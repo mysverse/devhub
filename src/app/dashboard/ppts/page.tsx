@@ -11,7 +11,9 @@ import {
   Anchor,
   Image,
   CardSection,
+  Skeleton,
 } from "@mantine/core";
+import { Suspense } from "react";
 
 // Initialize Linear client
 const linearClient = new LinearClient({
@@ -24,13 +26,33 @@ function extractFirstImage(markdown: string | null | undefined): string | null {
   return match ? match[1] : null;
 }
 
-export default async function PPTsPage() {
-  let issues: Issue[] = [];
-  let error = null;
+function PPTSkeleton() {
+  return (
+    <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
+      {[...Array(6)].map((_, i) => (
+        <Card key={i} withBorder radius="md" padding="lg">
+          <Skeleton height={160} mb="md" />
+          <Group justify="space-between" mb="xs">
+            <Skeleton height={20} width={60} />
+            <Skeleton height={20} width={40} />
+          </Group>
+          <Skeleton height={24} mb="xs" />
+          <Skeleton height={14} mb={4} />
+          <Skeleton height={14} mb={4} />
+          <Skeleton height={14} mb="md" width="70%" />
+          <Group justify="space-between" mt="auto" pt="md" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+            <Skeleton height={12} width={80} />
+            <Skeleton height={12} width={60} />
+          </Group>
+        </Card>
+      ))}
+    </SimpleGrid>
+  );
+}
 
+async function PPTList() {
+  let issues: Issue[] = [];
   try {
-    // In a real scenario, you'd filter by a specific team, label (e.g. "PPT"), or unassigned status.
-    // We are fetching the latest issues to display.
     const response = await linearClient.issues({
       first: 50,
       filter: {
@@ -38,15 +60,106 @@ export default async function PPTsPage() {
         state: { type: { eq: "unstarted" } },
       },
     });
-
     issues = response.nodes;
   } catch (e) {
     const err = e as Error;
     console.error("Failed to fetch Linear issues:", err);
-    error =
-      err.message || "Failed to fetch PPTs. Please check your LINEAR_API_KEY.";
+    return (
+      <Alert color="red" title="Error" mb="xl">
+        {err.message || "Failed to fetch PPTs. Please check your LINEAR_API_KEY."}
+      </Alert>
+    );
   }
 
+  if (issues.length === 0) {
+    return (
+      <Card withBorder radius="md" padding="xl" ta="center">
+        <Text c="dimmed">No available PPTs at the moment. Check back later!</Text>
+      </Card>
+    );
+  }
+
+  return (
+    <FadeIn>
+      <StaggerContainer>
+        <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
+          {issues.map((issue) => {
+            const pptEstimate = issue.estimate ? issue.estimate * 10 : 0;
+            const imageUrl = extractFirstImage(issue.description);
+
+            return (
+              <StaggerItem key={issue.id} className="h-full">
+                <Card
+                  withBorder
+                  radius="md"
+                  padding="lg"
+                  h="100%"
+                  style={{ display: "flex", flexDirection: "column" }}
+                >
+                  {imageUrl && (
+                    <CardSection mb="md">
+                      <Image
+                        src={imageUrl}
+                        height={160}
+                        alt={issue.title}
+                        fallbackSrc="https://placehold.co/600x400?text=No+Image"
+                      />
+                    </CardSection>
+                  )}
+
+                  <Group justify="space-between" align="flex-start" mb="xs">
+                    <Badge variant="light" color="blue">
+                      {issue.identifier}
+                    </Badge>
+                    {pptEstimate > 0 ? (
+                      <Text fw={700} c="green" fz="sm">
+                        ${pptEstimate}
+                      </Text>
+                    ) : (
+                      <Text fz="sm" fw={500} c="dimmed">
+                        No Payout Set
+                      </Text>
+                    )}
+                  </Group>
+
+                  <Title order={4} size="h5" lineClamp={2} mb="xs">
+                    {issue.title}
+                  </Title>
+                  <Text fz="sm" c="dimmed" lineClamp={3} mb="md">
+                    {issue.description
+                      ? issue.description
+                          .replace(/!\[.*?\]\(.*?\)/g, "")
+                          .trim()
+                      : "No description provided."}
+                  </Text>
+
+                  <Group
+                    justify="space-between"
+                    mt="auto"
+                    pt="md"
+                    style={{
+                      borderTop: "1px solid var(--mantine-color-default-border)",
+                    }}
+                  >
+                    <Text fz="xs" c="dimmed">
+                      Complexity:{" "}
+                      {issue.estimate ? `${issue.estimate} pts` : "Unestimated"}
+                    </Text>
+                    <Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
+                      View in Linear &rarr;
+                    </Anchor>
+                  </Group>
+                </Card>
+              </StaggerItem>
+            );
+          })}
+        </SimpleGrid>
+      </StaggerContainer>
+    </FadeIn>
+  );
+}
+
+export default function PPTsPage() {
   return (
     <FadeIn>
       <div style={{ marginBottom: "2rem" }}>
@@ -57,106 +170,9 @@ export default async function PPTsPage() {
         </Text>
       </div>
 
-      {error ? (
-        <Alert color="red" title="Error" mb="xl">
-          {error}
-        </Alert>
-      ) : (
-        <StaggerContainer>
-          <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
-            {issues.length === 0 ? (
-              <div style={{ gridColumn: "1 / -1" }}>
-                <Card withBorder radius="md" padding="xl" ta="center">
-                  <Text c="dimmed">
-                    No available PPTs at the moment. Check back later!
-                  </Text>
-                </Card>
-              </div>
-            ) : (
-              issues.map((issue) => {
-                // Calculate a dummy PPT amount based on estimate,
-                // or use a custom field if you have the Custom Field ID.
-                const pptEstimate = issue.estimate ? issue.estimate * 10 : 0;
-                const imageUrl = extractFirstImage(issue.description);
-
-                return (
-                  <StaggerItem key={issue.id} className="h-full">
-                    <Card
-                      withBorder
-                      radius="md"
-                      padding="lg"
-                      h="100%"
-                      style={{ display: "flex", flexDirection: "column" }}
-                    >
-                      {imageUrl && (
-                        <CardSection mb="md">
-                          <Image
-                            src={imageUrl}
-                            height={160}
-                            alt={issue.title}
-                            fallbackSrc="https://placehold.co/600x400?text=No+Image"
-                          />
-                        </CardSection>
-                      )}
-
-                      <Group justify="space-between" align="flex-start" mb="xs">
-                        <Badge variant="light" color="blue">
-                          {issue.identifier}
-                        </Badge>
-                        {pptEstimate > 0 ? (
-                          <Text fw={700} c="green" fz="sm">
-                            ${pptEstimate}
-                          </Text>
-                        ) : (
-                          <Text fz="sm" fw={500} c="dimmed">
-                            No Payout Set
-                          </Text>
-                        )}
-                      </Group>
-
-                      <Title order={4} size="h5" lineClamp={2} mb="xs">
-                        {issue.title}
-                      </Title>
-                      <Text fz="sm" c="dimmed" lineClamp={3} mb="md">
-                        {issue.description
-                          ? issue.description
-                              .replace(/!\[.*?\]\(.*?\)/g, "")
-                              .trim()
-                          : "No description provided."}
-                      </Text>
-
-                      <Group
-                        justify="space-between"
-                        mt="auto"
-                        pt="md"
-                        style={{
-                          borderTop:
-                            "1px solid var(--mantine-color-default-border)",
-                        }}
-                      >
-                        <Text fz="xs" c="dimmed">
-                          Complexity:{" "}
-                          {issue.estimate
-                            ? `${issue.estimate} pts`
-                            : "Unestimated"}
-                        </Text>
-                        <Anchor
-                          href={issue.url}
-                          target="_blank"
-                          fz="sm"
-                          fw={500}
-                        >
-                          View in Linear &rarr;
-                        </Anchor>
-                      </Group>
-                    </Card>
-                  </StaggerItem>
-                );
-              })
-            )}
-          </SimpleGrid>
-        </StaggerContainer>
-      )}
+      <Suspense fallback={<PPTSkeleton />}>
+        <PPTList />
+      </Suspense>
     </FadeIn>
   );
 }

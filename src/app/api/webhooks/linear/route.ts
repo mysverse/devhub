@@ -21,19 +21,40 @@ export async function POST(req: Request) {
   if (payload.action === 'update' && payload.type === 'Issue') {
     const issueData = payload.data;
     
-    // Check if it's marked as done. Let's assume state name "Done" or state.type "completed"
+    // Check if it's marked as done. Let's assume state.type "completed"
     if (issueData.state?.type === 'completed') {
       
-      let bountyAmount = 0;
+      let pptAmount = 0;
       
       if (issueData.estimate) {
-         bountyAmount = issueData.estimate * 10; // e.g. 1 point = $10
+         pptAmount = issueData.estimate * 10; // e.g. 1 point = $10
       }
       
       const assigneeEmail = issueData.assignee?.email;
       
-      if (bountyAmount > 0 && assigneeEmail) {
-        console.log(`Bounty of ${bountyAmount} for issue ${issueData.id} completed by ${assigneeEmail}`);
+      if (pptAmount > 0 && assigneeEmail) {
+        // Find the user by their Linear Email
+        const user = await prisma.userProfile.findFirst({
+          where: { linearEmail: assigneeEmail }
+        });
+
+        if (user) {
+          // Use upsert to prevent double crediting the same issue if webhook fires twice
+          await prisma.transaction.upsert({
+            where: { linearIssueId: issueData.id },
+            update: {}, // Do nothing if it already exists
+            create: {
+              userId: user.id,
+              linearIssueId: issueData.id,
+              amount: pptAmount,
+              currency: "USD",
+              status: "PENDING"
+            }
+          });
+          console.log(`PPT of ${pptAmount} credited to ${assigneeEmail} for issue ${issueData.id}`);
+        } else {
+          console.warn(`Could not find a linked DevHub user with Linear email: ${assigneeEmail}`);
+        }
       }
     }
   }

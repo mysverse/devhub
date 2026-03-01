@@ -35,15 +35,14 @@ export default async function SettingsPage() {
           <SettingsForm profile={userProfile} />
         </StaggerItem>
 
-        <Divider my="md" />
-        
-        {/* 
-          In a production environment, you might want to wrap InviteGenerator 
-          in a check like `if (userProfile.role === 'ADMIN')` to restrict who can generate invites. 
-        */}
-        <StaggerItem>
-          <InviteGenerator />
-        </StaggerItem>
+        {userProfile.role === 'ADMIN' && (
+          <>
+            <Divider my="md" />
+            <StaggerItem>
+              <InviteGenerator />
+            </StaggerItem>
+          </>
+        )}
       </Box>
     </StaggerContainer>
   );

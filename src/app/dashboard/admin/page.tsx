@@ -2,14 +2,10 @@ import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import PayoutCard from "./PayoutCard";
-import { LinearClient } from "@linear/sdk";
+import { getLinearClient } from "@/lib/linear";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { Title, Text, SimpleGrid, Card } from "@mantine/core";
 import { Transaction, UserProfile } from "@prisma/client";
-
-const linearClient = new LinearClient({
-  apiKey: process.env.LINEAR_API_KEY || 'dummy_key',
-});
 
 type TransactionWithUser = Transaction & { user: UserProfile };
 
@@ -34,6 +30,8 @@ export default async function AdminPage() {
     include: { user: true },
     orderBy: { createdAt: 'asc' }
   });
+
+  const linearClient = await getLinearClient(userId);
 
   // Fetch issue details from Linear to show task titles
   const transactionsWithDetails = await Promise.all(

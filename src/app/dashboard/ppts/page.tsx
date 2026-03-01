@@ -1,4 +1,7 @@
-import { LinearClient, Issue } from "@linear/sdk";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
+import { Issue } from "@linear/sdk";
+import { getLinearClient } from "@/lib/linear";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import {
   Title,
@@ -15,11 +18,6 @@ import {
 } from "@mantine/core";
 import { Suspense } from "react";
 import { Ticker } from "motion-plus/react";
-
-// Initialize Linear client
-const linearClient = new LinearClient({
-  apiKey: process.env.LINEAR_API_KEY || "dummy_key",
-});
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
   if (!markdown) return null;
@@ -58,24 +56,26 @@ function PPTSkeleton() {
   );
 }
 
-async function PPTList() {
+async function PPTList({ userId }: { userId: string }) {
   let issues: Issue[] = [];
   try {
+    const linearClient = await getLinearClient(userId);
     const response = await linearClient.issues({
       first: 50,
       filter: {
         assignee: { null: true },
         state: { type: { eq: "unstarted" } },
+        labels: { name: { eq: "PPT" } },
       },
     });
-    issues = response.nodes;
+    issues = response.nodes.sort((a, b) => (b.estimate || 0) - (a.estimate || 0));
   } catch (e) {
     const err = e as Error;
     console.error("Failed to fetch Linear issues:", err);
     return (
       <Alert color="red" title="Error" mb="xl">
         {err.message ||
-          "Failed to fetch PPTs. Please check your LINEAR_API_KEY."}
+          "Failed to fetch PPTs. Please check your Linear connection."}
       </Alert>
     );
   }
@@ -93,18 +93,44 @@ async function PPTList() {
   return (
     <FadeIn>
       {issues.length > 0 && (
-        <div style={{ marginBottom: '2rem' }}>
-          <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" ml="xs" style={{ letterSpacing: '0.05em' }}>Trending PPTs</Text>
-          <Card withBorder radius="md" p={0} style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
-            <Ticker 
-              velocity={30} 
+        <div style={{ marginBottom: "2rem" }}>
+          <Text
+            size="xs"
+            fw={700}
+            c="dimmed"
+            tt="uppercase"
+            mb="xs"
+            ml="xs"
+            style={{ letterSpacing: "0.05em" }}
+          >
+            Trending PPTs
+          </Text>
+          <Card
+            withBorder
+            radius="md"
+            p={0}
+            style={{
+              overflow: "hidden",
+              background: "var(--mantine-color-dark-8)",
+            }}
+          >
+            <Ticker
+              velocity={30}
               gap={48}
               items={issues.slice(0, 10).map((issue) => (
                 <Group key={issue.id} wrap="nowrap" gap="xs">
-                  <Badge size="xs" variant="outline" color="blue">{issue.identifier}</Badge>
-                  <Text size="sm" fw={500} style={{ whiteSpace: 'nowrap' }}>{issue.title}</Text>
-                  <Text size="xs" c="green" fw={700}>${issue.estimate ? issue.estimate * 10 : 0}</Text>
-                  <Text size="xs" c="dimmed" mx="sm">|</Text>
+                  <Badge size="xs" variant="outline" color="blue">
+                    {issue.identifier}
+                  </Badge>
+                  <Text size="sm" fw={500} style={{ whiteSpace: "nowrap" }}>
+                    {issue.title}
+                  </Text>
+                  <Text size="xs" c="green" fw={700}>
+                    {issue.estimate ? `$${issue.estimate * 5}` : "$5 - $25"}
+                  </Text>
+                  <Text size="xs" c="dimmed" mx="sm">
+                    |
+                  </Text>
                 </Group>
               ))}
             />
@@ -115,7 +141,7 @@ async function PPTList() {
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
           {issues.map((issue) => {
-            const pptEstimate = issue.estimate ? issue.estimate * 10 : 0;
+            const pptEstimate = issue.estimate ? issue.estimate * 5 : 0;
             const imageUrl = extractFirstImage(issue.description);
 
             return (
@@ -142,8 +168,8 @@ async function PPTList() {
                         ${pptEstimate}
                       </Text>
                     ) : (
-                      <Text fz="sm" fw={500} c="dimmed">
-                        No Payout Set
+                      <Text fz="sm" fw={700} c="green">
+                        $5 - $25
                       </Text>
                     )}
                   </Group>
@@ -184,7 +210,10 @@ async function PPTList() {
   );
 }
 
-export default function PPTsPage() {
+export default async function PPTsPage() {
+  const { userId } = await auth();
+  if (!userId) redirect("/");
+
   return (
     <FadeIn>
       <div style={{ marginBottom: "2rem" }}>
@@ -196,7 +225,7 @@ export default function PPTsPage() {
       </div>
 
       <Suspense fallback={<PPTSkeleton />}>
-        <PPTList />
+        <PPTList userId={userId} />
       </Suspense>
     </FadeIn>
   );

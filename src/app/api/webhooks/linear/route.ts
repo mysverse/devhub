@@ -27,7 +27,7 @@ export async function POST(req: Request) {
       let pptAmount = 0;
       
       if (issueData.estimate) {
-         pptAmount = issueData.estimate * 10; // e.g. 1 point = $10
+         pptAmount = issueData.estimate * 5; // e.g. 1 point = $5
       }
       
       const assigneeEmail = issueData.assignee?.email;

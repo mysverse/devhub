@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import { Issue } from "@linear/sdk";
 import { getLinearClient } from "@/lib/linear";
-import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import { FadeIn, StaggerContainer, StaggerItem, AnimatedNumber } from "@/components/animations";
 import {
   Title,
   Text,
@@ -23,7 +23,7 @@ import {
   Skeleton,
 } from "@mantine/core";
 import { Suspense } from "react";
-import { AnimateNumber, Carousel } from "motion-plus/react";
+import { Carousel } from "motion-plus/react";
 
 function WalletSkeletons() {
   return (
@@ -149,14 +149,13 @@ async function UserWallet({
               </Text>
               <Text fz="xl" fw={700}>
                 $
-                <AnimateNumber
+                <AnimatedNumber
+                  value={totalPendingBalance}
                   format={{
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   }}
-                >
-                  {totalPendingBalance}
-                </AnimateNumber>
+                />
               </Text>
             </Card>
           </StaggerItem>
@@ -173,14 +172,13 @@ async function UserWallet({
               </Text>
               <Text fz="xl" fw={700}>
                 $
-                <AnimateNumber
+                <AnimatedNumber
+                  value={totalEarned}
                   format={{
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 2,
                   }}
-                >
-                  {totalEarned}
-                </AnimateNumber>
+                />
               </Text>
             </Card>
           </StaggerItem>
@@ -292,14 +290,13 @@ async function ActiveTasks({
                     {pptEstimate > 0 && (
                       <Text fw={700} c="green" fz="sm">
                         $
-                        <AnimateNumber
+                        <AnimatedNumber
+                          value={pptEstimate}
                           format={{
                             minimumFractionDigits: 2,
                             maximumFractionDigits: 2,
                           }}
-                        >
-                          {pptEstimate}
-                        </AnimateNumber>{" "}
+                        />{" "}
                         (Pending)
                       </Text>
                     )}

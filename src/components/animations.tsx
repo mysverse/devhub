@@ -1,6 +1,8 @@
 'use client'
 
 import { motion, Variants } from "motion/react";
+import { AnimateNumber, type AnimateNumberProps } from "motion-plus/react";
+import { useState, useEffect } from "react";
 
 export const FADE_UP_ANIMATION_VARIANTS: Variants = {
   hidden: { opacity: 0, y: 10 },
@@ -53,12 +55,12 @@ export function StaggerItem({
   );
 }
 
-export function FadeIn({ 
-  children, 
+export function FadeIn({
+  children,
   className,
   delay = 0
-}: { 
-  children: React.ReactNode, 
+}: {
+  children: React.ReactNode,
   className?: string,
   delay?: number
 }) {
@@ -73,4 +75,20 @@ export function FadeIn({
       {children}
     </motion.div>
   );
+}
+
+export function AnimatedNumber({
+  value,
+  format,
+}: {
+  value: number;
+  format?: AnimateNumberProps["format"];
+}) {
+  const [displayed, setDisplayed] = useState(0);
+
+  useEffect(() => {
+    setDisplayed(value);
+  }, [value]);
+
+  return <AnimateNumber format={format}>{displayed}</AnimateNumber>;
 }

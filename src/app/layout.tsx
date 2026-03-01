@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { MantineProvider, ColorSchemeScript, createTheme } from "@mantine/core";
+import { Toaster } from "sonner";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
         >
           <MantineProvider theme={theme} defaultColorScheme="dark">
             {children}
+            <Toaster theme="dark" richColors />
           </MantineProvider>
         </body>
       </html>

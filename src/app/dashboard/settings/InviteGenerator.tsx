@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { generateInviteLink } from './invite-actions';
+import { toast } from 'sonner';
 import { Card, Title, Text, Button, Group, TextInput, Stack, CopyButton, ActionIcon, Tooltip } from '@mantine/core';
 import { Check, Copy } from 'lucide-react';
 
@@ -9,27 +10,23 @@ export default function InviteGenerator() {
   const [loading, setLoading] = useState(false);
   const [email, setEmail] = useState('');
   const [inviteUrl, setInviteUrl] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
-  const [error, setError] = useState('');
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     if (!email) return;
 
     setLoading(true);
-    setError('');
-    setSuccessMessage('');
     setInviteUrl('');
 
     const res = await generateInviteLink(email);
-    
+
     if (res?.error) {
-      setError(res.error);
+      toast.error(res.error);
     } else if (res?.success && res.url) {
       setInviteUrl(res.url);
-      setSuccessMessage(res.message || 'Invite sent!');
+      toast.success(res.message || 'Invite sent!');
     }
-    
+
     setLoading(false);
   }
 
@@ -62,7 +59,6 @@ export default function InviteGenerator() {
         </form>
       ) : (
         <Stack gap="md">
-          <Text size="sm" c="green" fw={500}>{successMessage}</Text>
           <Group align="flex-end" gap="sm">
             <TextInput 
               label="Direct Invite Link"
@@ -97,7 +93,6 @@ export default function InviteGenerator() {
         </Stack>
       )}
 
-      {error && <Text mt="md" size="sm" c="red" fw={500}>{error}</Text>}
     </Card>
   );
 }

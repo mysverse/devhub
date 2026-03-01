@@ -2,17 +2,17 @@
 
 import { useState } from 'react';
 import { updateProfileSettings } from './actions';
-import { 
-  Card, 
-  Title, 
-  TextInput, 
-  Textarea, 
-  Select, 
-  Button, 
-  Stack, 
-  Radio, 
-  Group, 
-  Text,
+import { toast } from 'sonner';
+import {
+  Card,
+  Title,
+  TextInput,
+  Textarea,
+  Select,
+  Button,
+  Stack,
+  Radio,
+  Group,
   Box
 } from '@mantine/core';
 
@@ -32,7 +32,6 @@ type ProfileProps = {
 
 export default function SettingsForm({ profile }: ProfileProps) {
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
   const [paymentMethod, setPaymentMethod] = useState(profile.paymentMethod);
   const [duitNowType, setDuitNowType] = useState<'ID' | 'BANK'>(
     profile.bankAccountNumber || profile.paymentMethod === 'BANK_TRANSFER' ? 'BANK' : 'ID'
@@ -40,16 +39,15 @@ export default function SettingsForm({ profile }: ProfileProps) {
 
   async function action(formData: FormData) {
     setLoading(true);
-    setMessage({ type: '', text: '' });
-    
+
     const res = await updateProfileSettings(formData);
-    
+
     if (res?.error) {
-      setMessage({ type: 'error', text: res.error });
+      toast.error(res.error);
     } else if (res?.success) {
-      setMessage({ type: 'success', text: 'Settings updated successfully!' });
+      toast.success('Settings updated successfully!');
     }
-    
+
     setLoading(false);
   }
 
@@ -196,19 +194,12 @@ export default function SettingsForm({ profile }: ProfileProps) {
           </Stack>
         </Card>
 
-        <Group>
-          <Button 
-            type="submit" 
-            loading={loading}
-          >
-            Save Settings
-          </Button>
-          {message.text && (
-            <Text fw={500} c={message.type === 'error' ? 'red' : 'green'}>
-              {message.text}
-            </Text>
-          )}
-        </Group>
+        <Button
+          type="submit"
+          loading={loading}
+        >
+          Save Settings
+        </Button>
       </Stack>
     </form>
   );

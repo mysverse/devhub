@@ -20,9 +20,14 @@ export default async function AdminPage() {
     redirect("/");
   }
 
-  // Ideally, add a check here for admin role.
-  // const user = await clerkClient.users.getUser(userId);
-  // if (user.publicMetadata.role !== 'admin') redirect('/dashboard');
+  const userProfile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { role: true }
+  });
+
+  if (!userProfile || userProfile.role !== 'ADMIN') {
+    redirect("/dashboard");
+  }
 
   const pendingTransactions = await prisma.transaction.findMany({
     where: { status: 'PENDING' },

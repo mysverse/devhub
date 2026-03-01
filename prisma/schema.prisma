@@ -15,6 +15,9 @@ model UserProfile {
   legalName        String?
   shippingAddress  String?  // For merch
   
+  // Roles and Permissions
+  role             Role     @default(DEVELOPER)
+
   // Payment Preferences
   paymentMethod    PaymentMethod @default(PAYPAL)
   paypalEmail      String?
@@ -37,6 +40,11 @@ model Invite {
   used             Boolean  @default(false)
   usedById         String?
   createdAt        DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  DEVELOPER
 }
 
 enum PaymentMethod {

@@ -1,33 +1,42 @@
 'use server'
 
-import { auth } from "@clerk/nextjs/server";
+import { auth, createClerkClient } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
-import crypto from "crypto";
 
-export async function generateInviteLink() {
+const clerkClient = createClerkClient({ secretKey: process.env.CLERK_SECRET_KEY });
+
+export async function generateInviteLink(emailAddress: string) {
   const { userId } = await auth();
   
   if (!userId) {
     return { error: "Unauthorized" };
   }
 
-  // Ideally, you'd check if the user is an admin here before allowing generation
-  // For now, we allow any logged-in user to generate for demonstration.
+  const userProfile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { role: true }
+  });
 
-  const token = crypto.randomBytes(32).toString('hex');
+  if (userProfile?.role !== 'ADMIN') {
+    return { error: "Forbidden: Only admins can invite users." };
+  }
 
   try {
-    const invite = await prisma.invite.create({
-      data: {
-        token,
-        creatorId: userId
-      }
+    const invitation = await clerkClient.invitations.createInvitation({
+      emailAddress: emailAddress,
+      ignoreExisting: true, // Don't fail if they already exist, just return the existing invite
+      notify: true, // Let Clerk send the email automatically
     });
 
-    const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/invite?token=${token}`;
-    return { success: true, url: inviteUrl };
+    return { 
+      success: true, 
+      url: invitation.url, // Clerk returns a pre-signed URL to bypass closed registrations
+      message: `Invitation sent to ${emailAddress}!`
+    };
   } catch (error) {
     const err = error as Error;
+    // Handle clerk specific error formats if needed
+    console.error("Clerk Invitation Error:", err);
     return { error: err.message || "Failed to generate invite" };
   }
 }

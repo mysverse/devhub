@@ -9,8 +9,15 @@ async function requireAdmin() {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
   
-  // For now, we will allow access for demonstration. 
-  // You can implement role checks based on Clerk publicMetadata later.
+  const userProfile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { role: true }
+  });
+
+  if (!userProfile || userProfile.role !== 'ADMIN') {
+    throw new Error("Forbidden: Admin access required");
+  }
+
   return userId;
 }
 

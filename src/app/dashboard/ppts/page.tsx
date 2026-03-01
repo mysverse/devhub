@@ -1,10 +1,21 @@
-import { LinearClient, Issue } from '@linear/sdk';
+import { LinearClient, Issue } from "@linear/sdk";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
-import { Title, Text, SimpleGrid, Card, Badge, Alert, Group, Anchor, Image } from "@mantine/core";
+import {
+  Title,
+  Text,
+  SimpleGrid,
+  Card,
+  Badge,
+  Alert,
+  Group,
+  Anchor,
+  Image,
+  CardSection,
+} from "@mantine/core";
 
 // Initialize Linear client
 const linearClient = new LinearClient({
-  apiKey: process.env.LINEAR_API_KEY || 'dummy_key',
+  apiKey: process.env.LINEAR_API_KEY || "dummy_key",
 });
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
@@ -24,23 +35,25 @@ export default async function PPTsPage() {
       first: 50,
       filter: {
         assignee: { null: true },
-        state: { type: { eq: "unstarted" } }
-      }
+        state: { type: { eq: "unstarted" } },
+      },
     });
-    
+
     issues = response.nodes;
   } catch (e) {
     const err = e as Error;
     console.error("Failed to fetch Linear issues:", err);
-    error = err.message || "Failed to fetch PPTs. Please check your LINEAR_API_KEY.";
+    error =
+      err.message || "Failed to fetch PPTs. Please check your LINEAR_API_KEY.";
   }
 
   return (
     <FadeIn>
-      <div style={{ marginBottom: '2rem' }}>
+      <div style={{ marginBottom: "2rem" }}>
         <Title order={1}>PPT Board</Title>
         <Text c="dimmed" mt="xs">
-          Find available tasks labeled as PPT (Pay Per Task). Claim a task to earn its payout.
+          Find available tasks labeled as PPT (Pay Per Task). Claim a task to
+          earn its payout.
         </Text>
       </div>
 
@@ -52,53 +65,87 @@ export default async function PPTsPage() {
         <StaggerContainer>
           <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
             {issues.length === 0 ? (
-              <div style={{ gridColumn: '1 / -1' }}>
+              <div style={{ gridColumn: "1 / -1" }}>
                 <Card withBorder radius="md" padding="xl" ta="center">
-                  <Text c="dimmed">No available PPTs at the moment. Check back later!</Text>
+                  <Text c="dimmed">
+                    No available PPTs at the moment. Check back later!
+                  </Text>
                 </Card>
               </div>
             ) : (
               issues.map((issue) => {
-                // Calculate a dummy PPT amount based on estimate, 
+                // Calculate a dummy PPT amount based on estimate,
                 // or use a custom field if you have the Custom Field ID.
                 const pptEstimate = issue.estimate ? issue.estimate * 10 : 0;
                 const imageUrl = extractFirstImage(issue.description);
 
                 return (
                   <StaggerItem key={issue.id} className="h-full">
-                    <Card withBorder radius="md" padding="lg" h="100%" style={{ display: 'flex', flexDirection: 'column' }}>
+                    <Card
+                      withBorder
+                      radius="md"
+                      padding="lg"
+                      h="100%"
+                      style={{ display: "flex", flexDirection: "column" }}
+                    >
                       {imageUrl && (
-                        <Card.Section mb="md">
+                        <CardSection mb="md">
                           <Image
                             src={imageUrl}
                             height={160}
                             alt={issue.title}
                             fallbackSrc="https://placehold.co/600x400?text=No+Image"
                           />
-                        </Card.Section>
+                        </CardSection>
                       )}
-                      
+
                       <Group justify="space-between" align="flex-start" mb="xs">
-                        <Badge variant="light" color="blue">{issue.identifier}</Badge>
+                        <Badge variant="light" color="blue">
+                          {issue.identifier}
+                        </Badge>
                         {pptEstimate > 0 ? (
-                          <Text fw={700} c="green" fz="sm">${pptEstimate}</Text>
+                          <Text fw={700} c="green" fz="sm">
+                            ${pptEstimate}
+                          </Text>
                         ) : (
-                          <Text fz="sm" fw={500} c="dimmed">No Payout Set</Text>
+                          <Text fz="sm" fw={500} c="dimmed">
+                            No Payout Set
+                          </Text>
                         )}
                       </Group>
-                      
+
                       <Title order={4} size="h5" lineClamp={2} mb="xs">
                         {issue.title}
                       </Title>
                       <Text fz="sm" c="dimmed" lineClamp={3} mb="md">
-                        {issue.description ? issue.description.replace(/!\[.*?\]\(.*?\)/g, '').trim() : 'No description provided.'}
+                        {issue.description
+                          ? issue.description
+                              .replace(/!\[.*?\]\(.*?\)/g, "")
+                              .trim()
+                          : "No description provided."}
                       </Text>
-                      
-                      <Group justify="space-between" mt="auto" pt="md" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+
+                      <Group
+                        justify="space-between"
+                        mt="auto"
+                        pt="md"
+                        style={{
+                          borderTop:
+                            "1px solid var(--mantine-color-default-border)",
+                        }}
+                      >
                         <Text fz="xs" c="dimmed">
-                          Complexity: {issue.estimate ? `${issue.estimate} pts` : 'Unestimated'}
+                          Complexity:{" "}
+                          {issue.estimate
+                            ? `${issue.estimate} pts`
+                            : "Unestimated"}
                         </Text>
-                        <Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
+                        <Anchor
+                          href={issue.url}
+                          target="_blank"
+                          fz="sm"
+                          fw={500}
+                        >
                           View in Linear &rarr;
                         </Anchor>
                       </Group>

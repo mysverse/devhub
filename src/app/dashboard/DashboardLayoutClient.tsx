@@ -2,6 +2,7 @@
 
 import { UserButton } from "@clerk/nextjs";
 import Link from "next/link";
+import Image from "next/image";
 import { AppShell, Group, Burger, Text, UnstyledButton, Container } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 
@@ -30,7 +31,7 @@ export default function DashboardLayoutClient({
             <Group>
               <Burger opened={opened} onClick={toggle} hiddenFrom="sm" size="sm" />
               <Link href="/dashboard" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                <img src="/devhub.svg" alt="DevHub" style={{ height: '32px', width: 'auto' }} />
+                <Image src="/devhub.svg" alt="DevHub" width={32} height={32} style={{ height: '32px', width: 'auto' }} />
               </Link>
             </Group>
 

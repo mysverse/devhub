@@ -77,7 +77,7 @@ function CarouselSkeleton() {
   );
 }
 
-async function UserWallet({ userProfile, userEmail }: { userProfile: any; userEmail?: string }) {
+async function UserWallet({ userProfile }: { userProfile: UserProfile & { transactions: Transaction[] } }) {
   let activeTasksPendingAmount = 0;
 
   if (userProfile.linearId) {
@@ -107,20 +107,20 @@ async function UserWallet({ userProfile, userEmail }: { userProfile: any; userEm
       activeTasksPendingAmount = assignedIssues.reduce((sum, issue) => {
         return sum + (issue.estimate ? issue.estimate * 10 : 0);
       }, 0);
-    } catch (e) {
-      console.error("Failed to fetch active tasks for wallet:", e);
+    } catch (_e) {
+      console.error("Failed to fetch active tasks for wallet:", _e);
     }
   }
 
   const databasePendingBalance = userProfile.transactions
-    .filter((tx: any) => tx.status === "PENDING")
-    .reduce((sum: number, tx: any) => sum + tx.amount, 0);
+    .filter((tx) => tx.status === "PENDING")
+    .reduce((sum: number, tx) => sum + tx.amount, 0);
 
   const totalPendingBalance = databasePendingBalance + activeTasksPendingAmount;
 
   const totalEarned = userProfile.transactions
-    .filter((tx: any) => tx.status === "PAID")
-    .reduce((sum: number, tx: any) => sum + tx.amount, 0);
+    .filter((tx) => tx.status === "PAID")
+    .reduce((sum: number, tx) => sum + tx.amount, 0);
 
   return (
     <FadeIn>
@@ -352,14 +352,14 @@ export default async function DashboardPage() {
 
       {!userProfile.linearId && (
         <Alert color="yellow" title="Linear Account Not Linked" mb="xl">
-          We couldn't automatically link your Linear account. Please ensure your
+          We couldn&apos;t automatically link your Linear account. Please ensure your
           Clerk account email ({user?.primaryEmailAddress?.emailAddress || "Not set"}) matches your
           Linear workspace email, or connect Linear via your profile settings.
         </Alert>
       )}
 
       <Suspense fallback={<WalletSkeletons />}>
-        <UserWallet userProfile={userProfile} userEmail={user?.primaryEmailAddress?.emailAddress} />
+        <UserWallet userProfile={userProfile} />
       </Suspense>
 
       <Suspense fallback={<CarouselSkeleton />}>

@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import SettingsForm from "./SettingsForm";
 import InviteGenerator from "./InviteGenerator";
-import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { Title, Text, Divider, Box } from "@mantine/core";
 
 export default async function SettingsPage() {

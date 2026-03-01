@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { markTransactionAsPaid } from "./actions";
-import { Card, Text, Group, Button, Badge, Box, Stack } from "@mantine/core";
+import { Card, Text, Group, Button, Box, Stack } from "@mantine/core";
 
 type PayoutCardProps = {
   transactionId: string;

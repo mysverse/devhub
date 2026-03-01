@@ -2,7 +2,8 @@
 
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import Link from "next/link";
-import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import Image from "next/image";
+import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { Container, Title, Text, Group, Button, Box, AppShell } from "@mantine/core";
 
 export default function Home() {
@@ -11,7 +12,7 @@ export default function Home() {
       <AppShell.Header>
         <Container size="lg" h="100%" display="flex" style={{ alignItems: 'center', justifyContent: 'space-between' }}>
           <Group gap="sm">
-            <img src="/devhub.svg" alt="DevHub" style={{ height: '32px', width: 'auto' }} />
+            <Image src="/devhub.svg" alt="DevHub" width={32} height={32} style={{ height: '32px', width: 'auto' }} />
           </Group>
           <Box>
             <SignedOut>

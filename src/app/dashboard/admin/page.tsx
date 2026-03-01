@@ -44,7 +44,7 @@ export default async function AdminPage() {
         try {
           const issue = await linearClient.issue(tx.linearIssueId);
           taskTitle = `${issue.identifier} - ${issue.title}`;
-        } catch (e) {
+        } catch {
           console.error("Failed to fetch issue details for", tx.linearIssueId);
         }
       }

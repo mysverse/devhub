@@ -59,6 +59,9 @@ model Transaction {
   userId           String
   user             UserProfile @relation(fields: [userId], references: [id])
   linearIssueId    String?  @unique // To prevent double crediting
+  linearIssueIdentifier String? // e.g. "DEV-123"
+  linearIssueTitle String?
+  linearIssueUrl   String?
   amount           Float
   currency         String   @default("USD") // Or "R$"
   status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED

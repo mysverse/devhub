@@ -450,7 +450,25 @@ export default async function DashboardPage() {
   const transactions = userProfile.transactions;
   const rows = transactions.map((tx) => (
     <TableTr key={tx.id}>
-      <TableTd>{tx.linearIssueId || "Manual Bonus"}</TableTd>
+      <TableTd>
+        {tx.linearIssueId ? (
+          tx.linearIssueUrl ? (
+            <Anchor href={tx.linearIssueUrl} target="_blank" fz="sm" fw={500}>
+              {tx.linearIssueTitle
+                ? `${tx.linearIssueTitle} (${tx.linearIssueIdentifier || tx.linearIssueId})`
+                : tx.linearIssueIdentifier || tx.linearIssueId}
+            </Anchor>
+          ) : (
+            <Text fz="sm">
+              {tx.linearIssueTitle
+                ? `${tx.linearIssueTitle} (${tx.linearIssueIdentifier || tx.linearIssueId})`
+                : tx.linearIssueIdentifier || tx.linearIssueId}
+            </Text>
+          )
+        ) : (
+          <Text fz="sm">Manual Bonus</Text>
+        )}
+      </TableTd>
       <TableTd fw={500}>
         ${tx.amount.toFixed(2)} {tx.currency}
       </TableTd>
@@ -525,7 +543,7 @@ export default async function DashboardPage() {
             >
               <TableThead>
                 <TableTr>
-                  <TableTh>Task (Linear ID)</TableTh>
+                  <TableTh>Task</TableTh>
                   <TableTh>Amount</TableTh>
                   <TableTh>Status</TableTh>
                   <TableTh>Date</TableTh>

@@ -42,10 +42,13 @@ export async function POST(req: Request) {
           // Use upsert to prevent double crediting the same issue if webhook fires twice
           await prisma.transaction.upsert({
             where: { linearIssueId: issueData.id },
-            update: {}, // Do nothing if it already exists
+            update: {},
             create: {
               userId: user.id,
               linearIssueId: issueData.id,
+              linearIssueIdentifier: issueData.identifier || null,
+              linearIssueTitle: issueData.title || null,
+              linearIssueUrl: issueData.url || null,
               amount: pptAmount,
               currency: "USD",
               status: "PENDING"

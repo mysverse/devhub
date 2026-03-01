@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, Variants } from "framer-motion";
+import { motion, Variants } from "motion/react";
 
 export const FADE_UP_ANIMATION_VARIANTS: Variants = {
   hidden: { opacity: 0, y: 10 },

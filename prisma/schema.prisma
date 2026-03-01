@@ -1,0 +1,65 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model UserProfile {
+  id               String   @id // Matches Clerk User ID
+  discordId        String?  @unique
+  robloxId         String?  @unique
+  linearId         String?  @unique
+  linearEmail      String?  @unique
+  legalName        String?
+  shippingAddress  String?  // For merch
+  
+  // Payment Preferences
+  paymentMethod    PaymentMethod @default(PAYPAL)
+  paypalEmail      String?
+  duitNowId        String?
+  bankName         String?
+  bankAccountNumber String?
+  bankAccountName  String?
+  robuxUsername    String?
+
+  // Relationships
+  transactions     Transaction[]
+  invites          Invite[]
+}
+
+model Invite {
+  id               String   @id @default(cuid())
+  token            String   @unique
+  creatorId        String
+  creator          UserProfile @relation(fields: [creatorId], references: [id])
+  used             Boolean  @default(false)
+  usedById         String?
+  createdAt        DateTime @default(now())
+}
+
+enum PaymentMethod {
+  PAYPAL
+  DUITNOW
+  ROBUX
+  BANK_TRANSFER
+}
+
+model Transaction {
+  id               String   @id @default(cuid())
+  userId           String
+  user             UserProfile @relation(fields: [userId], references: [id])
+  linearIssueId    String?  @unique // To prevent double crediting
+  amount           Float
+  currency         String   @default("USD") // Or "R$"
+  status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED
+  createdAt        DateTime @default(now())
+  paidAt           DateTime?
+}
+
+enum TxStatus {
+  PENDING
+  PAID
+  CANCELLED
+}

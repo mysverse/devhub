@@ -40,7 +40,14 @@ function PPTSkeleton() {
           <Skeleton height={14} mb={4} />
           <Skeleton height={14} mb={4} />
           <Skeleton height={14} mb="md" width="70%" />
-          <Group justify="space-between" mt="auto" pt="md" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>
+          <Group
+            justify="space-between"
+            mt="auto"
+            pt="md"
+            style={{
+              borderTop: "1px solid var(--mantine-color-default-border)",
+            }}
+          >
             <Skeleton height={12} width={80} />
             <Skeleton height={12} width={60} />
           </Group>
@@ -66,7 +73,8 @@ async function PPTList() {
     console.error("Failed to fetch Linear issues:", err);
     return (
       <Alert color="red" title="Error" mb="xl">
-        {err.message || "Failed to fetch PPTs. Please check your LINEAR_API_KEY."}
+        {err.message ||
+          "Failed to fetch PPTs. Please check your LINEAR_API_KEY."}
       </Alert>
     );
   }
@@ -74,7 +82,9 @@ async function PPTList() {
   if (issues.length === 0) {
     return (
       <Card withBorder radius="md" padding="xl" ta="center">
-        <Text c="dimmed">No available PPTs at the moment. Check back later!</Text>
+        <Text c="dimmed">
+          No available PPTs at the moment. Check back later!
+        </Text>
       </Card>
     );
   }
@@ -98,12 +108,7 @@ async function PPTList() {
                 >
                   {imageUrl && (
                     <CardSection mb="md">
-                      <Image
-                        src={imageUrl}
-                        height={160}
-                        alt={issue.title}
-                        fallbackSrc="https://placehold.co/600x400?text=No+Image"
-                      />
+                      <Image src={imageUrl} height={160} alt={issue.title} />
                     </CardSection>
                   )}
 
@@ -127,9 +132,7 @@ async function PPTList() {
                   </Title>
                   <Text fz="sm" c="dimmed" lineClamp={3} mb="md">
                     {issue.description
-                      ? issue.description
-                          .replace(/!\[.*?\]\(.*?\)/g, "")
-                          .trim()
+                      ? issue.description.replace(/!\[.*?\]\(.*?\)/g, "").trim()
                       : "No description provided."}
                   </Text>
 
@@ -138,7 +141,8 @@ async function PPTList() {
                     mt="auto"
                     pt="md"
                     style={{
-                      borderTop: "1px solid var(--mantine-color-default-border)",
+                      borderTop:
+                        "1px solid var(--mantine-color-default-border)",
                     }}
                   >
                     <Text fz="xs" c="dimmed">

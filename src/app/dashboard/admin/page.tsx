@@ -5,10 +5,13 @@ import PayoutCard from "./PayoutCard";
 import { LinearClient } from "@linear/sdk";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { Title, Text, SimpleGrid, Card } from "@mantine/core";
+import { Transaction, UserProfile } from "@prisma/client";
 
 const linearClient = new LinearClient({
   apiKey: process.env.LINEAR_API_KEY || 'dummy_key',
 });
+
+type TransactionWithUser = Transaction & { user: UserProfile };
 
 export default async function AdminPage() {
   const { userId } = await auth();
@@ -29,7 +32,7 @@ export default async function AdminPage() {
 
   // Fetch issue details from Linear to show task titles
   const transactionsWithDetails = await Promise.all(
-    pendingTransactions.map(async (tx) => {
+    pendingTransactions.map(async (tx: TransactionWithUser) => {
       let taskTitle = tx.linearIssueId || "Manual Payout";
       
       if (tx.linearIssueId && !tx.linearIssueId.includes(' ')) {

@@ -1,14 +1,20 @@
-import { LinearClient } from '@linear/sdk';
+import { LinearClient, Issue } from '@linear/sdk';
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
-import { Title, Text, SimpleGrid, Card, Badge, Alert, Group, Anchor } from "@mantine/core";
+import { Title, Text, SimpleGrid, Card, Badge, Alert, Group, Anchor, Image } from "@mantine/core";
 
 // Initialize Linear client
 const linearClient = new LinearClient({
   apiKey: process.env.LINEAR_API_KEY || 'dummy_key',
 });
 
+function extractFirstImage(markdown: string | null | undefined): string | null {
+  if (!markdown) return null;
+  const match = markdown.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
+  return match ? match[1] : null;
+}
+
 export default async function PPTsPage() {
-  let issues: any[] = [];
+  let issues: Issue[] = [];
   let error = null;
 
   try {
@@ -56,10 +62,22 @@ export default async function PPTsPage() {
                 // Calculate a dummy PPT amount based on estimate, 
                 // or use a custom field if you have the Custom Field ID.
                 const pptEstimate = issue.estimate ? issue.estimate * 10 : 0;
+                const imageUrl = extractFirstImage(issue.description);
 
                 return (
                   <StaggerItem key={issue.id} className="h-full">
                     <Card withBorder radius="md" padding="lg" h="100%" style={{ display: 'flex', flexDirection: 'column' }}>
+                      {imageUrl && (
+                        <Card.Section mb="md">
+                          <Image
+                            src={imageUrl}
+                            height={160}
+                            alt={issue.title}
+                            fallbackSrc="https://placehold.co/600x400?text=No+Image"
+                          />
+                        </Card.Section>
+                      )}
+                      
                       <Group justify="space-between" align="flex-start" mb="xs">
                         <Badge variant="light" color="blue">{issue.identifier}</Badge>
                         {pptEstimate > 0 ? (
@@ -73,7 +91,7 @@ export default async function PPTsPage() {
                         {issue.title}
                       </Title>
                       <Text fz="sm" c="dimmed" lineClamp={3} mb="md">
-                        {issue.description || 'No description provided.'}
+                        {issue.description ? issue.description.replace(/!\[.*?\]\(.*?\)/g, '').trim() : 'No description provided.'}
                       </Text>
                       
                       <Group justify="space-between" mt="auto" pt="md" style={{ borderTop: '1px solid var(--mantine-color-default-border)' }}>

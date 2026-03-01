@@ -1,7 +1,7 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
-import { LinearClient } from "@linear/sdk";
+import { LinearClient, Issue } from "@linear/sdk";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import {
   Title,
@@ -100,7 +100,7 @@ export default async function DashboardPage() {
     }
   }
 
-  let assignedIssues: any[] = [];
+  let assignedIssues: Issue[] = [];
   let linearError = null;
   let activeTasksPendingAmount = 0;
 

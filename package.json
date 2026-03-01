@@ -17,6 +17,7 @@
     "@prisma/client": "^7.4.2",
     "lucide-react": "^0.575.0",
     "motion": "^12.34.3",
+    "motion-plus": "https://api.motion.dev/registry.tgz?package=motion-plus&version=2.11.0&token=65a016326afe0ae8bdb421c58d3ee596c18c692519e30c84914b81f3b136fa7a",
     "next": "16.1.6",
     "pg": "^8.19.0",
     "postcss": "^8.5.6",

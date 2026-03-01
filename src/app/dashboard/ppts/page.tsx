@@ -14,6 +14,7 @@ import {
   Skeleton,
 } from "@mantine/core";
 import { Suspense } from "react";
+import { Ticker } from "motion-plus/react";
 
 // Initialize Linear client
 const linearClient = new LinearClient({
@@ -91,6 +92,26 @@ async function PPTList() {
 
   return (
     <FadeIn>
+      {issues.length > 0 && (
+        <div style={{ marginBottom: '2rem' }}>
+          <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb="xs" ml="xs" style={{ letterSpacing: '0.05em' }}>Trending PPTs</Text>
+          <Card withBorder radius="md" p={0} style={{ overflow: 'hidden', background: 'var(--mantine-color-dark-8)' }}>
+            <Ticker 
+              velocity={30} 
+              gap={48}
+              items={issues.slice(0, 10).map((issue) => (
+                <Group key={issue.id} wrap="nowrap" gap="xs">
+                  <Badge size="xs" variant="outline" color="blue">{issue.identifier}</Badge>
+                  <Text size="sm" fw={500} style={{ whiteSpace: 'nowrap' }}>{issue.title}</Text>
+                  <Text size="xs" c="green" fw={700}>${issue.estimate ? issue.estimate * 10 : 0}</Text>
+                  <Text size="xs" c="dimmed" mx="sm">|</Text>
+                </Group>
+              ))}
+            />
+          </Card>
+        </div>
+      )}
+
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
           {issues.map((issue) => {

@@ -21,6 +21,7 @@ import {
   Skeleton,
 } from "@mantine/core";
 import { Suspense } from "react";
+import { AnimateNumber, Carousel } from "motion-plus/react";
 
 const linearClient = new LinearClient({
   apiKey: process.env.LINEAR_API_KEY || "dummy_key",
@@ -56,6 +57,23 @@ function ActiveTasksSkeleton() {
         </Card>
       ))}
     </SimpleGrid>
+  );
+}
+
+function CarouselSkeleton() {
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <Skeleton height={32} width={200} mb="md" />
+      <div style={{ display: 'flex', gap: '20px', overflow: 'hidden' }}>
+        {[...Array(3)].map((_, i) => (
+          <Card key={i} withBorder radius="md" padding="lg" style={{ width: 300, flexShrink: 0 }}>
+            <Skeleton height={20} mb="xs" />
+            <Skeleton height={24} mb="sm" />
+            <Skeleton height={14} width="40%" />
+          </Card>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -111,14 +129,18 @@ async function UserWallet({ userProfile, userEmail }: { userProfile: any; userEm
           <StaggerItem>
             <Card withBorder radius="md" padding="xl" bg="var(--mantine-color-body)">
               <Text fz="sm" tt="uppercase" fw={700} c="dimmed">Pending PPTs</Text>
-              <Text fz="xl" fw={700}>${totalPendingBalance.toFixed(2)}</Text>
+              <Text fz="xl" fw={700}>
+                $<AnimateNumber format={{ minimumFractionDigits: 2, maximumFractionDigits: 2 }}>{totalPendingBalance}</AnimateNumber>
+              </Text>
             </Card>
           </StaggerItem>
 
           <StaggerItem>
             <Card withBorder radius="md" padding="xl" bg="var(--mantine-color-body)">
               <Text fz="sm" tt="uppercase" fw={700} c="dimmed">Total Earned</Text>
-              <Text fz="xl" fw={700}>${totalEarned.toFixed(2)}</Text>
+              <Text fz="xl" fw={700}>
+                $<AnimateNumber format={{ minimumFractionDigits: 2, maximumFractionDigits: 2 }}>{totalEarned}</AnimateNumber>
+              </Text>
             </Card>
           </StaggerItem>
 
@@ -194,7 +216,9 @@ async function ActiveTasks({ linearId }: { linearId: string }) {
                   <Group justify="space-between" align="flex-start" mb="xs">
                     <Badge variant="light" color="blue">{issue.identifier}</Badge>
                     {pptEstimate > 0 && (
-                      <Text fw={700} c="green" fz="sm">${pptEstimate} (Pending)</Text>
+                      <Text fw={700} c="green" fz="sm">
+                        $<AnimateNumber format={{ minimumFractionDigits: 2, maximumFractionDigits: 2 }}>{pptEstimate}</AnimateNumber> (Pending)
+                      </Text>
                     )}
                   </Group>
                   <Text fw={600} lineClamp={1} mb="md">{issue.title}</Text>
@@ -209,6 +233,49 @@ async function ActiveTasks({ linearId }: { linearId: string }) {
         </SimpleGrid>
       </StaggerContainer>
     </FadeIn>
+  );
+}
+
+async function RecommendedPPTs() {
+  let issues: Issue[] = [];
+  try {
+    const response = await linearClient.issues({
+      first: 5,
+      filter: {
+        assignee: { null: true },
+        state: { type: { eq: "unstarted" } },
+      },
+    });
+    issues = response.nodes;
+  } catch (e) {
+    console.error("Failed to fetch recommended PPTs:", e);
+    return null;
+  }
+
+  if (issues.length === 0) return null;
+
+  return (
+    <section style={{ marginBottom: "3rem" }}>
+      <Title order={2} mb="md">Available PPTs</Title>
+      <Carousel
+        gap={20}
+        items={issues.map((issue) => {
+          const pptEstimate = issue.estimate ? issue.estimate * 10 : 0;
+          return (
+            <Card key={issue.id} withBorder radius="md" padding="lg" style={{ width: 300 }}>
+              <Group justify="space-between" mb="xs">
+                <Badge size="sm" variant="light">{issue.identifier}</Badge>
+                <Text fw={700} c="green">${pptEstimate}</Text>
+              </Group>
+              <Text fw={600} lineClamp={1} mb="sm">{issue.title}</Text>
+              <Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
+                View Task &rarr;
+              </Anchor>
+            </Card>
+          );
+        })}
+      />
+    </section>
   );
 }
 
@@ -293,6 +360,10 @@ export default async function DashboardPage() {
 
       <Suspense fallback={<WalletSkeletons />}>
         <UserWallet userProfile={userProfile} userEmail={user?.primaryEmailAddress?.emailAddress} />
+      </Suspense>
+
+      <Suspense fallback={<CarouselSkeleton />}>
+        <RecommendedPPTs />
       </Suspense>
 
       {userProfile.linearId && (

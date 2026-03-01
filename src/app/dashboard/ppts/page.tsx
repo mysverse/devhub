@@ -22,7 +22,8 @@ import { Ticker } from "motion-plus/react";
 function extractFirstImage(markdown: string | null | undefined): string | null {
   if (!markdown) return null;
   const match = markdown.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
-  return match ? match[1] : null;
+  if (!match) return null;
+  return `/api/image-proxy?url=${encodeURIComponent(match[1])}`;
 }
 
 function PPTSkeleton() {
@@ -68,7 +69,9 @@ async function PPTList({ userId }: { userId: string }) {
         labels: { name: { eq: "PPT" } },
       },
     });
-    issues = response.nodes.sort((a, b) => (b.estimate || 0) - (a.estimate || 0));
+    issues = response.nodes.sort(
+      (a, b) => (b.estimate || 0) - (a.estimate || 0),
+    );
   } catch (e) {
     const err = e as Error;
     console.error("Failed to fetch Linear issues:", err);

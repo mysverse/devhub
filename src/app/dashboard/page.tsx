@@ -336,7 +336,9 @@ async function RecommendedPPTs({ userId }: { userId: string }) {
         state: { type: { eq: "unstarted" } },
       },
     });
-    issues = response.nodes.sort((a, b) => (b.estimate || 0) - (a.estimate || 0));
+    issues = response.nodes.sort(
+      (a, b) => (b.estimate || 0) - (a.estimate || 0),
+    );
   } catch (e) {
     console.error("Failed to fetch recommended PPTs:", e);
     return null;
@@ -354,8 +356,13 @@ async function RecommendedPPTs({ userId }: { userId: string }) {
         items={issues.map((issue) => {
           const pptEstimate = issue.estimate ? issue.estimate * 5 : 0;
           return (
-            <Card key={issue.id} withBorder radius="md" padding="lg" style={{ width: 300 }}>
-
+            <Card
+              key={issue.id}
+              withBorder
+              radius="md"
+              padding="lg"
+              style={{ width: 300 }}
+            >
               <Group justify="space-between" mb="xs">
                 <Badge size="sm" variant="light">
                   {issue.identifier}
@@ -404,13 +411,13 @@ export default async function DashboardPage() {
   // Auto-derive Linear Account
   if (!userProfile.linearId && user) {
     const linearOAuth = user.externalAccounts.find(
-      (acc) => acc.provider === "oauth_linear",
+      (acc) => acc.provider === "linear",
     );
-    if (linearOAuth && linearOAuth.externalId) {
+    if (linearOAuth && linearOAuth.providerUserId) {
       userProfile = await prisma.userProfile.update({
         where: { id: userId },
         data: {
-          linearId: linearOAuth.externalId,
+          linearId: linearOAuth.providerUserId,
           linearEmail: linearOAuth.emailAddress,
         },
         include: { transactions: true },

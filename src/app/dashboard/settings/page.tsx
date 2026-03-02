@@ -7,44 +7,44 @@ import InviteGenerator from "./InviteGenerator";
 import SettingsForm from "./SettingsForm";
 
 export default async function SettingsPage() {
-	const { userId } = await auth();
+  const { userId } = await auth();
 
-	if (!userId) {
-		redirect("/");
-	}
+  if (!userId) {
+    redirect("/");
+  }
 
-	const userProfile = await prisma.userProfile.findUnique({
-		where: { id: userId },
-	});
+  const userProfile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+  });
 
-	if (!userProfile) {
-		redirect("/dashboard");
-	}
+  if (!userProfile) {
+    redirect("/dashboard");
+  }
 
-	return (
-		<StaggerContainer>
-			<Box style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-				<StaggerItem>
-					<Title order={1}>HR Settings</Title>
-					<Text c="dimmed" mt="xs">
-						Manage your personal information and payment preferences to receive
-						your payouts.
-					</Text>
-				</StaggerItem>
+  return (
+    <StaggerContainer>
+      <Box style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+        <StaggerItem>
+          <Title order={1}>HR Settings</Title>
+          <Text c="dimmed" mt="xs">
+            Manage your personal information and payment preferences to receive
+            your payouts.
+          </Text>
+        </StaggerItem>
 
-				<StaggerItem>
-					<SettingsForm profile={userProfile} />
-				</StaggerItem>
+        <StaggerItem>
+          <SettingsForm profile={userProfile} />
+        </StaggerItem>
 
-				{userProfile.role === "ADMIN" && (
-					<>
-						<Divider my="md" />
-						<StaggerItem>
-							<InviteGenerator />
-						</StaggerItem>
-					</>
-				)}
-			</Box>
-		</StaggerContainer>
-	);
+        {userProfile.role === "ADMIN" && (
+          <>
+            <Divider my="md" />
+            <StaggerItem>
+              <InviteGenerator />
+            </StaggerItem>
+          </>
+        )}
+      </Box>
+    </StaggerContainer>
+  );
 }

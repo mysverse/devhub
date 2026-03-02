@@ -1,17 +1,17 @@
 import { auth } from "@clerk/nextjs/server";
-import { Issue } from "@linear/sdk";
+import type { Issue } from "@linear/sdk";
 import {
-	Alert,
-	Anchor,
-	Badge,
-	Card,
-	CardSection,
-	Group,
-	Image,
-	SimpleGrid,
-	Skeleton,
-	Text,
-	Title,
+  Alert,
+  Anchor,
+  Badge,
+  Card,
+  CardSection,
+  Group,
+  Image,
+  SimpleGrid,
+  Skeleton,
+  Text,
+  Title,
 } from "@mantine/core";
 import { Ticker } from "motion-plus/react";
 import { redirect } from "next/navigation";
@@ -20,216 +20,216 @@ import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { getLinearClient } from "@/lib/linear";
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
-	if (!markdown) return null;
-	const match = markdown.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
-	if (!match) return null;
-	return `/api/image-proxy?url=${encodeURIComponent(match[1])}`;
+  if (!markdown) return null;
+  const match = markdown.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
+  if (!match) return null;
+  return `/api/image-proxy?url=${encodeURIComponent(match[1])}`;
 }
 
 function PPTSkeleton() {
-	return (
-		<SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
-			{[...Array(6)].map((_, i) => (
-				<Card key={i} withBorder radius="md" padding="lg">
-					<Skeleton height={160} mb="md" />
-					<Group justify="space-between" mb="xs">
-						<Skeleton height={20} width={60} />
-						<Skeleton height={20} width={40} />
-					</Group>
-					<Skeleton height={24} mb="xs" />
-					<Skeleton height={14} mb={4} />
-					<Skeleton height={14} mb={4} />
-					<Skeleton height={14} mb="md" width="70%" />
-					<Group
-						justify="space-between"
-						mt="auto"
-						pt="md"
-						style={{
-							borderTop: "1px solid var(--mantine-color-default-border)",
-						}}
-					>
-						<Skeleton height={12} width={80} />
-						<Skeleton height={12} width={60} />
-					</Group>
-				</Card>
-			))}
-		</SimpleGrid>
-	);
+  return (
+    <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
+      {[...Array(6)].map((_, i) => (
+        <Card key={i} withBorder radius="md" padding="lg">
+          <Skeleton height={160} mb="md" />
+          <Group justify="space-between" mb="xs">
+            <Skeleton height={20} width={60} />
+            <Skeleton height={20} width={40} />
+          </Group>
+          <Skeleton height={24} mb="xs" />
+          <Skeleton height={14} mb={4} />
+          <Skeleton height={14} mb={4} />
+          <Skeleton height={14} mb="md" width="70%" />
+          <Group
+            justify="space-between"
+            mt="auto"
+            pt="md"
+            style={{
+              borderTop: "1px solid var(--mantine-color-default-border)",
+            }}
+          >
+            <Skeleton height={12} width={80} />
+            <Skeleton height={12} width={60} />
+          </Group>
+        </Card>
+      ))}
+    </SimpleGrid>
+  );
 }
 
 async function PPTList({ userId }: { userId: string }) {
-	let issues: Issue[] = [];
-	try {
-		const linearClient = await getLinearClient(userId);
-		const response = await linearClient.issues({
-			first: 50,
-			filter: {
-				assignee: { null: true },
-				state: { type: { eq: "unstarted" } },
-				labels: { name: { eq: "PPT" } },
-			},
-		});
-		issues = response.nodes.sort(
-			(a, b) => (b.estimate || 0) - (a.estimate || 0),
-		);
-	} catch (e) {
-		const err = e as Error;
-		console.error("Failed to fetch Linear issues:", err);
-		return (
-			<Alert color="red" title="Error" mb="xl">
-				{err.message ||
-					"Failed to fetch PPTs. Please check your Linear connection."}
-			</Alert>
-		);
-	}
+  let issues: Issue[] = [];
+  try {
+    const linearClient = await getLinearClient(userId);
+    const response = await linearClient.issues({
+      first: 50,
+      filter: {
+        assignee: { null: true },
+        state: { type: { eq: "unstarted" } },
+        labels: { name: { eq: "PPT" } },
+      },
+    });
+    issues = response.nodes.sort(
+      (a, b) => (b.estimate || 0) - (a.estimate || 0),
+    );
+  } catch (e) {
+    const err = e as Error;
+    console.error("Failed to fetch Linear issues:", err);
+    return (
+      <Alert color="red" title="Error" mb="xl">
+        {err.message ||
+          "Failed to fetch PPTs. Please check your Linear connection."}
+      </Alert>
+    );
+  }
 
-	if (issues.length === 0) {
-		return (
-			<Card withBorder radius="md" padding="xl" ta="center">
-				<Text c="dimmed">
-					No available PPTs at the moment. Check back later!
-				</Text>
-			</Card>
-		);
-	}
+  if (issues.length === 0) {
+    return (
+      <Card withBorder radius="md" padding="xl" ta="center">
+        <Text c="dimmed">
+          No available PPTs at the moment. Check back later!
+        </Text>
+      </Card>
+    );
+  }
 
-	return (
-		<FadeIn>
-			{issues.length > 0 && (
-				<div style={{ marginBottom: "2rem" }}>
-					<Text
-						size="xs"
-						fw={700}
-						c="dimmed"
-						tt="uppercase"
-						mb="xs"
-						ml="xs"
-						style={{ letterSpacing: "0.05em" }}
-					>
-						Trending PPTs
-					</Text>
-					<Card
-						withBorder
-						radius="md"
-						p={0}
-						style={{
-							overflow: "hidden",
-							background: "var(--mantine-color-dark-8)",
-						}}
-					>
-						<Ticker
-							velocity={30}
-							gap={48}
-							items={issues.slice(0, 10).map((issue) => (
-								<Group key={issue.id} wrap="nowrap" gap="xs">
-									<Badge size="xs" variant="outline" color="blue">
-										{issue.identifier}
-									</Badge>
-									<Text size="sm" fw={500} style={{ whiteSpace: "nowrap" }}>
-										{issue.title}
-									</Text>
-									<Text size="xs" c="green" fw={700}>
-										{issue.estimate ? `$${issue.estimate * 5}` : "$5 - $25"}
-									</Text>
-									<Text size="xs" c="dimmed" mx="sm">
-										|
-									</Text>
-								</Group>
-							))}
-						/>
-					</Card>
-				</div>
-			)}
+  return (
+    <FadeIn>
+      {issues.length > 0 && (
+        <div style={{ marginBottom: "2rem" }}>
+          <Text
+            size="xs"
+            fw={700}
+            c="dimmed"
+            tt="uppercase"
+            mb="xs"
+            ml="xs"
+            style={{ letterSpacing: "0.05em" }}
+          >
+            Trending PPTs
+          </Text>
+          <Card
+            withBorder
+            radius="md"
+            p={0}
+            style={{
+              overflow: "hidden",
+              background: "var(--mantine-color-dark-8)",
+            }}
+          >
+            <Ticker
+              velocity={30}
+              gap={48}
+              items={issues.slice(0, 10).map((issue) => (
+                <Group key={issue.id} wrap="nowrap" gap="xs">
+                  <Badge size="xs" variant="outline" color="blue">
+                    {issue.identifier}
+                  </Badge>
+                  <Text size="sm" fw={500} style={{ whiteSpace: "nowrap" }}>
+                    {issue.title}
+                  </Text>
+                  <Text size="xs" c="green" fw={700}>
+                    {issue.estimate ? `$${issue.estimate * 5}` : "$5 - $25"}
+                  </Text>
+                  <Text size="xs" c="dimmed" mx="sm">
+                    |
+                  </Text>
+                </Group>
+              ))}
+            />
+          </Card>
+        </div>
+      )}
 
-			<StaggerContainer>
-				<SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
-					{issues.map((issue) => {
-						const pptEstimate = issue.estimate ? issue.estimate * 5 : 0;
-						const imageUrl = extractFirstImage(issue.description);
+      <StaggerContainer>
+        <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
+          {issues.map((issue) => {
+            const pptEstimate = issue.estimate ? issue.estimate * 5 : 0;
+            const imageUrl = extractFirstImage(issue.description);
 
-						return (
-							<StaggerItem key={issue.id} className="h-full">
-								<Card
-									withBorder
-									radius="md"
-									padding="lg"
-									h="100%"
-									style={{ display: "flex", flexDirection: "column" }}
-								>
-									{imageUrl && (
-										<CardSection mb="md">
-											<Image src={imageUrl} height={160} alt={issue.title} />
-										</CardSection>
-									)}
+            return (
+              <StaggerItem key={issue.id} className="h-full">
+                <Card
+                  withBorder
+                  radius="md"
+                  padding="lg"
+                  h="100%"
+                  style={{ display: "flex", flexDirection: "column" }}
+                >
+                  {imageUrl && (
+                    <CardSection mb="md">
+                      <Image src={imageUrl} height={160} alt={issue.title} />
+                    </CardSection>
+                  )}
 
-									<Group justify="space-between" align="flex-start" mb="xs">
-										<Badge variant="light" color="blue">
-											{issue.identifier}
-										</Badge>
-										{pptEstimate > 0 ? (
-											<Text fw={700} c="green" fz="sm">
-												${pptEstimate}
-											</Text>
-										) : (
-											<Text fz="sm" fw={700} c="green">
-												$5 - $25
-											</Text>
-										)}
-									</Group>
+                  <Group justify="space-between" align="flex-start" mb="xs">
+                    <Badge variant="light" color="blue">
+                      {issue.identifier}
+                    </Badge>
+                    {pptEstimate > 0 ? (
+                      <Text fw={700} c="green" fz="sm">
+                        ${pptEstimate}
+                      </Text>
+                    ) : (
+                      <Text fz="sm" fw={700} c="green">
+                        $5 - $25
+                      </Text>
+                    )}
+                  </Group>
 
-									<Title order={4} size="h5" lineClamp={2} mb="xs">
-										{issue.title}
-									</Title>
-									<Text fz="sm" c="dimmed" lineClamp={3} mb="md">
-										{issue.description
-											? issue.description.replace(/!\[.*?\]\(.*?\)/g, "").trim()
-											: "No description provided."}
-									</Text>
+                  <Title order={4} size="h5" lineClamp={2} mb="xs">
+                    {issue.title}
+                  </Title>
+                  <Text fz="sm" c="dimmed" lineClamp={3} mb="md">
+                    {issue.description
+                      ? issue.description.replace(/!\[.*?\]\(.*?\)/g, "").trim()
+                      : "No description provided."}
+                  </Text>
 
-									<Group
-										justify="space-between"
-										mt="auto"
-										pt="md"
-										style={{
-											borderTop:
-												"1px solid var(--mantine-color-default-border)",
-										}}
-									>
-										<Text fz="xs" c="dimmed">
-											Complexity:{" "}
-											{issue.estimate ? `${issue.estimate} pts` : "Unestimated"}
-										</Text>
-										<Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
-											View in Linear &rarr;
-										</Anchor>
-									</Group>
-								</Card>
-							</StaggerItem>
-						);
-					})}
-				</SimpleGrid>
-			</StaggerContainer>
-		</FadeIn>
-	);
+                  <Group
+                    justify="space-between"
+                    mt="auto"
+                    pt="md"
+                    style={{
+                      borderTop:
+                        "1px solid var(--mantine-color-default-border)",
+                    }}
+                  >
+                    <Text fz="xs" c="dimmed">
+                      Complexity:{" "}
+                      {issue.estimate ? `${issue.estimate} pts` : "Unestimated"}
+                    </Text>
+                    <Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
+                      View in Linear &rarr;
+                    </Anchor>
+                  </Group>
+                </Card>
+              </StaggerItem>
+            );
+          })}
+        </SimpleGrid>
+      </StaggerContainer>
+    </FadeIn>
+  );
 }
 
 export default async function PPTsPage() {
-	const { userId } = await auth();
-	if (!userId) redirect("/");
+  const { userId } = await auth();
+  if (!userId) redirect("/");
 
-	return (
-		<FadeIn>
-			<div style={{ marginBottom: "2rem" }}>
-				<Title order={1}>PPT Board</Title>
-				<Text c="dimmed" mt="xs">
-					Find available tasks labeled as PPT (Pay Per Task). Claim a task to
-					earn its payout.
-				</Text>
-			</div>
+  return (
+    <FadeIn>
+      <div style={{ marginBottom: "2rem" }}>
+        <Title order={1}>PPT Board</Title>
+        <Text c="dimmed" mt="xs">
+          Find available tasks labeled as PPT (Pay Per Task). Claim a task to
+          earn its payout.
+        </Text>
+      </div>
 
-			<Suspense fallback={<PPTSkeleton />}>
-				<PPTList userId={userId} />
-			</Suspense>
-		</FadeIn>
-	);
+      <Suspense fallback={<PPTSkeleton />}>
+        <PPTList userId={userId} />
+      </Suspense>
+    </FadeIn>
+  );
 }

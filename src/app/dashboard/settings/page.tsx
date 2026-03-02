@@ -1,49 +1,50 @@
 import { auth } from "@clerk/nextjs/server";
+import { Box, Divider, Text, Title } from "@mantine/core";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
-import SettingsForm from "./SettingsForm";
-import InviteGenerator from "./InviteGenerator";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
-import { Title, Text, Divider, Box } from "@mantine/core";
+import prisma from "@/lib/prisma";
+import InviteGenerator from "./InviteGenerator";
+import SettingsForm from "./SettingsForm";
 
 export default async function SettingsPage() {
-  const { userId } = await auth();
-  
-  if (!userId) {
-    redirect("/");
-  }
+	const { userId } = await auth();
 
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId }
-  });
+	if (!userId) {
+		redirect("/");
+	}
 
-  if (!userProfile) {
-    redirect("/dashboard");
-  }
+	const userProfile = await prisma.userProfile.findUnique({
+		where: { id: userId },
+	});
 
-  return (
-    <StaggerContainer>
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
-        <StaggerItem>
-          <Title order={1}>HR Settings</Title>
-          <Text c="dimmed" mt="xs">
-            Manage your personal information and payment preferences to receive your payouts.
-          </Text>
-        </StaggerItem>
+	if (!userProfile) {
+		redirect("/dashboard");
+	}
 
-        <StaggerItem>
-          <SettingsForm profile={userProfile} />
-        </StaggerItem>
+	return (
+		<StaggerContainer>
+			<Box style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
+				<StaggerItem>
+					<Title order={1}>HR Settings</Title>
+					<Text c="dimmed" mt="xs">
+						Manage your personal information and payment preferences to receive
+						your payouts.
+					</Text>
+				</StaggerItem>
 
-        {userProfile.role === 'ADMIN' && (
-          <>
-            <Divider my="md" />
-            <StaggerItem>
-              <InviteGenerator />
-            </StaggerItem>
-          </>
-        )}
-      </Box>
-    </StaggerContainer>
-  );
+				<StaggerItem>
+					<SettingsForm profile={userProfile} />
+				</StaggerItem>
+
+				{userProfile.role === "ADMIN" && (
+					<>
+						<Divider my="md" />
+						<StaggerItem>
+							<InviteGenerator />
+						</StaggerItem>
+					</>
+				)}
+			</Box>
+		</StaggerContainer>
+	);
 }

@@ -1,44 +1,45 @@
 {
-  "name": "devhub",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
-  },
-  "dependencies": {
-    "@clerk/nextjs": "^6.39.0",
-    "@linear/sdk": "^76.0.0",
-    "@mantine/core": "^8.3.15",
-    "@mantine/hooks": "^8.3.15",
-    "@prisma/adapter-pg": "^7.4.2",
-    "@prisma/client": "^7.4.2",
-    "lucide-react": "^0.575.0",
-    "motion": "^12.34.3",
-    "motion-plus": "https://api.motion.dev/registry.tgz?package=motion-plus&version=2.11.0&token=65a016326afe0ae8bdb421c58d3ee596c18c692519e30c84914b81f3b136fa7a",
-    "next": "16.1.6",
-    "pg": "^8.19.0",
-    "postcss": "^8.5.6",
-    "postcss-preset-mantine": "^1.18.0",
-    "postcss-simple-vars": "^7.0.1",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "sonner": "^2.0.7",
-    "zod": "^4.3.6"
-  },
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4",
-    "@types/node": "^20",
-    "@types/pg": "^8.18.0",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "dotenv": "^17.3.1",
-    "eslint": "^9",
-    "eslint-config-next": "16.1.6",
-    "prisma": "^7.4.2",
-    "tailwindcss": "^4",
-    "typescript": "^5"
-  }
+	"name": "devhub",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"lint": "biome lint --write"
+	},
+	"dependencies": {
+		"@clerk/nextjs": "^6.39.0",
+		"@linear/sdk": "^76.0.0",
+		"@mantine/core": "^8.3.15",
+		"@mantine/hooks": "^8.3.15",
+		"@prisma/adapter-pg": "^7.4.2",
+		"@prisma/client": "^7.4.2",
+		"lucide-react": "^0.576.0",
+		"motion": "^12.34.3",
+		"motion-plus": "https://api.motion.dev/registry.tgz?package=motion-plus&version=2.11.0&token=65a016326afe0ae8bdb421c58d3ee596c18c692519e30c84914b81f3b136fa7a",
+		"next": "16.1.6",
+		"pg": "^8.19.0",
+		"postcss": "^8.5.6",
+		"postcss-preset-mantine": "^1.18.0",
+		"postcss-simple-vars": "^7.0.1",
+		"react": "19.2.4",
+		"react-dom": "19.2.4",
+		"sonner": "^2.0.7",
+		"zod": "^4.3.6"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.4.4",
+		"@tailwindcss/postcss": "^4.2.1",
+		"@types/node": "^25.3.3",
+		"@types/pg": "^8.18.0",
+		"@types/react": "^19.2.14",
+		"@types/react-dom": "^19.2.3",
+		"dotenv": "^17.3.1",
+		"eslint": "^9.39.3",
+		"eslint-config-next": "16.1.6",
+		"prisma": "^7.4.2",
+		"tailwindcss": "^4.2.1",
+		"typescript": "^5.9.3"
+	}
 }

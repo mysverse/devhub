@@ -264,19 +264,21 @@ export default function OnboardingFlow({
                       later from HR Settings.
                     </Alert>
                   ) : (
-                    <Alert color="yellow" title="Linear not auto-detected">
-                      We couldn&apos;t automatically find your Linear account.
-                      Enter your Linear workspace email to link it.
-                    </Alert>
+                    <>
+                      <Alert color="yellow" title="Linear not auto-detected">
+                        We couldn&apos;t automatically find your Linear account.
+                        Enter your Linear workspace email to link it.
+                      </Alert>
+                      <TextInput
+                        label="Linear Workspace Email"
+                        placeholder="you@company.com"
+                        type="email"
+                        value={linearEmail}
+                        onChange={(e) => setLinearEmail(e.target.value)}
+                        description="The email address you use in your Linear workspace."
+                      />
+                    </>
                   )}
-                  <TextInput
-                    label="Linear Workspace Email"
-                    placeholder="you@company.com"
-                    type="email"
-                    value={linearEmail}
-                    onChange={(e) => setLinearEmail(e.target.value)}
-                    description="The email address you use in your Linear workspace."
-                  />
                 </Stack>
               )}
             </Box>

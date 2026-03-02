@@ -35,7 +35,7 @@ export default function Home() {
           </Group>
           <Box>
             <SignedOut>
-              <SignInButton mode="modal">
+              <SignInButton mode="modal" fallbackRedirectUrl="/onboarding">
                 <Button variant="subtle">Sign In</Button>
               </SignInButton>
             </SignedOut>
@@ -81,7 +81,7 @@ export default function Home() {
                   </Button>
                 </SignedIn>
                 <SignedOut>
-                  <SignInButton mode="modal">
+                  <SignInButton mode="modal" fallbackRedirectUrl="/onboarding">
                     <Button size="lg" radius="xl">
                       Join the Team
                     </Button>

@@ -29,7 +29,14 @@ export async function generateInviteLink(emailAddress: string) {
       emailAddress: emailAddress,
       ignoreExisting: true, // Don't fail if they already exist, just return the existing invite
       notify: true, // Let Clerk send the email automatically
-      redirectUrl: `${getBaseUrl()}/onboarding`,
+      redirectUrl: `${getBaseUrl()}/sign-up`,
+    });
+
+    // Track the invitation in our local database
+    await prisma.invite.upsert({
+      where: { token: invitation.id },
+      create: { token: invitation.id, creatorId: userId },
+      update: {},
     });
 
     return {

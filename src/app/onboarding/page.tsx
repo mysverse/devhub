@@ -6,7 +6,7 @@ import OnboardingFlow from "./OnboardingFlow";
 
 export default async function OnboardingPage() {
   const { userId } = await auth();
-  if (!userId) redirect("/sign-in");
+  if (!userId) redirect("/sign-up");
 
   // If a profile already exists, the user has already onboarded
   const existingProfile = await prisma.userProfile.findUnique({

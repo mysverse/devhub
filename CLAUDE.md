@@ -6,8 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```bash
 pnpm dev          # Start dev server
-pnpm build        # Production build
-pnpm lint         # Run ESLint
+pnpm build        # Production build (runs prisma generate first)
+pnpm lint         # Run Biome linter with auto-fix
+pnpm check        # Run Biome check (lint + format + import organization) with auto-fix
 pnpm prisma migrate dev    # Run database migrations
 pnpm prisma generate       # Regenerate Prisma client after schema changes
 ```
@@ -24,7 +25,7 @@ This is a pay-per-task (PPT) tracking dashboard for developers. It integrates wi
 - **Server Actions**: Located in `actions.ts` files colocated with their route (e.g., `src/app/dashboard/settings/actions.ts`). All actions authenticate via `auth()` from Clerk and check roles where needed.
 - **Auth middleware**: `src/proxy.ts` (not `middleware.ts`) — Clerk middleware protecting `/dashboard` and `/settings` routes.
 - **Linear OAuth**: `src/lib/linear.ts` retrieves user OAuth tokens via Clerk, falling back to a system `LINEAR_API_KEY`.
-- **Prisma singleton**: `src/lib/prisma.ts` uses the `pg` adapter with connection pooling and a global singleton to prevent hot-reload connection exhaustion.
+- **Prisma client**: `src/lib/prisma.ts` uses the `pg` adapter with a connection pool.
 - **Animations**: Uses `motion` (not `framer-motion`) and `motion-plus`. Animation components are in `src/components/animations.tsx`.
 
 ### Route Structure
@@ -59,6 +60,13 @@ CLERK_SECRET_KEY         # Clerk server-side secret
 LINEAR_API_KEY           # Fallback Linear API key
 LINEAR_WEBHOOK_SECRET    # HMAC-SHA256 webhook verification
 ```
+
+### Linting & Formatting
+
+- **Biome** (not ESLint) for linting and formatting
+- Double quotes for JS/TS strings
+- Space indentation
+- Auto-organized imports via Biome assist
 
 ### UI & Styling
 

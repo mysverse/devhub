@@ -1,4 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import prisma from "@/lib/prisma";
 import DashboardLayoutClient from "./DashboardLayoutClient";
 
@@ -15,7 +16,8 @@ export default async function DashboardLayout({
       where: { id: userId },
       select: { role: true },
     });
-    isAdmin = userProfile?.role === "ADMIN";
+    if (!userProfile) redirect("/onboarding");
+    isAdmin = userProfile.role === "ADMIN";
   }
 
   return (

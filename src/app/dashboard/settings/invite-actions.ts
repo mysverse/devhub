@@ -2,6 +2,7 @@
 
 import { auth, createClerkClient } from "@clerk/nextjs/server";
 import prisma from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/url";
 
 const clerkClient = createClerkClient({
   secretKey: process.env.CLERK_SECRET_KEY,
@@ -28,6 +29,7 @@ export async function generateInviteLink(emailAddress: string) {
       emailAddress: emailAddress,
       ignoreExisting: true, // Don't fail if they already exist, just return the existing invite
       notify: true, // Let Clerk send the email automatically
+      redirectUrl: `${getBaseUrl()}/onboarding`,
     });
 
     return {

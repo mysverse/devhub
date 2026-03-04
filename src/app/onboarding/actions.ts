@@ -2,6 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
+import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
@@ -17,6 +18,7 @@ type OnboardingInput = {
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
+  agreedDocuments: string[];
 };
 
 const OnboardingSchema = z.object({
@@ -36,6 +38,7 @@ const OnboardingSchema = z.object({
   bankName: z.string().optional().nullable(),
   bankAccountNumber: z.string().optional().nullable(),
   bankAccountName: z.string().optional().nullable(),
+  agreedDocuments: z.array(z.enum(["COI", "NDA"])),
 });
 
 export async function completeOnboarding(
@@ -88,6 +91,38 @@ export async function completeOnboarding(
       create: { id: userId, ...profileData },
       update: profileData,
     });
+
+    // Create signed document records for agreed documents
+    if (data.agreedDocuments.length > 0) {
+      for (const docType of data.agreedDocuments) {
+        const template = getDocumentTemplate(docType);
+        const renderedContent = renderTemplate(template.content, {
+          LEGAL_NAME: data.legalName,
+        });
+
+        await prisma.signedDocument.upsert({
+          where: {
+            userId_documentType: {
+              userId,
+              documentType: docType,
+            },
+          },
+          create: {
+            userId,
+            documentType: docType,
+            templateVersion: template.meta.version,
+            templateContent: renderedContent,
+            legalName: data.legalName,
+          },
+          update: {
+            templateVersion: template.meta.version,
+            templateContent: renderedContent,
+            legalName: data.legalName,
+            signedAt: new Date(),
+          },
+        });
+      }
+    }
 
     return { success: true };
   } catch (error) {

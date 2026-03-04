@@ -30,6 +30,7 @@ model UserProfile {
   // Relationships
   transactions     Transaction[]
   invites          Invite[]
+  signedDocuments  SignedDocument[]
 }
 
 model Invite {
@@ -73,4 +74,36 @@ enum TxStatus {
   PENDING
   PAID
   CANCELLED
+}
+
+enum DocumentType {
+  COI
+  NDA
+}
+
+model SignedDocument {
+  id              String       @id @default(cuid())
+  userId          String
+  user            UserProfile  @relation(fields: [userId], references: [id])
+  documentType    DocumentType
+  templateVersion String
+  templateContent String
+  legalName       String
+  signedAt        DateTime     @default(now())
+  ipAddress       String?
+
+  coiEntries      CoiEntry[]
+
+  @@unique([userId, documentType])
+}
+
+model CoiEntry {
+  id                  String         @id @default(cuid())
+  signedDocumentId    String
+  signedDocument      SignedDocument  @relation(fields: [signedDocumentId], references: [id], onDelete: Cascade)
+  organizationName    String
+  natureOfInvolvement String
+  description         String
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 }

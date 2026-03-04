@@ -5,32 +5,45 @@ import {
   Box,
   Button,
   Card,
+  Checkbox,
   Container,
   Group,
   Radio,
+  ScrollArea,
   Select,
   Stack,
   Stepper,
   Text,
   TextInput,
   Title,
+  TypographyStylesProvider,
   UnstyledButton,
 } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import Markdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { completeOnboarding } from "./actions";
+
+type DocumentTemplate = {
+  type: string;
+  title: string;
+  content: string;
+};
 
 type Props = {
   initialName: string | null;
   detectedLinearId: string | null;
   detectedLinearEmail: string | null;
+  documentTemplates: DocumentTemplate[];
 };
 
 export default function OnboardingFlow({
   initialName,
   detectedLinearId,
   detectedLinearEmail,
+  documentTemplates,
 }: Props) {
   const router = useRouter();
   const [active, setActive] = useState(0);
@@ -47,7 +60,12 @@ export default function OnboardingFlow({
   const [discordId, setDiscordId] = useState("");
   const [robuxUsername, setRobuxUsername] = useState("");
 
-  // Step 3: payment
+  // Step 3: agreements
+  const [agreedDocuments, setAgreedDocuments] = useState<Set<string>>(
+    new Set(),
+  );
+
+  // Step 4: payment
   const [paymentMethod, setPaymentMethod] = useState<
     "PAYPAL" | "ROBUX" | "DUITNOW" | "BANK_TRANSFER"
   >("PAYPAL");
@@ -67,7 +85,11 @@ export default function OnboardingFlow({
       toast.error("Please enter your legal name to continue.");
       return;
     }
-    setActive((a) => Math.min(a + 1, 3));
+    if (active === 3 && agreedDocuments.size < documentTemplates.length) {
+      toast.error("Please agree to all documents to continue.");
+      return;
+    }
+    setActive((a) => Math.min(a + 1, 4));
   }
 
   function prevStep() {
@@ -122,6 +144,7 @@ export default function OnboardingFlow({
         ? bankAccountNumber.trim() || null
         : null,
       bankAccountName: needsBankDetails ? bankAccountName.trim() || null : null,
+      agreedDocuments: Array.from(agreedDocuments),
     });
 
     setLoading(false);
@@ -152,6 +175,7 @@ export default function OnboardingFlow({
         <Stepper.Step label="Welcome" />
         <Stepper.Step label="Personal Info" />
         <Stepper.Step label="Accounts" />
+        <Stepper.Step label="Agreements" />
         <Stepper.Step label="Payment" />
       </Stepper>
 
@@ -304,8 +328,53 @@ export default function OnboardingFlow({
         </Card>
       )}
 
-      {/* Step 3: Payment Method */}
+      {/* Step 3: Agreements */}
       {active === 3 && (
+        <Card withBorder radius="md" padding="xl">
+          <Title order={3} mb="xs">
+            Legal Agreements
+          </Title>
+          <Text c="dimmed" mb="xl">
+            Please review and agree to the following documents to continue.
+          </Text>
+
+          <Stack gap="lg">
+            {documentTemplates.map((doc) => (
+              <Card key={doc.type} withBorder radius="sm" padding="md">
+                <Stack gap="sm">
+                  <Title order={5}>{doc.title}</Title>
+                  <ScrollArea h={200}>
+                    <TypographyStylesProvider>
+                      <Markdown remarkPlugins={[remarkGfm]}>
+                        {doc.content.replace(
+                          /\{\{LEGAL_NAME\}\}/g,
+                          legalName || "_______________",
+                        )}
+                      </Markdown>
+                    </TypographyStylesProvider>
+                  </ScrollArea>
+                  <Checkbox
+                    label={`I, ${legalName || "[Legal Name]"}, have read and agree to this ${doc.title}.`}
+                    checked={agreedDocuments.has(doc.type)}
+                    onChange={(e) => {
+                      const next = new Set(agreedDocuments);
+                      if (e.currentTarget.checked) {
+                        next.add(doc.type);
+                      } else {
+                        next.delete(doc.type);
+                      }
+                      setAgreedDocuments(next);
+                    }}
+                  />
+                </Stack>
+              </Card>
+            ))}
+          </Stack>
+        </Card>
+      )}
+
+      {/* Step 4: Payment Method */}
+      {active === 4 && (
         <Card withBorder radius="md" padding="xl">
           <Title order={3} mb="xs">
             Payment Preferences
@@ -439,7 +508,7 @@ export default function OnboardingFlow({
           <div />
         )}
 
-        {active < 3 ? (
+        {active < 4 ? (
           <Button onClick={nextStep}>Next</Button>
         ) : (
           <Button onClick={handleSubmit} loading={loading}>

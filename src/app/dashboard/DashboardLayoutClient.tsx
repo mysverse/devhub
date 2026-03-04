@@ -78,6 +78,11 @@ export default function DashboardLayoutClient({
                   HR Settings
                 </Text>
               </UnstyledButton>
+              <UnstyledButton component={Link} href="/dashboard/documents">
+                <Text size="sm" fw={500}>
+                  Documents
+                </Text>
+              </UnstyledButton>
               {isAdmin && (
                 <UnstyledButton component={Link} href="/dashboard/admin">
                   <Text size="sm" fw={500}>
@@ -116,6 +121,14 @@ export default function DashboardLayoutClient({
           onClick={toggle}
         >
           HR Settings
+        </UnstyledButton>
+        <UnstyledButton
+          component={Link}
+          href="/dashboard/documents"
+          py="xs"
+          onClick={toggle}
+        >
+          Documents
         </UnstyledButton>
         {isAdmin && (
           <UnstyledButton

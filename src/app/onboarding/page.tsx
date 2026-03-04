@@ -1,5 +1,9 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import {
+  REQUIRED_DOCUMENTS,
+  getDocumentTemplate,
+} from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import OnboardingFlow from "./OnboardingFlow";
@@ -59,11 +63,22 @@ export default async function OnboardingPage() {
     }
   }
 
+  // Load document templates for the agreements step
+  const documentTemplates = REQUIRED_DOCUMENTS.map((type) => {
+    const template = getDocumentTemplate(type);
+    return {
+      type,
+      title: template.meta.title,
+      content: template.content,
+    };
+  });
+
   return (
     <OnboardingFlow
       initialName={initialName}
       detectedLinearId={detectedLinearId}
       detectedLinearEmail={detectedLinearEmail}
+      documentTemplates={documentTemplates}
     />
   );
 }

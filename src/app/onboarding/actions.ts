@@ -20,6 +20,11 @@ type OnboardingInput = {
   bankAccountNumber: string | null;
   bankAccountName: string | null;
   agreedDocuments: string[];
+  coiEntries?: {
+    organizationName: string;
+    natureOfInvolvement: string;
+    description: string;
+  }[];
 };
 
 const OnboardingSchema = z.object({
@@ -40,6 +45,15 @@ const OnboardingSchema = z.object({
   bankAccountNumber: z.string().optional().nullable(),
   bankAccountName: z.string().optional().nullable(),
   agreedDocuments: z.array(z.enum(["COI", "NDA"])),
+  coiEntries: z
+    .array(
+      z.object({
+        organizationName: z.string().min(1),
+        natureOfInvolvement: z.string().min(1),
+        description: z.string().min(1),
+      }),
+    )
+    .optional(),
 });
 
 export async function completeOnboarding(
@@ -101,7 +115,7 @@ export async function completeOnboarding(
           LEGAL_NAME: data.legalName,
         });
 
-        await prisma.signedDocument.upsert({
+        const doc = await prisma.signedDocument.upsert({
           where: {
             userId_documentType: {
               userId,
@@ -122,6 +136,17 @@ export async function completeOnboarding(
             signedAt: new Date(),
           },
         });
+
+        if (docType === "COI" && data.coiEntries?.length) {
+          await prisma.coiEntry.createMany({
+            data: data.coiEntries.map((entry) => ({
+              signedDocumentId: doc.id,
+              organizationName: entry.organizationName,
+              natureOfInvolvement: entry.natureOfInvolvement,
+              description: entry.description,
+            })),
+          });
+        }
       }
     }
 

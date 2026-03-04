@@ -6,10 +6,7 @@ import prisma from "@/lib/prisma";
 
 type Params = Promise<{ id: string }>;
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Params },
-) {
+export async function GET(_request: Request, { params }: { params: Params }) {
   const { id } = await params;
   const { userId } = await auth();
   if (!userId) {
@@ -38,10 +35,7 @@ export async function GET(
       select: { role: true },
     });
 
-    if (
-      signedDocument.userId !== userId &&
-      requestingUser?.role !== "ADMIN"
-    ) {
+    if (signedDocument.userId !== userId && requestingUser?.role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

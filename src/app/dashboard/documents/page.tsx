@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { getAllDocumentTemplates } from "@/lib/documents";
+import prisma from "@/lib/prisma";
 import DocumentsClient from "./DocumentsClient";
 
 export default async function DocumentsPage() {

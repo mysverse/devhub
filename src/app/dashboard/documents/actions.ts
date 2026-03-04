@@ -6,13 +6,31 @@ import { z } from "zod";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 
-export async function signDocument(documentType: string) {
+export async function signDocument(
+  documentType: string,
+  coiEntries?: {
+    organizationName: string;
+    natureOfInvolvement: string;
+    description: string;
+  }[],
+) {
   const { userId } = await auth();
   if (!userId) return { error: "Unauthorized" };
 
   const validTypes = ["COI", "NDA"];
   if (!validTypes.includes(documentType)) {
     return { error: "Invalid document type" };
+  }
+
+  if (coiEntries?.length) {
+    for (const entry of coiEntries) {
+      const parsed = CoiEntrySchema.safeParse(entry);
+      if (!parsed.success) {
+        return {
+          error: parsed.error.issues[0]?.message || "Invalid COI entry",
+        };
+      }
+    }
   }
 
   try {
@@ -22,34 +40,51 @@ export async function signDocument(documentType: string) {
     });
 
     if (!userProfile?.legalName) {
-      return { error: "Legal name is required to sign documents. Please update your profile first." };
+      return {
+        error:
+          "Legal name is required to sign documents. Please update your profile first.",
+      };
     }
 
+    const legalName = userProfile.legalName;
     const template = getDocumentTemplate(documentType);
     const renderedContent = renderTemplate(template.content, {
-      LEGAL_NAME: userProfile.legalName,
+      LEGAL_NAME: legalName,
     });
 
-    await prisma.signedDocument.upsert({
-      where: {
-        userId_documentType: {
+    await prisma.$transaction(async (tx) => {
+      const doc = await tx.signedDocument.upsert({
+        where: {
+          userId_documentType: {
+            userId,
+            documentType: documentType as "COI" | "NDA",
+          },
+        },
+        create: {
           userId,
           documentType: documentType as "COI" | "NDA",
+          templateVersion: template.meta.version,
+          templateContent: renderedContent,
+          legalName,
         },
-      },
-      create: {
-        userId,
-        documentType: documentType as "COI" | "NDA",
-        templateVersion: template.meta.version,
-        templateContent: renderedContent,
-        legalName: userProfile.legalName,
-      },
-      update: {
-        templateVersion: template.meta.version,
-        templateContent: renderedContent,
-        legalName: userProfile.legalName,
-        signedAt: new Date(),
-      },
+        update: {
+          templateVersion: template.meta.version,
+          templateContent: renderedContent,
+          legalName,
+          signedAt: new Date(),
+        },
+      });
+
+      if (documentType === "COI" && coiEntries?.length) {
+        await tx.coiEntry.createMany({
+          data: coiEntries.map((entry) => ({
+            signedDocumentId: doc.id,
+            organizationName: entry.organizationName,
+            natureOfInvolvement: entry.natureOfInvolvement,
+            description: entry.description,
+          })),
+        });
+      }
     });
 
     revalidatePath("/dashboard/documents");

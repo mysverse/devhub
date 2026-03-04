@@ -11,8 +11,8 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import prisma from "@/lib/prisma";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
+import prisma from "@/lib/prisma";
 
 export default async function AdminDocumentsPage() {
   const { userId } = await auth();

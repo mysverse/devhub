@@ -1,10 +1,4 @@
-import {
-  Document,
-  Page,
-  StyleSheet,
-  Text,
-  View,
-} from "@react-pdf/renderer";
+import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { siteConfig } from "@/lib/config";
 
@@ -223,11 +217,7 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       View,
       { key: "dev", style: styles.row },
       createElement(Text, { style: styles.label }, "Developer"),
-      createElement(
-        Text,
-        { style: styles.value },
-        data.legalName || "Not set",
-      ),
+      createElement(Text, { style: styles.value }, data.legalName || "Not set"),
     ),
     createElement(
       View,
@@ -243,11 +233,7 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       View,
       { key: "account", style: styles.row },
       createElement(Text, { style: styles.label }, "Account"),
-      createElement(
-        Text,
-        { style: styles.value },
-        getPaymentDetails(data),
-      ),
+      createElement(Text, { style: styles.value }, getPaymentDetails(data)),
     ),
   ];
 
@@ -261,7 +247,11 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       createElement(
         View,
         { style: styles.header },
-        createElement(Text, { style: styles.brand }, siteConfig.appName.toUpperCase()),
+        createElement(
+          Text,
+          { style: styles.brand },
+          siteConfig.appName.toUpperCase(),
+        ),
         createElement(Text, { style: styles.title }, "PAYMENT SLIP"),
       ),
       // Meta line
@@ -290,11 +280,7 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       createElement(
         View,
         { style: styles.section },
-        createElement(
-          Text,
-          { style: styles.sectionTitle },
-          "Payment Details",
-        ),
+        createElement(Text, { style: styles.sectionTitle }, "Payment Details"),
         ...paymentRows,
       ),
       // Amount

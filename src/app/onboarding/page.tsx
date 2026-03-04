@@ -1,9 +1,6 @@
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
-import {
-  REQUIRED_DOCUMENTS,
-  getDocumentTemplate,
-} from "@/lib/documents";
+import { getDocumentTemplate, REQUIRED_DOCUMENTS } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import OnboardingFlow from "./OnboardingFlow";

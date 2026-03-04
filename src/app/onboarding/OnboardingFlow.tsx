@@ -285,8 +285,8 @@ export default function OnboardingFlow({
                   {userType === "new" ? (
                     <Alert color="blue">
                       An admin will invite you to the Linear workspace once your
-                      {siteConfig.appName} account is set up. You can link your Linear account
-                      later from HR Settings.
+                      {siteConfig.appName} account is set up. You can link your
+                      Linear account later from HR Settings.
                     </Alert>
                   ) : (
                     <>

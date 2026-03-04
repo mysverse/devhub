@@ -10,8 +10,8 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  TextInput,
   Textarea,
+  TextInput,
   Title,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -163,9 +163,7 @@ function CoiEntriesSection({ entries }: { entries: CoiEntryData[] }) {
     if (result?.error) {
       toast.error(result.error);
     } else {
-      toast.success(
-        editingEntry ? "Entry updated." : "Entry added.",
-      );
+      toast.success(editingEntry ? "Entry updated." : "Entry added.");
       close();
       resetForm();
     }

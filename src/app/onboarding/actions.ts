@@ -139,8 +139,7 @@ export async function completeOnboarding(
         err.message.includes("linearEmail")
       ) {
         return {
-          error:
-            `This Linear account is already linked to another ${siteConfig.appName} account.`,
+          error: `This Linear account is already linked to another ${siteConfig.appName} account.`,
         };
       }
     }

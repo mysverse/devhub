@@ -3,16 +3,13 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import {
-  type TransactionSlipData,
   createTransactionSlipPdf,
+  type TransactionSlipData,
 } from "@/lib/transaction-slip-pdf";
 
 type Params = Promise<{ id: string }>;
 
-export async function GET(
-  _request: Request,
-  { params }: { params: Params },
-) {
+export async function GET(_request: Request, { params }: { params: Params }) {
   const { id } = await params;
   const { userId } = await auth();
   if (!userId) {
@@ -51,10 +48,7 @@ export async function GET(
       select: { role: true },
     });
 
-    if (
-      transaction.userId !== userId &&
-      requestingUser?.role !== "ADMIN"
-    ) {
+    if (transaction.userId !== userId && requestingUser?.role !== "ADMIN") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

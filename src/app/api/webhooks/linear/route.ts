@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { siteConfig } from "@/lib/config";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -61,7 +62,7 @@ export async function POST(req: Request) {
           );
         } else {
           console.warn(
-            `Could not find a linked DevHub user with Linear email: ${assigneeEmail}`,
+            `Could not find a linked ${siteConfig.appName} user with Linear email: ${assigneeEmail}`,
           );
         }
       }

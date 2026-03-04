@@ -6,6 +6,7 @@ import {
   View,
 } from "@react-pdf/renderer";
 import { createElement } from "react";
+import { siteConfig } from "@/lib/config";
 
 const styles = StyleSheet.create({
   page: {
@@ -257,7 +258,7 @@ export function createDocumentPdf({
       createElement(
         Text,
         { style: styles.signatureValue },
-        "Electronically signed via DevHub",
+        `Electronically signed via ${siteConfig.appName}`,
       ),
       createElement(
         Text,

@@ -12,6 +12,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import Image from "next/image";
 import Link from "next/link";
+import { siteConfig } from "@/lib/config";
 
 export default function DashboardLayoutClient({
   children,
@@ -54,7 +55,7 @@ export default function DashboardLayoutClient({
               >
                 <Image
                   src="/devhub.svg"
-                  alt="DevHub"
+                  alt={siteConfig.appName}
                   width={32}
                   height={32}
                   style={{ height: "32px", width: "auto" }}

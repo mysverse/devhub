@@ -1,16 +1,16 @@
 ---
 title: "Non-Disclosure Agreement"
-version: "1.0.0"
+version: "1.1.0"
 type: "NDA"
 ---
 
 # Non-Disclosure Agreement
 
-I, **{{LEGAL_NAME}}**, hereby enter into this Non-Disclosure Agreement ("Agreement") with DevHub.
+I, **{{LEGAL_NAME}}**, hereby enter into this Non-Disclosure Agreement ("Agreement") with MYSverse Digital Ventures.
 
 ## 1. Definition of Confidential Information
 
-"Confidential Information" means any and all non-public information disclosed by DevHub, including but not limited to:
+"Confidential Information" means any and all non-public information disclosed by MYSverse Digital Ventures, including but not limited to:
 
 - Source code, software architecture, and technical documentation
 - Business strategies, financial data, and operational plans
@@ -25,8 +25,8 @@ I, **{{LEGAL_NAME}}**, hereby enter into this Non-Disclosure Agreement ("Agreeme
 I agree to:
 
 - Hold all Confidential Information in strict confidence.
-- Not disclose Confidential Information to any third party without prior written consent from DevHub.
-- Use Confidential Information solely for the purpose of performing my duties for DevHub.
+- Not disclose Confidential Information to any third party without prior written consent from MYSverse Digital Ventures.
+- Use Confidential Information solely for the purpose of performing my duties for MYSverse Digital Ventures.
 - Take all reasonable measures to protect the confidentiality of such information.
 - Not copy, reproduce, or distribute Confidential Information except as necessary to perform my duties.
 
@@ -35,21 +35,21 @@ I agree to:
 This Agreement does not apply to information that:
 
 - Is or becomes publicly available through no fault of mine.
-- Was known to me prior to disclosure by DevHub, as evidenced by written records.
+- Was known to me prior to disclosure by MYSverse Digital Ventures, as evidenced by written records.
 - Is independently developed by me without use of Confidential Information.
 - Is disclosed to me by a third party who has a legal right to make such disclosure.
 
 ## 4. Duration
 
-This Agreement remains in effect during my engagement with DevHub and for a period of **two (2) years** following the termination of my engagement, regardless of the reason for termination.
+This Agreement remains in effect during my engagement with MYSverse Digital Ventures and for a period of **two (2) years** following the termination of my engagement, regardless of the reason for termination.
 
 ## 5. Return of Information
 
-Upon termination of my engagement with DevHub, or upon request, I agree to promptly return or destroy all Confidential Information in my possession, including any copies, notes, or derivatives.
+Upon termination of my engagement with MYSverse Digital Ventures, or upon request, I agree to promptly return or destroy all Confidential Information in my possession, including any copies, notes, or derivatives.
 
 ## 6. Remedies
 
-I acknowledge that any breach of this Agreement may cause irreparable harm to DevHub and that DevHub shall be entitled to seek equitable relief, including injunction and specific performance, in addition to any other remedies available at law.
+I acknowledge that any breach of this Agreement may cause irreparable harm to MYSverse Digital Ventures and that MYSverse Digital Ventures shall be entitled to seek equitable relief, including injunction and specific performance, in addition to any other remedies available at law.
 
 ## 7. Acknowledgment
 

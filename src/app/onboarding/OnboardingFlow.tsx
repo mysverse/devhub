@@ -24,6 +24,7 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import { siteConfig } from "@/lib/config";
 import { completeOnboarding } from "./actions";
 
 type DocumentTemplate = {
@@ -164,7 +165,7 @@ export default function OnboardingFlow({
     <Container size="sm" py="xl">
       <div style={{ marginBottom: "2rem", textAlign: "center" }}>
         <Title order={1} mb="xs">
-          Welcome to DevHub
+          Welcome to {siteConfig.appName}
         </Title>
         <Text c="dimmed">
           Let&apos;s get your account set up in just a few steps.
@@ -229,7 +230,7 @@ export default function OnboardingFlow({
               </Text>
               <Text size="sm" c="dimmed">
                 I&apos;m already in the Roblox group, Discord server, and Linear
-                workspace — I just need a DevHub account.
+                workspace — I just need a {siteConfig.appName} account.
               </Text>
             </UnstyledButton>
           </Stack>
@@ -284,7 +285,7 @@ export default function OnboardingFlow({
                   {userType === "new" ? (
                     <Alert color="blue">
                       An admin will invite you to the Linear workspace once your
-                      DevHub account is set up. You can link your Linear account
+                      {siteConfig.appName} account is set up. You can link your Linear account
                       later from HR Settings.
                     </Alert>
                   ) : (

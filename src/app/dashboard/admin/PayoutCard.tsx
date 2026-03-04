@@ -87,6 +87,16 @@ export default function PayoutCard({
         >
           Mark as Paid
         </Button>
+        <Button
+          component="a"
+          href={`/api/transactions/${transactionId}/pdf`}
+          fullWidth
+          variant="light"
+          color="gray"
+          mt="xs"
+        >
+          Download Slip
+        </Button>
       </Box>
     </Card>
   );

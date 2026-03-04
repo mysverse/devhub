@@ -2,6 +2,7 @@
 
 import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
+import { siteConfig } from "@/lib/config";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
@@ -139,7 +140,7 @@ export async function completeOnboarding(
       ) {
         return {
           error:
-            "This Linear account is already linked to another DevHub account.",
+            `This Linear account is already linked to another ${siteConfig.appName} account.`,
         };
       }
     }

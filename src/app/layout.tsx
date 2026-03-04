@@ -3,6 +3,7 @@ import { ColorSchemeScript, createTheme, MantineProvider } from "@mantine/core";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
+import { siteConfig } from "@/lib/config";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
@@ -17,7 +18,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "DevHub - PPT Dashboard",
+  title: `${siteConfig.appName} - PPT Dashboard`,
   description: "Pay-Per-Task tracking for our developer team",
 };
 

@@ -13,6 +13,7 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import { siteConfig } from "@/lib/config";
 
 export default function Home() {
   return (
@@ -27,7 +28,7 @@ export default function Home() {
           <Group gap="sm">
             <Image
               src="/devhub.svg"
-              alt="DevHub"
+              alt={siteConfig.appName}
               width={32}
               height={32}
               style={{ height: "32px", width: "auto" }}

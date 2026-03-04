@@ -494,6 +494,11 @@ export default async function DashboardPage() {
       <TableTd c="dimmed" fz="sm">
         {new Date(tx.createdAt).toLocaleDateString()}
       </TableTd>
+      <TableTd>
+        <Anchor href={`/api/transactions/${tx.id}/pdf`} fz="sm" fw={500}>
+          Slip
+        </Anchor>
+      </TableTd>
     </TableTr>
   ));
 
@@ -552,6 +557,7 @@ export default async function DashboardPage() {
                   <TableTh>Amount</TableTh>
                   <TableTh>Status</TableTh>
                   <TableTh>Date</TableTh>
+                  <TableTh />
                 </TableTr>
               </TableThead>
               <TableTbody>
@@ -559,7 +565,7 @@ export default async function DashboardPage() {
                   rows
                 ) : (
                   <TableTr>
-                    <TableTd colSpan={4}>
+                    <TableTd colSpan={5}>
                       <Text ta="center" c="dimmed" py="xl">
                         No transactions yet. Complete some PPTs!
                       </Text>

@@ -23,7 +23,7 @@ This is a pay-per-task (PPT) tracking dashboard for developers. It integrates wi
 
 - **Server vs Client components**: Pages that fetch data are server components. Interactive forms/UI use `'use client'`. Layouts fetch auth/profile data server-side and pass to client layout components.
 - **Server Actions**: Located in `actions.ts` files colocated with their route (e.g., `src/app/dashboard/settings/actions.ts`). All actions authenticate via `auth()` from Clerk and check roles where needed.
-- **Auth middleware**: `src/middleware.ts` — Clerk middleware protecting `/dashboard` and `/settings` routes.
+- **Auth middleware**: `src/proxy.ts` — Clerk middleware protecting `/dashboard` and `/settings` routes.
 - **Linear OAuth**: `src/lib/linear.ts` retrieves user OAuth tokens via Clerk, falling back to a system `LINEAR_API_KEY`.
 - **Prisma client**: `src/lib/prisma.ts` uses the `pg` adapter with a connection pool.
 - **Animations**: Uses `motion` (not `framer-motion`) and `motion-plus`. Animation components are in `src/components/animations.tsx`.

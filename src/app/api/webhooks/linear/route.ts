@@ -30,7 +30,7 @@ export async function POST(req: Request) {
       let pptAmount = 0;
 
       if (issueData.estimate) {
-        pptAmount = issueData.estimate * 5; // e.g. 1 point = $5
+        pptAmount = issueData.estimate * 20; // e.g. 1 point = RM20
       }
 
       const assigneeEmail = issueData.assignee?.email;
@@ -53,7 +53,7 @@ export async function POST(req: Request) {
               linearIssueTitle: issueData.title || null,
               linearIssueUrl: issueData.url || null,
               amount: pptAmount,
-              currency: "USD",
+              currency: "MYR",
               status: "PENDING",
             },
           });

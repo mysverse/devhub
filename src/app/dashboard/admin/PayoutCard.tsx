@@ -50,7 +50,8 @@ export default function PayoutCard({
             {developerName}
           </Text>
           <Text size="lg" fw={700} c="green">
-            ${amount.toFixed(2)} {currency}
+            {currency === "MYR" ? "RM" : "$"}
+            {amount.toFixed(2)} {currency}
           </Text>
         </Group>
 

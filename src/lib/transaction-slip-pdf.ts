@@ -174,7 +174,9 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
   const amountStr =
     data.currency === "R$"
       ? `${data.amount.toFixed(2)} R$`
-      : `$${data.amount.toFixed(2)} ${data.currency}`;
+      : data.currency === "MYR"
+        ? `RM${data.amount.toFixed(2)}`
+        : `$${data.amount.toFixed(2)} ${data.currency}`;
 
   const detailRows: React.ReactElement[] = [
     createElement(

@@ -6,8 +6,11 @@ import {
   Badge,
   Card,
   Group,
+  ProgressRoot,
+  ProgressSection,
   SimpleGrid,
   Skeleton,
+  Stack,
   Table,
   TableTbody,
   TableTd,
@@ -27,6 +30,7 @@ import {
   StaggerContainer,
   StaggerItem,
 } from "@/components/animations";
+import TaskCard from "@/components/TaskCard";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
@@ -121,7 +125,7 @@ async function UserWallet({
         .map(({ issue }) => issue);
 
       activeTasksPendingAmount = assignedIssues.reduce((sum, issue) => {
-        return sum + (issue.estimate ? issue.estimate * 5 : 0);
+        return sum + (issue.estimate ? issue.estimate * 20 : 0);
       }, 0);
     } catch (_e) {
       console.error("Failed to fetch active tasks for wallet:", _e);
@@ -142,18 +146,19 @@ async function UserWallet({
     <FadeIn>
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg" mb="xl">
-          <StaggerItem>
+          <StaggerItem className="h-full">
             <Card
               withBorder
               radius="md"
               padding="xl"
               bg="var(--mantine-color-body)"
+              h="100%"
             >
               <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
                 Pending PPTs
               </Text>
               <Text fz="xl" fw={700}>
-                $
+                RM
                 <AnimatedNumber
                   value={totalPendingBalance}
                   format={{
@@ -165,18 +170,19 @@ async function UserWallet({
             </Card>
           </StaggerItem>
 
-          <StaggerItem>
+          <StaggerItem className="h-full">
             <Card
               withBorder
               radius="md"
               padding="xl"
               bg="var(--mantine-color-body)"
+              h="100%"
             >
               <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
                 Total Earned
               </Text>
               <Text fz="xl" fw={700}>
-                $
+                RM
                 <AnimatedNumber
                   value={totalEarned}
                   format={{
@@ -188,12 +194,13 @@ async function UserWallet({
             </Card>
           </StaggerItem>
 
-          <StaggerItem>
+          <StaggerItem className="h-full">
             <Card
               withBorder
               radius="md"
               padding="xl"
               bg="var(--mantine-color-body)"
+              h="100%"
             >
               <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
                 Payment Method
@@ -283,66 +290,210 @@ async function ActiveTasks({
     <FadeIn>
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          {assignedIssues.map((issue) => {
-            const pptEstimate = issue.estimate ? issue.estimate * 5 : 0;
-            return (
-              <StaggerItem key={issue.id}>
-                <Card withBorder radius="md" padding="lg" h="100%">
-                  <Group justify="space-between" align="flex-start" mb="xs">
-                    <Badge variant="light" color="blue">
-                      {issue.identifier}
-                    </Badge>
-                    {pptEstimate > 0 && (
-                      <Text fw={700} c="green" fz="sm">
-                        $
-                        <AnimatedNumber
-                          value={pptEstimate}
-                          format={{
-                            minimumFractionDigits: 2,
-                            maximumFractionDigits: 2,
-                          }}
-                        />{" "}
-                        (Pending)
-                      </Text>
-                    )}
-                  </Group>
-                  <Text fw={600} lineClamp={1} mb="md">
-                    {issue.title}
-                  </Text>
-                  <Group justify="space-between" mt="auto">
-                    <Text fz="sm" c="dimmed">
-                      {issue.estimate ? `${issue.estimate} pts` : "Unestimated"}
-                    </Text>
-                    <Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
-                      Open in Linear &rarr;
-                    </Anchor>
-                  </Group>
-                </Card>
-              </StaggerItem>
-            );
-          })}
+          {assignedIssues.map((issue) => (
+            <StaggerItem key={issue.id}>
+              <TaskCard
+                issueId={issue.id}
+                identifier={issue.identifier}
+                title={issue.title}
+                url={issue.url}
+                estimate={issue.estimate}
+                variant="active"
+              />
+            </StaggerItem>
+          ))}
         </SimpleGrid>
       </StaggerContainer>
     </FadeIn>
   );
 }
 
-async function RecommendedPPTs({ userId }: { userId: string }) {
+function LeaderboardSkeleton() {
+  return (
+    <Card withBorder radius="md" p={0}>
+      <Stack gap={0}>
+        {[...Array(5)].map((_, i) => (
+          <Group
+            key={i}
+            p="md"
+            style={
+              i > 0
+                ? { borderTop: "1px solid var(--mantine-color-default-border)" }
+                : undefined
+            }
+          >
+            <Skeleton height={20} width={20} circle />
+            <Skeleton height={16} width={120} />
+            <Skeleton height={16} width={80} ml="auto" />
+          </Group>
+        ))}
+      </Stack>
+    </Card>
+  );
+}
+
+type LeaderboardEntry = {
+  name: string;
+  avatarUrl: string | null;
+  completedAmount: number;
+  inProgressAmount: number;
+  totalTasks: number;
+  completedTasks: number;
+};
+
+async function Leaderboard({ userId }: { userId: string }) {
+  try {
+    const linearClient = await getLinearClient(userId);
+    const response = await linearClient.issues({
+      first: 100,
+      filter: {
+        labels: { name: { eq: "PPT" } },
+        assignee: { null: false },
+      },
+    });
+
+    const issues = response.nodes;
+
+    // Enrich with assignee and state data
+    const enriched = await Promise.all(
+      issues.map(async (issue) => {
+        const [assignee, state] = await Promise.all([
+          issue.assignee,
+          issue.state,
+        ]);
+        return { issue, assignee, stateType: state?.type ?? "unknown" };
+      }),
+    );
+
+    // Group by assignee
+    const byAssignee = new Map<string, LeaderboardEntry>();
+    for (const { issue, assignee, stateType } of enriched) {
+      if (!assignee) continue;
+      const amount = issue.estimate ? issue.estimate * 20 : 0;
+      const isCompleted = stateType === "completed";
+      const isActive = stateType === "started" || stateType === "unstarted";
+
+      const existing = byAssignee.get(assignee.id);
+      if (existing) {
+        existing.totalTasks++;
+        if (isCompleted) {
+          existing.completedAmount += amount;
+          existing.completedTasks++;
+        } else if (isActive) {
+          existing.inProgressAmount += amount;
+        }
+      } else {
+        byAssignee.set(assignee.id, {
+          name: assignee.displayName || assignee.name,
+          avatarUrl: assignee.avatarUrl ?? null,
+          completedAmount: isCompleted ? amount : 0,
+          inProgressAmount: isActive && !isCompleted ? amount : 0,
+          totalTasks: 1,
+          completedTasks: isCompleted ? 1 : 0,
+        });
+      }
+    }
+
+    const sorted = [...byAssignee.values()].sort(
+      (a, b) =>
+        b.completedAmount +
+        b.inProgressAmount -
+        (a.completedAmount + a.inProgressAmount),
+    );
+
+    if (sorted.length === 0) return null;
+
+    const maxTotal = Math.max(
+      ...sorted.map((e) => e.completedAmount + e.inProgressAmount),
+    );
+
+    return (
+      <section style={{ marginBottom: "3rem" }}>
+        <Title order={2} mb="md">
+          Leaderboard
+        </Title>
+        <Card withBorder radius="md" p={0}>
+          <Stack gap={0}>
+            {sorted.map((entry, i) => {
+              const total = entry.completedAmount + entry.inProgressAmount;
+              const completedPct =
+                maxTotal > 0 ? (entry.completedAmount / maxTotal) * 100 : 0;
+              const inProgressPct =
+                maxTotal > 0 ? (entry.inProgressAmount / maxTotal) * 100 : 0;
+
+              return (
+                <Group
+                  key={entry.name}
+                  p="md"
+                  gap="md"
+                  wrap="nowrap"
+                  style={
+                    i > 0
+                      ? {
+                          borderTop:
+                            "1px solid var(--mantine-color-default-border)",
+                        }
+                      : undefined
+                  }
+                >
+                  <Text fw={700} fz="sm" c="dimmed" w={20} ta="center">
+                    {i + 1}
+                  </Text>
+                  <Stack gap={4} style={{ flex: 1, minWidth: 0 }}>
+                    <Group justify="space-between" wrap="nowrap">
+                      <Text fw={600} fz="sm" truncate="end">
+                        {entry.name}
+                      </Text>
+                      <Group gap="xs" wrap="nowrap">
+                        {entry.inProgressAmount > 0 && (
+                          <Text fz="xs" c="yellow" fw={600}>
+                            +RM{entry.inProgressAmount} pending
+                          </Text>
+                        )}
+                        <Text fw={700} fz="sm" c="green">
+                          RM{total}
+                        </Text>
+                      </Group>
+                    </Group>
+                    <ProgressRoot size="sm">
+                      <ProgressSection value={completedPct} color="green" />
+                      <ProgressSection value={inProgressPct} color="yellow" />
+                    </ProgressRoot>
+                    <Text fz="xs" c="dimmed">
+                      {entry.completedTasks}/{entry.totalTasks} tasks completed
+                    </Text>
+                  </Stack>
+                </Group>
+              );
+            })}
+          </Stack>
+        </Card>
+      </section>
+    );
+  } catch (e) {
+    console.error("Failed to fetch leaderboard:", e);
+    return null;
+  }
+}
+
+async function SuggestedPPTs({ userId }: { userId: string }) {
   let issues: Issue[] = [];
   try {
     const linearClient = await getLinearClient(userId);
     const response = await linearClient.issues({
-      first: 5,
+      first: 10,
       filter: {
         assignee: { null: true },
         state: { type: { eq: "unstarted" } },
+        labels: { name: { eq: "PPT" } },
       },
     });
+    // Sort by highest value first
     issues = response.nodes.sort(
       (a, b) => (b.estimate || 0) - (a.estimate || 0),
     );
   } catch (e) {
-    console.error("Failed to fetch recommended PPTs:", e);
+    console.error("Failed to fetch suggested PPTs:", e);
     return null;
   }
 
@@ -350,38 +501,31 @@ async function RecommendedPPTs({ userId }: { userId: string }) {
 
   return (
     <section style={{ marginBottom: "3rem" }}>
-      <Title order={2} mb="md">
-        Available PPTs
-      </Title>
+      <Group justify="space-between" align="baseline" mb="md">
+        <Title order={2}>Suggested for You</Title>
+        <Anchor href="/dashboard/ppts" fz="sm" fw={500}>
+          View all PPTs &rarr;
+        </Anchor>
+      </Group>
+      <Text fz="sm" c="dimmed" mb="md">
+        High-value tasks available to claim, sorted by payout.
+      </Text>
       <Carousel
         gap={20}
-        items={issues.map((issue) => {
-          const pptEstimate = issue.estimate ? issue.estimate * 5 : 0;
-          return (
-            <Card
+        items={issues
+          .slice(0, 6)
+          .map((issue) => (
+            <TaskCard
               key={issue.id}
-              withBorder
-              radius="md"
-              padding="lg"
-              style={{ width: 300 }}
-            >
-              <Group justify="space-between" mb="xs">
-                <Badge size="sm" variant="light">
-                  {issue.identifier}
-                </Badge>
-                <Text fw={700} c="green">
-                  {pptEstimate > 0 ? `$${pptEstimate}` : "$5 - $25"}
-                </Text>
-              </Group>
-              <Text fw={600} lineClamp={1} mb="sm">
-                {issue.title}
-              </Text>
-              <Anchor href={issue.url} target="_blank" fz="sm" fw={500}>
-                View Task &rarr;
-              </Anchor>
-            </Card>
-          );
-        })}
+              issueId={issue.id}
+              identifier={issue.identifier}
+              title={issue.title}
+              url={issue.url}
+              estimate={issue.estimate}
+              description={issue.description}
+              variant="compact"
+            />
+          ))}
       />
     </section>
   );
@@ -475,7 +619,8 @@ export default async function DashboardPage() {
         )}
       </TableTd>
       <TableTd fw={500}>
-        ${tx.amount.toFixed(2)} {tx.currency}
+        {tx.currency === "MYR" ? "RM" : "$"}
+        {tx.amount.toFixed(2)} {tx.currency}
       </TableTd>
       <TableTd>
         <Badge
@@ -525,7 +670,11 @@ export default async function DashboardPage() {
       </Suspense>
 
       <Suspense fallback={<CarouselSkeleton />}>
-        <RecommendedPPTs userId={userId} />
+        <SuggestedPPTs userId={userId} />
+      </Suspense>
+
+      <Suspense fallback={<LeaderboardSkeleton />}>
+        <Leaderboard userId={userId} />
       </Suspense>
 
       {userProfile.linearId && (

@@ -17,7 +17,7 @@ pnpm prisma generate       # Regenerate Prisma client after schema changes
 
 **Stack**: Next.js 16 (App Router) + TypeScript + Prisma (PostgreSQL) + Clerk auth + Mantine UI + Tailwind CSS
 
-This is a pay-per-task (PPT) tracking dashboard for developers. It integrates with Linear for task management — when a Linear issue is completed, a webhook credits the developer based on `estimate * 5`.
+This is a pay-per-task (PPT) tracking dashboard for developers. It integrates with Linear for task management — when a Linear issue is completed, a webhook credits the developer based on `estimate * 20` (MYR). Default currency is MYR (RM).
 
 ### Key Patterns
 
@@ -71,6 +71,7 @@ LINEAR_WEBHOOK_SECRET    # HMAC-SHA256 webhook verification
 ### UI & Styling
 
 - **Mantine v8** as the component library with dark color scheme and blue primary color
+- **Mantine compound components** (e.g. `Progress.Root`, `Progress.Section`) don't work in server components. Import the sub-components directly instead: `ProgressRoot`, `ProgressSection`, etc.
 - **Tailwind CSS v4** for utility classes alongside Mantine
 - **PostCSS** configured with Mantine preset and breakpoint variables
 - Path alias: `@/*` maps to `src/*`

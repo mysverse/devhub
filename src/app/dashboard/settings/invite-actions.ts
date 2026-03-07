@@ -1,15 +1,12 @@
 "use server";
 
-import { auth, createClerkClient } from "@clerk/nextjs/server";
+import crypto from "node:crypto";
+import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
 
-const clerkClient = createClerkClient({
-  secretKey: process.env.CLERK_SECRET_KEY,
-});
-
 export async function generateInviteLink(emailAddress: string) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
 
   if (!userId) {
     return { error: "Unauthorized" };
@@ -25,29 +22,22 @@ export async function generateInviteLink(emailAddress: string) {
   }
 
   try {
-    const invitation = await clerkClient.invitations.createInvitation({
-      emailAddress: emailAddress,
-      ignoreExisting: true, // Don't fail if they already exist, just return the existing invite
-      notify: true, // Let Clerk send the email automatically
-      redirectUrl: `${getBaseUrl()}/sign-up`,
+    const token = crypto.randomBytes(32).toString("hex");
+
+    await prisma.invite.create({
+      data: { token, creatorId: userId },
     });
 
-    // Track the invitation in our local database
-    await prisma.invite.upsert({
-      where: { token: invitation.id },
-      create: { token: invitation.id, creatorId: userId },
-      update: {},
-    });
+    const url = `${getBaseUrl()}/sign-in?invite=${token}`;
 
     return {
       success: true,
-      url: invitation.url, // Clerk returns a pre-signed URL to bypass closed registrations
-      message: `Invitation sent to ${emailAddress}!`,
+      url,
+      message: `Invite link generated for ${emailAddress}!`,
     };
   } catch (error) {
     const err = error as Error;
-    // Handle clerk specific error formats if needed
-    console.error("Clerk Invitation Error:", err);
+    console.error("Invite generation error:", err);
     return { error: err.message || "Failed to generate invite" };
   }
 }

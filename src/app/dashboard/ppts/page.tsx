@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import type { Issue } from "@linear/sdk";
 import {
   Alert,
@@ -18,6 +17,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import TaskCard from "@/components/TaskCard";
+import { getSession } from "@/lib/auth-utils";
 import { getLinearClient } from "@/lib/linear";
 
 type EnrichedIssue = {
@@ -98,7 +98,11 @@ function ProjectSectionHeader({
   info,
   taskCount,
   totalPayout,
-}: { info: ProjectInfo; taskCount: number; totalPayout: number }) {
+}: {
+  info: ProjectInfo;
+  taskCount: number;
+  totalPayout: number;
+}) {
   const days = daysLeft(info.targetDate);
   const progressPct = Math.round(info.progress * 100);
 
@@ -174,7 +178,10 @@ function ProjectSectionHeader({
 function IssueGrid({
   items,
   hideProject,
-}: { items: EnrichedIssue[]; hideProject?: boolean }) {
+}: {
+  items: EnrichedIssue[];
+  hideProject?: boolean;
+}) {
   return (
     <StaggerContainer>
       <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
@@ -194,11 +201,11 @@ function IssueGrid({
               hideProject={hideProject}
               subIssueCount={item.subIssueCount}
               variant="full"
-              />
-            </StaggerItem>
-          ))}
-        </SimpleGrid>
-      </StaggerContainer>
+            />
+          </StaggerItem>
+        ))}
+      </SimpleGrid>
+    </StaggerContainer>
   );
 }
 
@@ -463,7 +470,7 @@ async function PPTList({ userId }: { userId: string }) {
 }
 
 export default async function PPTsPage() {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) redirect("/");
 
   return (

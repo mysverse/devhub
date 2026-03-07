@@ -1,17 +1,21 @@
 "use client";
 
-import { UserButton } from "@clerk/nextjs";
 import {
   AppShell,
+  Avatar,
   Burger,
   Container,
   Group,
+  Menu,
   Text,
   UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { LogOut } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { signOut, useSession } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 
 export default function DashboardLayoutClient({
@@ -22,6 +26,8 @@ export default function DashboardLayoutClient({
   isAdmin: boolean;
 }) {
   const [opened, { toggle }] = useDisclosure();
+  const { data: session } = useSession();
+  const router = useRouter();
 
   return (
     <AppShell
@@ -93,7 +99,32 @@ export default function DashboardLayoutClient({
               )}
             </Group>
 
-            <UserButton afterSignOutUrl="/" />
+            <Menu shadow="md" width={200}>
+              <Menu.Target>
+                <UnstyledButton>
+                  <Avatar
+                    src={session?.user?.image}
+                    alt={session?.user?.name ?? "User"}
+                    radius="xl"
+                    size="sm"
+                  />
+                </UnstyledButton>
+              </Menu.Target>
+              <Menu.Dropdown>
+                <Menu.Label>
+                  {session?.user?.name ?? session?.user?.email}
+                </Menu.Label>
+                <Menu.Item
+                  leftSection={<LogOut size={14} />}
+                  onClick={async () => {
+                    await signOut();
+                    router.push("/");
+                  }}
+                >
+                  Sign out
+                </Menu.Item>
+              </Menu.Dropdown>
+            </Menu>
           </Group>
         </Container>
       </AppShell.Header>

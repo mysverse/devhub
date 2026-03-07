@@ -1,8 +1,8 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 
@@ -14,7 +14,7 @@ export async function signDocument(
     description: string;
   }[],
 ) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
   const validTypes = ["COI", "NDA"];
@@ -106,7 +106,7 @@ export async function addCoiEntry(input: {
   natureOfInvolvement: string;
   description: string;
 }) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
   const parsed = CoiEntrySchema.safeParse(input);
@@ -148,7 +148,7 @@ export async function updateCoiEntry(input: {
   natureOfInvolvement: string;
   description: string;
 }) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
   const parsed = CoiEntrySchema.safeParse(input);
@@ -184,7 +184,7 @@ export async function updateCoiEntry(input: {
 }
 
 export async function removeCoiEntry(entryId: string) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
   try {

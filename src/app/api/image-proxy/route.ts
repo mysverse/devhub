@@ -1,11 +1,11 @@
-import { auth } from "@clerk/nextjs/server";
 import { type NextRequest, NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-utils";
 import { getLinearToken } from "@/lib/linear";
 
 const ALLOWED_HOSTS = ["uploads.linear.app", "linear.app"];
 
 export async function GET(req: NextRequest) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

@@ -1,8 +1,8 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
 
 const SettingsSchema = z.object({
@@ -23,7 +23,7 @@ const SettingsSchema = z.object({
 });
 
 export async function updateProfileSettings(formData: FormData) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) throw new Error("Unauthorized");
 
   const rawData = {

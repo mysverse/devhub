@@ -1,11 +1,11 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth-utils";
 import { getAllDocumentTemplates } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 import DocumentsClient from "./DocumentsClient";
 
 export default async function DocumentsPage() {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) redirect("/sign-in");
 
   const signedDocuments = await prisma.signedDocument.findMany({

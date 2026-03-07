@@ -1,4 +1,3 @@
-import { auth, currentUser } from "@clerk/nextjs/server";
 import type { Issue } from "@linear/sdk";
 import {
   Alert,
@@ -31,6 +30,7 @@ import {
   StaggerItem,
 } from "@/components/animations";
 import TaskCard from "@/components/TaskCard";
+import { getSession } from "@/lib/auth-utils";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
@@ -532,10 +532,8 @@ async function SuggestedPPTs({ userId }: { userId: string }) {
 }
 
 export default async function DashboardPage() {
-  const { userId } = await auth();
+  const { userId, user } = await getSession();
   if (!userId) redirect("/");
-
-  const user = await currentUser();
 
   let userProfile = await prisma.userProfile.findUnique({
     where: { id: userId },
@@ -546,53 +544,27 @@ export default async function DashboardPage() {
     userProfile = await prisma.userProfile.create({
       data: {
         id: userId,
-        legalName: user?.firstName
-          ? `${user.firstName} ${user.lastName || ""}`.trim()
-          : null,
+        legalName: user?.name ?? null,
       },
       include: { transactions: true },
     });
   }
 
-  // Auto-derive Linear Account
-  if (!userProfile.linearId && user) {
-    const linearOAuth = user.externalAccounts.find(
-      (acc) => acc.provider === "linear",
-    );
-    if (linearOAuth?.providerUserId) {
+  // Auto-derive Linear Account from better-auth account table
+  if (!userProfile.linearId) {
+    const linearAccount = await prisma.account.findFirst({
+      where: { userId, providerId: "linear" },
+      select: { accountId: true },
+    });
+    if (linearAccount) {
       userProfile = await prisma.userProfile.update({
         where: { id: userId },
         data: {
-          linearId: linearOAuth.providerUserId,
-          linearEmail: linearOAuth.emailAddress,
+          linearId: linearAccount.accountId,
+          linearEmail: user?.email ?? null,
         },
         include: { transactions: true },
       });
-    } else {
-      const primaryEmail = user.emailAddresses.find(
-        (e) => e.id === user.primaryEmailAddressId,
-      )?.emailAddress;
-      if (primaryEmail) {
-        try {
-          const linearClient = await getLinearClient(userId);
-          const usersResponse = await linearClient.users();
-          const linearUser = usersResponse.nodes.find(
-            (u) => u.email.toLowerCase() === primaryEmail.toLowerCase(),
-          );
-          if (linearUser) {
-            userProfile = await prisma.userProfile.update({
-              where: { id: userId },
-              data: { linearId: linearUser.id, linearEmail: linearUser.email },
-              include: { transactions: true },
-            });
-          }
-        } catch (e) {
-          console.error(
-            "Failed to automatically link Linear account via email:",
-            e,
-          );
-        }
-      }
     }
   }
 
@@ -659,9 +631,8 @@ export default async function DashboardPage() {
       {!userProfile.linearId && (
         <Alert color="yellow" title="Linear Account Not Linked" mb="xl">
           We couldn&apos;t automatically link your Linear account. Please ensure
-          your Clerk account email (
-          {user?.primaryEmailAddress?.emailAddress || "Not set"}) matches your
-          Linear workspace email, or connect Linear via your profile settings.
+          your account email ({user?.email || "Not set"}) matches your Linear
+          workspace email, or try signing out and back in.
         </Alert>
       )}
 

@@ -110,7 +110,11 @@ function ComplexityDots({ points }: { points: number | null | undefined }) {
 
 function LinearIcon({ url }: { url: string }) {
   return (
-    <Anchor href={url} target="_blank" style={{ display: "flex", opacity: 0.7 }}>
+    <Anchor
+      href={url}
+      target="_blank"
+      style={{ display: "flex", opacity: 0.7 }}
+    >
       <Image src="/linear.png" w={18} h={18} alt="Open in Linear" />
     </Anchor>
   );

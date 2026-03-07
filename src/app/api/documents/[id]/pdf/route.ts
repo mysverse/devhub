@@ -1,6 +1,6 @@
-import { auth } from "@clerk/nextjs/server";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
+import { getSession } from "@/lib/auth-utils";
 import { createDocumentPdf } from "@/lib/markdown-to-pdf";
 import prisma from "@/lib/prisma";
 
@@ -8,7 +8,7 @@ type Params = Promise<{ id: string }>;
 
 export async function GET(_request: Request, { params }: { params: Params }) {
   const { id } = await params;
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }

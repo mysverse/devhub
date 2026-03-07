@@ -1,8 +1,8 @@
-import { auth } from "@clerk/nextjs/server";
 import { Card, SimpleGrid, Text, Title } from "@mantine/core";
 import type { Transaction, UserProfile } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import { getSession } from "@/lib/auth-utils";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import PayoutCard from "./PayoutCard";
@@ -10,7 +10,7 @@ import PayoutCard from "./PayoutCard";
 type TransactionWithUser = Transaction & { user: UserProfile };
 
 export default async function AdminPage() {
-  const { userId } = await auth();
+  const { userId } = await getSession();
 
   if (!userId) {
     redirect("/");

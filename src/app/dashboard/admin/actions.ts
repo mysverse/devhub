@@ -1,12 +1,12 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
 
 // In a real application, you should verify if the user has an ADMIN role in Clerk/Database.
 async function requireAdmin() {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) throw new Error("Unauthorized");
 
   const userProfile = await prisma.userProfile.findUnique({

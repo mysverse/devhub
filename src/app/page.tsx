@@ -1,6 +1,5 @@
 "use client";
 
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/nextjs";
 import {
   AppShell,
   Box,
@@ -13,9 +12,12 @@ import {
 import Image from "next/image";
 import Link from "next/link";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import { signIn, useSession } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 
 export default function Home() {
+  const { data: session, isPending } = useSession();
+
   return (
     <AppShell header={{ height: 60 }} padding="md">
       <AppShell.Header>
@@ -35,14 +37,24 @@ export default function Home() {
             />
           </Group>
           <Box>
-            <SignedOut>
-              <SignInButton mode="modal" fallbackRedirectUrl="/onboarding">
-                <Button variant="subtle">Sign In</Button>
-              </SignInButton>
-            </SignedOut>
-            <SignedIn>
-              <UserButton />
-            </SignedIn>
+            {!isPending && !session && (
+              <Button
+                variant="subtle"
+                onClick={() =>
+                  signIn.oauth2({
+                    providerId: "linear",
+                    callbackURL: "/onboarding",
+                  })
+                }
+              >
+                Sign In
+              </Button>
+            )}
+            {session && (
+              <Button variant="subtle" component={Link} href="/dashboard">
+                Dashboard
+              </Button>
+            )}
           </Box>
         </Container>
       </AppShell.Header>
@@ -71,7 +83,7 @@ export default function Home() {
 
             <StaggerItem>
               <Group justify="center">
-                <SignedIn>
+                {session ? (
                   <Button
                     size="lg"
                     radius="xl"
@@ -80,14 +92,21 @@ export default function Home() {
                   >
                     Go to Dashboard
                   </Button>
-                </SignedIn>
-                <SignedOut>
-                  <SignInButton mode="modal" fallbackRedirectUrl="/onboarding">
-                    <Button size="lg" radius="xl">
-                      Join the Team
-                    </Button>
-                  </SignInButton>
-                </SignedOut>
+                ) : (
+                  <Button
+                    size="lg"
+                    radius="xl"
+                    loading={isPending}
+                    onClick={() =>
+                      signIn.oauth2({
+                        providerId: "linear",
+                        callbackURL: "/onboarding",
+                      })
+                    }
+                  >
+                    Join the Team
+                  </Button>
+                )}
               </Group>
             </StaggerItem>
           </Container>

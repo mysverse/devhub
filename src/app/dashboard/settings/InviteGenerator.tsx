@@ -47,8 +47,8 @@ export default function InviteGenerator() {
         Team Onboarding
       </Title>
       <Text size="sm" c="dimmed" mb="lg">
-        Invite a new developer to the team. This will allow them to bypass the
-        closed registration page and automatically create their account.
+        Generate an invite link for a new developer. Share the link with them to
+        join the team.
       </Text>
 
       {!inviteUrl ? (
@@ -99,8 +99,7 @@ export default function InviteGenerator() {
             </CopyButton>
           </Group>
           <Text size="xs" c="yellow.7">
-            * Clerk has sent them an email, but you can also share this link
-            manually.
+            * Share this link with the developer directly.
           </Text>
           <Button
             variant="subtle"

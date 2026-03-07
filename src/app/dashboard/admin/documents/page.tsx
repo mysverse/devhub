@@ -1,4 +1,3 @@
-import { auth } from "@clerk/nextjs/server";
 import {
   Badge,
   Button,
@@ -11,11 +10,12 @@ import {
 } from "@mantine/core";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth-utils";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 
 export default async function AdminDocumentsPage() {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) redirect("/sign-in");
 
   const userProfile = await prisma.userProfile.findUnique({

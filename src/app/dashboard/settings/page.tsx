@@ -1,13 +1,13 @@
-import { auth } from "@clerk/nextjs/server";
 import { Box, Divider, Text, Title } from "@mantine/core";
 import { redirect } from "next/navigation";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
 import InviteGenerator from "./InviteGenerator";
 import SettingsForm from "./SettingsForm";
 
 export default async function SettingsPage() {
-  const { userId } = await auth();
+  const { userId } = await getSession();
 
   if (!userId) {
     redirect("/");

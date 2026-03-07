@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 import SigningForm from "./SigningForm";
@@ -8,7 +8,7 @@ type Params = Promise<{ type: string }>;
 
 export default async function DocumentViewPage({ params }: { params: Params }) {
   const { type } = await params;
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) redirect("/sign-in");
 
   const docType = type.toUpperCase();

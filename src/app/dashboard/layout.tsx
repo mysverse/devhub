@@ -1,5 +1,5 @@
-import { auth } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
 import DashboardLayoutClient from "./DashboardLayoutClient";
 
@@ -8,7 +8,7 @@ export default async function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   let isAdmin = false;
 
   if (userId) {

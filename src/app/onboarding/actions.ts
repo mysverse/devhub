@@ -1,7 +1,7 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { z } from "zod";
+import { getSession } from "@/lib/auth-utils";
 import { siteConfig } from "@/lib/config";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
@@ -59,7 +59,7 @@ const OnboardingSchema = z.object({
 export async function completeOnboarding(
   input: OnboardingInput,
 ): Promise<{ error?: string; success?: boolean }> {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
   const parsed = OnboardingSchema.safeParse(input);

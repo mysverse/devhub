@@ -1,11 +1,11 @@
 "use server";
 
-import { auth } from "@clerk/nextjs/server";
 import { revalidatePath } from "next/cache";
+import { getSession } from "@/lib/auth-utils";
 import { getLinearClient } from "@/lib/linear";
 
 export async function claimIssue(issueId: string) {
-  const { userId } = await auth();
+  const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
   try {

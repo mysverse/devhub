@@ -1,13 +1,14 @@
 import {
   Anchor,
+  Avatar,
   Badge,
   Card,
   CardSection,
   Group,
   Image,
-  Stack,
   Text,
   Title,
+  Tooltip,
 } from "@mantine/core";
 import Markdown from "react-markdown";
 import ClaimButton from "./ClaimButton";
@@ -75,9 +76,45 @@ type TaskCardProps = {
   description?: string | null;
   projectName?: string | null;
   assigneeName?: string | null;
+  assigneeAvatarUrl?: string | null;
   isAssignedToViewer?: boolean;
+  hideProject?: boolean;
+  subIssueCount?: number;
   variant?: "full" | "compact" | "active";
 };
+
+function ComplexityDots({ points }: { points: number | null | undefined }) {
+  const count = points || 0;
+  if (count === 0) return null;
+  return (
+    <Tooltip label={`Complexity: ${count} pts`}>
+      <Group gap={3} align="center" style={{ cursor: "default" }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: "50%",
+              background:
+                i < count
+                  ? "var(--mantine-color-blue-5)"
+                  : "var(--mantine-color-dark-4)",
+            }}
+          />
+        ))}
+      </Group>
+    </Tooltip>
+  );
+}
+
+function LinearIcon({ url }: { url: string }) {
+  return (
+    <Anchor href={url} target="_blank" style={{ display: "flex", opacity: 0.7 }}>
+      <Image src="/linear.png" w={18} h={18} alt="Open in Linear" />
+    </Anchor>
+  );
+}
 
 export default function TaskCard({
   issueId,
@@ -88,7 +125,10 @@ export default function TaskCard({
   description,
   projectName,
   assigneeName,
+  assigneeAvatarUrl,
   isAssignedToViewer,
+  hideProject,
+  subIssueCount,
   variant = "full",
 }: TaskCardProps) {
   const pptEstimate = estimate ? estimate * 20 : 0;
@@ -176,14 +216,26 @@ export default function TaskCard({
       )}
 
       <Group justify="space-between" align="flex-start" mb="xs">
-        <Group gap="xs" style={{ flexWrap: "wrap" }}>
+        <Group gap="xs" style={{ flexWrap: "wrap" }} align="center">
           <Badge variant="light" color="blue">
             {identifier}
           </Badge>
-          {projectName && (
+          {projectName && !hideProject && (
             <Badge variant="dot" color="gray" size="sm">
               {projectName}
             </Badge>
+          )}
+          {assigneeName && (
+            <Tooltip label={assigneeName}>
+              <Avatar
+                src={assigneeAvatarUrl}
+                size={22}
+                radius="xl"
+                color={isAssignedToViewer ? "green" : "gray"}
+              >
+                {assigneeName.charAt(0).toUpperCase()}
+              </Avatar>
+            </Tooltip>
           )}
         </Group>
         {pptEstimate > 0 ? (
@@ -205,7 +257,7 @@ export default function TaskCard({
       </div>
 
       <Group
-        justify="space-between"
+        gap="sm"
         align="center"
         mt="auto"
         pt="md"
@@ -213,20 +265,18 @@ export default function TaskCard({
           borderTop: "1px solid var(--mantine-color-default-border)",
         }}
       >
-        <Stack gap={2}>
-          <Text fz="xs" c="dimmed">
-            Complexity: {estimate ? `${estimate} pts` : "Unestimated"}
-          </Text>
-          {assigneeName && (
-            <Text fz="xs" c="yellow">
-              Assigned: {assigneeName}
-            </Text>
-          )}
-        </Stack>
-        <Group gap="xs">
-          <Anchor href={url} target="_blank" fz="xs" fw={500}>
-            Linear &rarr;
-          </Anchor>
+        <ComplexityDots points={estimate} />
+        {subIssueCount != null && subIssueCount > 0 && (
+          <Tooltip
+            label={`${subIssueCount} sub-issue${subIssueCount !== 1 ? "s" : ""}`}
+          >
+            <Badge variant="light" color="gray" size="xs">
+              {subIssueCount} sub
+            </Badge>
+          </Tooltip>
+        )}
+        <Group gap="sm" align="center" ml="auto">
+          <LinearIcon url={url} />
           {isAssignedToViewer ? (
             <Badge variant="light" color="green" size="sm">
               Yours

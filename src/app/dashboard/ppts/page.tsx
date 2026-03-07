@@ -27,7 +27,9 @@ type EnrichedIssue = {
   teamName: string | null;
   teamKey: string;
   assigneeName: string | null;
+  assigneeAvatarUrl: string | null;
   isAssignedToViewer: boolean;
+  subIssueCount: number;
 };
 
 type ProjectInfo = {
@@ -92,13 +94,17 @@ function formatDate(date: string | null): string | null {
   });
 }
 
-function ProjectSectionHeader({ info }: { info: ProjectInfo }) {
+function ProjectSectionHeader({
+  info,
+  taskCount,
+  totalPayout,
+}: { info: ProjectInfo; taskCount: number; totalPayout: number }) {
   const days = daysLeft(info.targetDate);
   const progressPct = Math.round(info.progress * 100);
 
   return (
-    <Stack gap={4} mb="md">
-      <Group gap="sm" align="baseline">
+    <Group justify="space-between" align="center" wrap="wrap" gap="sm" mb="md">
+      <Group gap="sm" align="center">
         <Title order={3}>{info.name}</Title>
         {info.health && (
           <Badge
@@ -119,15 +125,23 @@ function ProjectSectionHeader({ info }: { info: ProjectInfo }) {
                 : "Off Track"}
           </Badge>
         )}
+        <Badge variant="light" color="gray" size="sm">
+          {taskCount} task{taskCount !== 1 && "s"}
+        </Badge>
+        {totalPayout > 0 && (
+          <Text fz="sm" c="green" fw={600}>
+            RM{totalPayout}
+          </Text>
+        )}
       </Group>
-      <Group gap="md" align="center">
-        <div style={{ flex: 1, maxWidth: 200 }}>
+      <Group gap="sm" align="center">
+        <div style={{ width: 120 }}>
           <ProgressRoot size="sm" radius="xl">
             <ProgressSection value={progressPct} color="blue" />
           </ProgressRoot>
         </div>
         <Text fz="xs" c="dimmed" fw={500}>
-          {progressPct}% complete
+          {progressPct}%
         </Text>
         {info.startDate && info.targetDate && (
           <Text fz="xs" c="dimmed">
@@ -153,43 +167,38 @@ function ProjectSectionHeader({ info }: { info: ProjectInfo }) {
           </Badge>
         )}
       </Group>
-    </Stack>
+    </Group>
   );
 }
 
-function IssueGrid({ items }: { items: EnrichedIssue[] }) {
-  const groupTotal = items.reduce(
-    (s, i) => s + (i.issue.estimate ? i.issue.estimate * 20 : 0),
-    0,
-  );
+function IssueGrid({
+  items,
+  hideProject,
+}: { items: EnrichedIssue[]; hideProject?: boolean }) {
   return (
-    <>
-      {groupTotal > 0 && (
-        <Text fz="sm" c="green" fw={600} mb="sm">
-          RM{groupTotal} total
-        </Text>
-      )}
-      <StaggerContainer>
-        <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
-          {items.map((item) => (
-            <StaggerItem key={item.issue.id} className="h-full">
-              <TaskCard
-                issueId={item.issue.id}
-                identifier={item.issue.identifier}
-                title={item.issue.title}
-                url={item.issue.url}
-                estimate={item.issue.estimate}
-                description={item.issue.description}
-                projectName={item.projectName}
-                assigneeName={item.assigneeName}
-                isAssignedToViewer={item.isAssignedToViewer}
-                variant="full"
+    <StaggerContainer>
+      <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
+        {items.map((item) => (
+          <StaggerItem key={item.issue.id} className="h-full">
+            <TaskCard
+              issueId={item.issue.id}
+              identifier={item.issue.identifier}
+              title={item.issue.title}
+              url={item.issue.url}
+              estimate={item.issue.estimate}
+              description={item.issue.description}
+              projectName={item.projectName}
+              assigneeName={item.assigneeName}
+              assigneeAvatarUrl={item.assigneeAvatarUrl}
+              isAssignedToViewer={item.isAssignedToViewer}
+              hideProject={hideProject}
+              subIssueCount={item.subIssueCount}
+              variant="full"
               />
             </StaggerItem>
           ))}
         </SimpleGrid>
       </StaggerContainer>
-    </>
   );
 }
 
@@ -220,15 +229,18 @@ function ProjectSection({
   info: ProjectInfo;
   items: EnrichedIssue[];
 }) {
+  const totalPayout = items.reduce(
+    (s, i) => s + (i.issue.estimate ? i.issue.estimate * 20 : 0),
+    0,
+  );
   return (
     <section>
-      <ProjectSectionHeader info={info} />
-      <Group gap="sm" mb="sm" align="baseline">
-        <Badge variant="light" color="gray" size="lg">
-          {items.length} task{items.length !== 1 && "s"}
-        </Badge>
-      </Group>
-      <IssueGrid items={items} />
+      <ProjectSectionHeader
+        info={info}
+        taskCount={items.length}
+        totalPayout={totalPayout}
+      />
+      <IssueGrid items={items} hideProject />
     </section>
   );
 }
@@ -276,10 +288,11 @@ async function PPTList({ userId }: { userId: string }) {
 
   const enriched: EnrichedIssue[] = await Promise.all(
     issues.map(async (issue) => {
-      const [project, team, assignee] = await Promise.all([
+      const [project, team, assignee, children] = await Promise.all([
         issue.project,
         issue.team,
         issue.assignee,
+        issue.children(),
       ]);
 
       if (project && !projectMap.has(project.id)) {
@@ -299,7 +312,9 @@ async function PPTList({ userId }: { userId: string }) {
         teamName: team?.name ?? null,
         teamKey: team?.key ?? "other",
         assigneeName: assignee ? assignee.displayName || assignee.name : null,
+        assigneeAvatarUrl: assignee?.avatarUrl ?? null,
         isAssignedToViewer: assignee?.id === viewerId,
+        subIssueCount: children?.nodes?.length ?? 0,
       };
     }),
   );

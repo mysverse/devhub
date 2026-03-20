@@ -18,7 +18,7 @@ import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
-import { getLinearClient } from "@/lib/linear";
+import { withLinearFallback } from "@/lib/linear";
 
 type EnrichedIssue = {
   issue: Issue;
@@ -256,20 +256,24 @@ async function PPTList({ userId }: { userId: string }) {
   let issues: Issue[] = [];
   let viewerId: string | null = null;
   try {
-    const linearClient = await getLinearClient(userId);
-    const viewer = await linearClient.viewer;
-    viewerId = viewer.id;
-
-    const response = await linearClient.issues({
-      first: 50,
-      filter: {
-        state: { type: { in: ["unstarted", "started"] } },
-        labels: { name: { eq: "PPT" } },
-      },
+    const result = await withLinearFallback(userId, async (client) => {
+      const viewer = await client.viewer;
+      const response = await client.issues({
+        first: 50,
+        filter: {
+          state: { type: { in: ["unstarted", "started"] } },
+          labels: { name: { eq: "PPT" } },
+        },
+      });
+      return {
+        viewerId: viewer.id,
+        issues: response.nodes.sort(
+          (a, b) => (b.estimate || 0) - (a.estimate || 0),
+        ),
+      };
     });
-    issues = response.nodes.sort(
-      (a, b) => (b.estimate || 0) - (a.estimate || 0),
-    );
+    viewerId = result.viewerId;
+    issues = result.issues;
   } catch (e) {
     const err = e as Error;
     console.error("Failed to fetch Linear issues:", err);

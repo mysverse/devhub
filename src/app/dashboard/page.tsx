@@ -31,7 +31,7 @@ import {
 } from "@/components/animations";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
-import { getLinearClient } from "@/lib/linear";
+import { withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
 function WalletSkeletons() {
@@ -101,32 +101,37 @@ async function UserWallet({
 
   if (userProfile.linearId) {
     try {
-      const linearClient = await getLinearClient(userId);
-      const response = await linearClient.issues({
-        first: 50,
-        filter: {
-          assignee: { id: { eq: userProfile.linearId } },
+      const linearId = userProfile.linearId;
+      activeTasksPendingAmount = await withLinearFallback(
+        userId,
+        async (client) => {
+          const response = await client.issues({
+            first: 50,
+            filter: {
+              assignee: { id: { eq: linearId } },
+            },
+          });
+
+          const allIssues = response.nodes;
+          const issuesWithState = await Promise.all(
+            allIssues.map(async (issue) => {
+              const state = await issue.state;
+              return { issue, state };
+            }),
+          );
+
+          const assignedIssues = issuesWithState
+            .filter(
+              ({ state }) =>
+                state?.type !== "completed" && state?.type !== "canceled",
+            )
+            .map(({ issue }) => issue);
+
+          return assignedIssues.reduce((sum, issue) => {
+            return sum + (issue.estimate ? issue.estimate * 20 : 0);
+          }, 0);
         },
-      });
-
-      const allIssues = response.nodes;
-      const issuesWithState = await Promise.all(
-        allIssues.map(async (issue) => {
-          const state = await issue.state;
-          return { issue, state };
-        }),
       );
-
-      const assignedIssues = issuesWithState
-        .filter(
-          ({ state }) =>
-            state?.type !== "completed" && state?.type !== "canceled",
-        )
-        .map(({ issue }) => issue);
-
-      activeTasksPendingAmount = assignedIssues.reduce((sum, issue) => {
-        return sum + (issue.estimate ? issue.estimate * 20 : 0);
-      }, 0);
     } catch (_e) {
       console.error("Failed to fetch active tasks for wallet:", _e);
     }
@@ -243,28 +248,29 @@ async function ActiveTasks({
   let linearError = null;
 
   try {
-    const linearClient = await getLinearClient(userId);
-    const response = await linearClient.issues({
-      first: 10,
-      filter: {
-        assignee: { id: { eq: linearId } },
-      },
+    assignedIssues = await withLinearFallback(userId, async (client) => {
+      const response = await client.issues({
+        first: 10,
+        filter: {
+          assignee: { id: { eq: linearId } },
+        },
+      });
+
+      const allIssues = response.nodes;
+      const issuesWithState = await Promise.all(
+        allIssues.map(async (issue) => {
+          const state = await issue.state;
+          return { issue, state };
+        }),
+      );
+
+      return issuesWithState
+        .filter(
+          ({ state }) =>
+            state?.type !== "completed" && state?.type !== "canceled",
+        )
+        .map(({ issue }) => issue);
     });
-
-    const allIssues = response.nodes;
-    const issuesWithState = await Promise.all(
-      allIssues.map(async (issue) => {
-        const state = await issue.state;
-        return { issue, state };
-      }),
-    );
-
-    assignedIssues = issuesWithState
-      .filter(
-        ({ state }) =>
-          state?.type !== "completed" && state?.type !== "canceled",
-      )
-      .map(({ issue }) => issue);
   } catch (e) {
     const err = e as Error;
     linearError = err.message;
@@ -343,27 +349,34 @@ type LeaderboardEntry = {
 
 async function Leaderboard({ userId }: { userId: string }) {
   try {
-    const linearClient = await getLinearClient(userId);
-    const response = await linearClient.issues({
-      first: 100,
-      filter: {
-        labels: { name: { eq: "PPT" } },
-        assignee: { null: false },
+    const { enriched: enrichedData } = await withLinearFallback(
+      userId,
+      async (client) => {
+        const response = await client.issues({
+          first: 100,
+          filter: {
+            labels: { name: { eq: "PPT" } },
+            assignee: { null: false },
+          },
+        });
+
+        const nodes = response.nodes;
+
+        const enriched = await Promise.all(
+          nodes.map(async (issue) => {
+            const [assignee, state] = await Promise.all([
+              issue.assignee,
+              issue.state,
+            ]);
+            return { issue, assignee, stateType: state?.type ?? "unknown" };
+          }),
+        );
+
+        return { enriched };
       },
-    });
-
-    const issues = response.nodes;
-
-    // Enrich with assignee and state data
-    const enriched = await Promise.all(
-      issues.map(async (issue) => {
-        const [assignee, state] = await Promise.all([
-          issue.assignee,
-          issue.state,
-        ]);
-        return { issue, assignee, stateType: state?.type ?? "unknown" };
-      }),
     );
+
+    const enriched = enrichedData;
 
     // Group by assignee
     const byAssignee = new Map<string, LeaderboardEntry>();
@@ -479,19 +492,20 @@ async function Leaderboard({ userId }: { userId: string }) {
 async function SuggestedPPTs({ userId }: { userId: string }) {
   let issues: Issue[] = [];
   try {
-    const linearClient = await getLinearClient(userId);
-    const response = await linearClient.issues({
-      first: 10,
-      filter: {
-        assignee: { null: true },
-        state: { type: { eq: "unstarted" } },
-        labels: { name: { eq: "PPT" } },
-      },
+    issues = await withLinearFallback(userId, async (client) => {
+      const response = await client.issues({
+        first: 10,
+        filter: {
+          assignee: { null: true },
+          state: { type: { eq: "unstarted" } },
+          labels: { name: { eq: "PPT" } },
+        },
+      });
+      // Sort by highest value first
+      return response.nodes.sort(
+        (a, b) => (b.estimate || 0) - (a.estimate || 0),
+      );
     });
-    // Sort by highest value first
-    issues = response.nodes.sort(
-      (a, b) => (b.estimate || 0) - (a.estimate || 0),
-    );
   } catch (e) {
     console.error("Failed to fetch suggested PPTs:", e);
     return null;

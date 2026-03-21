@@ -170,6 +170,7 @@ export default async function AdminPage() {
               <StaggerItem key={tx.id}>
                 <PayoutCard
                   transactionId={tx.id}
+                  userId={tx.user.id}
                   amount={tx.amount}
                   currency={tx.currency}
                   developerName={

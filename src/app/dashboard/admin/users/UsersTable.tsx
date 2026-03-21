@@ -5,11 +5,17 @@ import {
   AccordionControl,
   AccordionItem,
   AccordionPanel,
+  ActionIcon,
   Avatar,
   Badge,
   Button,
   Card,
   Group,
+  Menu,
+  MenuDropdown,
+  MenuItem,
+  MenuLabel,
+  MenuTarget,
   Stack,
   Table,
   TableTbody,
@@ -20,7 +26,14 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import { EllipsisVertical, FileX, Mail, UserPen } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
+import { toast } from "sonner";
+import {
+  sendDocumentInvalidatedNotice,
+  sendLegalNameReminder,
+} from "../email-actions";
 
 type CoiEntry = {
   id: string;
@@ -58,6 +71,86 @@ const PAYMENT_LABELS: Record<string, string> = {
   BANK_TRANSFER: "Bank Transfer",
 };
 
+function UserActions({
+  user,
+  requiredDocuments,
+}: {
+  user: UserRow;
+  requiredDocuments: readonly string[];
+}) {
+  const [loading, setLoading] = useState(false);
+
+  async function handleLegalNameReminder() {
+    setLoading(true);
+    const res = await sendLegalNameReminder(user.id);
+    if (res.error) {
+      toast.error(res.error);
+    } else {
+      toast.success(`Legal name reminder sent to ${user.userEmail}`);
+    }
+    setLoading(false);
+  }
+
+  async function handleInvalidateDocument(documentType: string) {
+    setLoading(true);
+    const res = await sendDocumentInvalidatedNotice(user.id, documentType);
+    if (res.error) {
+      toast.error(res.error);
+    } else {
+      toast.success(
+        `${documentType} invalidated and notification sent to ${user.userEmail}`,
+      );
+    }
+    setLoading(false);
+  }
+
+  const signedDocs = user.signedDocuments.filter((d) =>
+    requiredDocuments.includes(d.documentType),
+  );
+
+  return (
+    <Menu shadow="md" width={220} position="bottom-end">
+      <MenuTarget>
+        <ActionIcon variant="subtle" color="gray" loading={loading} size="sm">
+          <EllipsisVertical size={16} />
+        </ActionIcon>
+      </MenuTarget>
+      <MenuDropdown>
+        <MenuLabel>Email Notifications</MenuLabel>
+        <MenuItem
+          leftSection={<UserPen size={14} />}
+          onClick={handleLegalNameReminder}
+        >
+          Remind: Use Legal Name
+        </MenuItem>
+        {signedDocs.length > 0 && (
+          <>
+            <MenuLabel>Invalidate Document</MenuLabel>
+            {signedDocs.map((doc) => (
+              <MenuItem
+                key={doc.documentType}
+                leftSection={<FileX size={14} />}
+                color="red"
+                onClick={() => handleInvalidateDocument(doc.documentType)}
+              >
+                Invalidate {doc.documentType}
+              </MenuItem>
+            ))}
+          </>
+        )}
+        <MenuLabel>Contact</MenuLabel>
+        <MenuItem
+          leftSection={<Mail size={14} />}
+          component="a"
+          href={`mailto:${user.userEmail}`}
+        >
+          Email Directly
+        </MenuItem>
+      </MenuDropdown>
+    </Menu>
+  );
+}
+
 export default function UsersTable({
   users,
   requiredDocuments,
@@ -93,6 +186,7 @@ export default function UsersTable({
                 ))}
                 <TableTh>Payment</TableTh>
                 <TableTh>Tasks</TableTh>
+                <TableTh w={50} />
               </TableTr>
             </TableThead>
             <TableTbody>
@@ -199,10 +293,16 @@ export default function UsersTable({
                       <TableTd>
                         <Text size="sm">{user.transactionCount}</Text>
                       </TableTd>
+                      <TableTd>
+                        <UserActions
+                          user={user}
+                          requiredDocuments={requiredDocuments}
+                        />
+                      </TableTd>
                     </TableTr>
                     {hasCoiEntries && (
                       <TableTr>
-                        <TableTd colSpan={7 + requiredDocuments.length} p={0}>
+                        <TableTd colSpan={8 + requiredDocuments.length} p={0}>
                           <AccordionPanel>
                             <Stack gap="xs" p="sm">
                               <Text size="sm" fw={600}>

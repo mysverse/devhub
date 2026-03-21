@@ -67,6 +67,7 @@ export default function SettingsForm({ profile }: ProfileProps) {
               name="legalName"
               defaultValue={profile.legalName || ""}
               placeholder="John Doe"
+              description="This is kept private and only visible to authorised administrators for payment and compliance purposes."
             />
             <Textarea
               label="Shipping Address (for Merch)"

@@ -266,7 +266,7 @@ export default function OnboardingFlow({
             value={legalName}
             onChange={(e) => setLegalName(e.target.value)}
             required
-            description="Enter your full legal name as it appears on official documents."
+            description="Enter your full legal name as it appears on official documents. This is kept private and only visible to authorised administrators for payment and compliance purposes."
           />
         </Card>
       )}

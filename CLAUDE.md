@@ -71,7 +71,7 @@ LINEAR_WEBHOOK_SECRET    # HMAC-SHA256 webhook verification
 ### UI & Styling
 
 - **Mantine v8** as the component library with dark color scheme and blue primary color
-- **Mantine compound components** (e.g. `Progress.Root`, `Progress.Section`) don't work in server components. Import the sub-components directly instead: `ProgressRoot`, `ProgressSection`, etc.
+- **Mantine compound components**: NEVER use dot-notation syntax like `Table.Tr`, `Menu.Item`, `AppShell.Header`, etc. ALWAYS import and use the flat component names directly: `TableTr`, `MenuItem`, `AppShellHeader`, etc. This applies to ALL components (server and client), not just server components. Example: `import { TableTr, TableTd, MenuTarget } from "@mantine/core";`
 - **Tailwind CSS v4** for utility classes alongside Mantine
 - **PostCSS** configured with Mantine preset and breakpoint variables
 - Path alias: `@/*` maps to `src/*`

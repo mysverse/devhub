@@ -5,6 +5,11 @@ import {
   Group,
   Stack,
   Table,
+  TableTbody,
+  TableTd,
+  TableTh,
+  TableThead,
+  TableTr,
   Text,
   Title,
 } from "@mantine/core";
@@ -56,28 +61,28 @@ export default async function AdminDocumentsPage() {
 
       <Card withBorder radius="md" padding={0}>
         <Table striped highlightOnHover>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Name</Table.Th>
+          <TableThead>
+            <TableTr>
+              <TableTh>Name</TableTh>
               {REQUIRED_DOCUMENTS.map((type) => (
-                <Table.Th key={type}>{type}</Table.Th>
+                <TableTh key={type}>{type}</TableTh>
               ))}
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
+            </TableTr>
+          </TableThead>
+          <TableTbody>
             {users.map((user) => (
-              <Table.Tr key={user.id}>
-                <Table.Td>
+              <TableTr key={user.id}>
+                <TableTd>
                   <Text size="sm" fw={500}>
                     {user.legalName || "No name set"}
                   </Text>
-                </Table.Td>
+                </TableTd>
                 {REQUIRED_DOCUMENTS.map((type) => {
                   const doc = user.signedDocuments.find(
                     (d) => d.documentType === type,
                   );
                   return (
-                    <Table.Td key={type}>
+                    <TableTd key={type}>
                       {doc ? (
                         <Group gap="xs">
                           <Badge color="green" variant="light" size="sm">
@@ -100,12 +105,12 @@ export default async function AdminDocumentsPage() {
                           Not Signed
                         </Badge>
                       )}
-                    </Table.Td>
+                    </TableTd>
                   );
                 })}
-              </Table.Tr>
+              </TableTr>
             ))}
-          </Table.Tbody>
+          </TableTbody>
         </Table>
       </Card>
     </Stack>

@@ -11,10 +11,12 @@ import {
   Group,
   Modal,
   Radio,
+  RadioGroup,
   ScrollArea,
   Select,
   Stack,
   Stepper,
+  StepperStep,
   Text,
   Textarea,
   TextInput,
@@ -185,11 +187,11 @@ export default function OnboardingFlow({
       </div>
 
       <Stepper active={active} mb="xl" size="sm">
-        <Stepper.Step label="Welcome" />
-        <Stepper.Step label="Personal Info" />
-        <Stepper.Step label="Accounts" />
-        <Stepper.Step label="Agreements" />
-        <Stepper.Step label="Payment" />
+        <StepperStep label="Welcome" />
+        <StepperStep label="Personal Info" />
+        <StepperStep label="Accounts" />
+        <StepperStep label="Agreements" />
+        <StepperStep label="Payment" />
       </Stepper>
 
       {/* Step 0: Welcome — user type selection */}
@@ -447,7 +449,7 @@ export default function OnboardingFlow({
 
             {paymentMethod === "DUITNOW" && (
               <Stack gap="sm">
-                <Radio.Group
+                <RadioGroup
                   label="DuitNow Type"
                   value={duitNowType}
                   onChange={(val) => setDuitNowType(val as "ID" | "BANK")}
@@ -456,7 +458,7 @@ export default function OnboardingFlow({
                     <Radio value="ID" label="Phone / NRIC ID" />
                     <Radio value="BANK" label="Bank Account" />
                   </Group>
-                </Radio.Group>
+                </RadioGroup>
 
                 {duitNowType === "ID" ? (
                   <TextInput

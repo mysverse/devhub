@@ -2,11 +2,18 @@
 
 import {
   AppShell,
+  AppShellHeader,
+  AppShellMain,
+  AppShellNavbar,
   Avatar,
   Burger,
   Container,
   Group,
   Menu,
+  MenuDropdown,
+  MenuItem,
+  MenuLabel,
+  MenuTarget,
   Text,
   UnstyledButton,
 } from "@mantine/core";
@@ -39,7 +46,7 @@ export default function DashboardLayoutClient({
       }}
       padding="md"
     >
-      <AppShell.Header>
+      <AppShellHeader>
         <Container size="lg" h="100%">
           <Group h="100%" px="md" justify="space-between">
             <Group>
@@ -100,7 +107,7 @@ export default function DashboardLayoutClient({
             </Group>
 
             <Menu shadow="md" width={200}>
-              <Menu.Target>
+              <MenuTarget>
                 <UnstyledButton>
                   <Avatar
                     src={session?.user?.image}
@@ -109,12 +116,12 @@ export default function DashboardLayoutClient({
                     size="sm"
                   />
                 </UnstyledButton>
-              </Menu.Target>
-              <Menu.Dropdown>
-                <Menu.Label>
+              </MenuTarget>
+              <MenuDropdown>
+                <MenuLabel>
                   {session?.user?.name ?? session?.user?.email}
-                </Menu.Label>
-                <Menu.Item
+                </MenuLabel>
+                <MenuItem
                   leftSection={<LogOut size={14} />}
                   onClick={async () => {
                     await signOut();
@@ -122,14 +129,14 @@ export default function DashboardLayoutClient({
                   }}
                 >
                   Sign out
-                </Menu.Item>
-              </Menu.Dropdown>
+                </MenuItem>
+              </MenuDropdown>
             </Menu>
           </Group>
         </Container>
-      </AppShell.Header>
+      </AppShellHeader>
 
-      <AppShell.Navbar p="md">
+      <AppShellNavbar p="md">
         <UnstyledButton
           component={Link}
           href="/dashboard"
@@ -172,13 +179,13 @@ export default function DashboardLayoutClient({
             Admin
           </UnstyledButton>
         )}
-      </AppShell.Navbar>
+      </AppShellNavbar>
 
-      <AppShell.Main>
+      <AppShellMain>
         <Container size="lg" py="xl">
           {children}
         </Container>
-      </AppShell.Main>
+      </AppShellMain>
     </AppShell>
   );
 }

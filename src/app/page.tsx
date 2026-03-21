@@ -2,6 +2,8 @@
 
 import {
   AppShell,
+  AppShellHeader,
+  AppShellMain,
   Box,
   Button,
   Container,
@@ -20,7 +22,7 @@ export default function Home() {
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
-      <AppShell.Header>
+      <AppShellHeader>
         <Container
           size="lg"
           h="100%"
@@ -57,9 +59,9 @@ export default function Home() {
             )}
           </Box>
         </Container>
-      </AppShell.Header>
+      </AppShellHeader>
 
-      <AppShell.Main
+      <AppShellMain
         display="flex"
         style={{
           minHeight: "calc(100vh - 60px)",
@@ -111,7 +113,7 @@ export default function Home() {
             </StaggerItem>
           </Container>
         </StaggerContainer>
-      </AppShell.Main>
+      </AppShellMain>
     </AppShell>
   );
 }

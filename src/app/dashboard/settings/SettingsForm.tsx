@@ -6,6 +6,7 @@ import {
   Card,
   Group,
   Radio,
+  RadioGroup,
   Select,
   Stack,
   Textarea,
@@ -124,7 +125,7 @@ export default function SettingsForm({ profile }: ProfileProps) {
 
             {paymentMethod === "DUITNOW" && (
               <Stack gap="sm">
-                <Radio.Group
+                <RadioGroup
                   value={duitNowType}
                   onChange={(val) => setDuitNowType(val as "ID" | "BANK")}
                 >
@@ -132,7 +133,7 @@ export default function SettingsForm({ profile }: ProfileProps) {
                     <Radio value="ID" label="Phone / NRIC ID" />
                     <Radio value="BANK" label="Bank Account" />
                   </Group>
-                </Radio.Group>
+                </RadioGroup>
 
                 {duitNowType === "ID" ? (
                   <TextInput

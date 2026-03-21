@@ -60,7 +60,7 @@ CLERK_SECRET_KEY         # Clerk server-side secret
 LINEAR_API_KEY           # Fallback Linear API key
 LINEAR_WEBHOOK_SECRET    # HMAC-SHA256 webhook verification
 RESEND_API_KEY           # Resend email service API key
-EMAIL_FROM               # Sender address (default: "MYSverse DevHub <noreply@mysverse.com>")
+EMAIL_FROM               # Sender address (default: "MYSverse DevHub <devhub@mysver.se>")
 NEXT_PUBLIC_APP_URL      # Public app URL for email CTA links (default: http://localhost:3000)
 ```
 

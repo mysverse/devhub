@@ -29,6 +29,7 @@ import {
   StaggerContainer,
   StaggerItem,
 } from "@/components/animations";
+import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
 import { withLinearFallback } from "@/lib/linear";
@@ -517,9 +518,9 @@ async function SuggestedPPTs({ userId }: { userId: string }) {
     <section style={{ marginBottom: "3rem" }}>
       <Group justify="space-between" align="baseline" mb="md">
         <Title order={2}>Suggested for You</Title>
-        <Anchor href="/dashboard/ppts" fz="sm" fw={500}>
+        <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
           View all PPTs &rarr;
-        </Anchor>
+        </LinkAnchor>
       </Group>
       <Text fz="sm" c="dimmed" mb="md">
         High-value tasks available to claim, sorted by payout.

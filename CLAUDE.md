@@ -75,6 +75,7 @@ NEXT_PUBLIC_APP_URL      # Public app URL for email CTA links (default: http://l
 
 - **Mantine v8** as the component library with dark color scheme and blue primary color
 - **Mantine compound components**: NEVER use dot-notation syntax like `Table.Tr`, `Menu.Item`, `AppShell.Header`, etc. ALWAYS import and use the flat component names directly: `TableTr`, `MenuItem`, `AppShellHeader`, etc. This applies to ALL components (server and client), not just server components. Example: `import { TableTr, TableTd, MenuTarget } from "@mantine/core";`
+- **Internal navigation links**: In Server Components, you cannot pass `component={Link}` to Mantine components (functions can't be passed as props to Client Components in Next.js). Use the `"use client"` wrapper components instead: `LinkButton` (`src/components/LinkButton.tsx`) for button-style links, `LinkAnchor` (`src/components/LinkAnchor.tsx`) for anchor/text-style links. These wrap Mantine's `Button`/`Anchor` with Next.js `Link` for SPA navigation.
 - **Tailwind CSS v4** for utility classes alongside Mantine
 - **PostCSS** configured with Mantine preset and breakpoint variables
 - Path alias: `@/*` maps to `src/*`

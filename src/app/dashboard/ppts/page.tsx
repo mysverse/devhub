@@ -18,7 +18,15 @@ import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
+import type { CurrencyCode } from "@/lib/currency";
+import {
+  estimateToAmount,
+  formatAmount,
+  formatEstimate,
+  getCurrencyForPaymentMethod,
+} from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
+import prisma from "@/lib/prisma";
 
 type EnrichedIssue = {
   issue: Issue;
@@ -98,10 +106,12 @@ function ProjectSectionHeader({
   info,
   taskCount,
   totalPayout,
+  currency,
 }: {
   info: ProjectInfo;
   taskCount: number;
   totalPayout: number;
+  currency: CurrencyCode;
 }) {
   const days = daysLeft(info.targetDate);
   const progressPct = Math.round(info.progress * 100);
@@ -134,7 +144,7 @@ function ProjectSectionHeader({
         </Badge>
         {totalPayout > 0 && (
           <Text fz="sm" c="green" fw={600}>
-            RM{totalPayout}
+            {formatAmount(totalPayout, currency)}
           </Text>
         )}
       </Group>
@@ -178,9 +188,11 @@ function ProjectSectionHeader({
 function IssueGrid({
   items,
   hideProject,
+  currency,
 }: {
   items: EnrichedIssue[];
   hideProject?: boolean;
+  currency: CurrencyCode;
 }) {
   return (
     <StaggerContainer>
@@ -201,6 +213,7 @@ function IssueGrid({
               hideProject={hideProject}
               subIssueCount={item.subIssueCount}
               variant="full"
+              currency={currency}
             />
           </StaggerItem>
         ))}
@@ -212,9 +225,11 @@ function IssueGrid({
 function TeamSection({
   teamName,
   items,
+  currency,
 }: {
   teamName: string;
   items: EnrichedIssue[];
+  currency: CurrencyCode;
 }) {
   return (
     <section>
@@ -224,7 +239,7 @@ function TeamSection({
           {items.length} task{items.length !== 1 && "s"}
         </Badge>
       </Group>
-      <IssueGrid items={items} />
+      <IssueGrid items={items} currency={currency} />
     </section>
   );
 }
@@ -232,12 +247,15 @@ function TeamSection({
 function ProjectSection({
   info,
   items,
+  currency,
 }: {
   info: ProjectInfo;
   items: EnrichedIssue[];
+  currency: CurrencyCode;
 }) {
   const totalPayout = items.reduce(
-    (s, i) => s + (i.issue.estimate ? i.issue.estimate * 20 : 0),
+    (s, i) =>
+      s + (i.issue.estimate ? estimateToAmount(i.issue.estimate, currency) : 0),
     0,
   );
   return (
@@ -246,13 +264,20 @@ function ProjectSection({
         info={info}
         taskCount={items.length}
         totalPayout={totalPayout}
+        currency={currency}
       />
-      <IssueGrid items={items} hideProject />
+      <IssueGrid items={items} hideProject currency={currency} />
     </section>
   );
 }
 
-async function PPTList({ userId }: { userId: string }) {
+async function PPTList({
+  userId,
+  currency,
+}: {
+  userId: string;
+  currency: CurrencyCode;
+}) {
   let issues: Issue[] = [];
   let viewerId: string | null = null;
   try {
@@ -430,9 +455,7 @@ async function PPTList({ userId }: { userId: string }) {
                     {item.issue.title}
                   </Text>
                   <Text size="xs" c="green" fw={700}>
-                    {item.issue.estimate
-                      ? `RM${item.issue.estimate * 20}`
-                      : "RM20 - RM100"}
+                    {formatEstimate(item.issue.estimate, currency)}
                   </Text>
                   <Text size="xs" c="dimmed" mx="sm">
                     |
@@ -452,6 +475,7 @@ async function PPTList({ userId }: { userId: string }) {
               key={projectId}
               info={group.info}
               items={group.items}
+              currency={currency}
             />
           ))}
         </Stack>
@@ -465,6 +489,7 @@ async function PPTList({ userId }: { userId: string }) {
               key={teamKey}
               teamName={group.teamName}
               items={group.items}
+              currency={currency}
             />
           ))}
         </Stack>
@@ -477,6 +502,14 @@ export default async function PPTsPage() {
   const { userId } = await getSession();
   if (!userId) redirect("/");
 
+  const userProfile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { paymentMethod: true },
+  });
+  const userCurrency = getCurrencyForPaymentMethod(
+    userProfile?.paymentMethod ?? "PAYPAL",
+  );
+
   return (
     <FadeIn>
       <div style={{ marginBottom: "2rem" }}>
@@ -488,7 +521,7 @@ export default async function PPTsPage() {
       </div>
 
       <Suspense fallback={<PPTSkeleton />}>
-        <PPTList userId={userId} />
+        <PPTList userId={userId} currency={userCurrency} />
       </Suspense>
     </FadeIn>
   );

@@ -1,6 +1,21 @@
-import { Document, Page, StyleSheet, Text, View } from "@react-pdf/renderer";
+import fs from "node:fs";
+import path from "node:path";
+import {
+  Document,
+  Image,
+  Page,
+  StyleSheet,
+  Text,
+  View,
+} from "@react-pdf/renderer";
 import { createElement } from "react";
 import { siteConfig } from "@/lib/config";
+
+function getLogoDataUri(): string {
+  const svgPath = path.join(process.cwd(), "public", "devhub-black.svg");
+  const svg = fs.readFileSync(svgPath, "utf-8");
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
 
 const styles = StyleSheet.create({
   page: {
@@ -19,9 +34,8 @@ const styles = StyleSheet.create({
     borderBottomColor: "#333333",
   },
   brand: {
-    fontSize: 20,
-    fontFamily: "Helvetica-Bold",
-    letterSpacing: 2,
+    height: 28,
+    width: 140,
   },
   title: {
     fontSize: 14,
@@ -172,8 +186,8 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
     : data.linearIssueIdentifier || "Manual Bonus";
 
   const amountStr =
-    data.currency === "R$"
-      ? `${data.amount.toFixed(2)} R$`
+    data.currency === "ROBUX"
+      ? `${data.amount.toLocaleString("en-US", { maximumFractionDigits: 0 })} Robux`
       : data.currency === "MYR"
         ? `RM${data.amount.toFixed(2)}`
         : `$${data.amount.toFixed(2)} ${data.currency}`;
@@ -249,11 +263,7 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       createElement(
         View,
         { style: styles.header },
-        createElement(
-          Text,
-          { style: styles.brand },
-          siteConfig.appName.toUpperCase(),
-        ),
+        createElement(Image, { style: styles.brand, src: getLogoDataUri() }),
         createElement(Text, { style: styles.title }, "PAYMENT SLIP"),
       ),
       // Meta line

@@ -22,7 +22,13 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { ChevronDown, EllipsisVertical, FileX, Mail, UserPen } from "lucide-react";
+import {
+  ChevronDown,
+  EllipsisVertical,
+  FileX,
+  Mail,
+  UserPen,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -327,14 +333,10 @@ export default function UsersTable({
                   </TableTr>
                   {hasCoiEntries && isExpanded && (
                     <TableTr key={`${user.id}-coi`}>
-                      <TableTd
-                        colSpan={8 + requiredDocuments.length}
-                        p={0}
-                      >
+                      <TableTd colSpan={8 + requiredDocuments.length} p={0}>
                         <Stack gap="xs" p="sm">
                           <Text size="sm" fw={600}>
-                            Declared Conflicts of Interest (
-                            {coiEntries.length})
+                            Declared Conflicts of Interest ({coiEntries.length})
                           </Text>
                           {coiEntries.map((entry) => (
                             <Card
@@ -347,11 +349,7 @@ export default function UsersTable({
                                 <Text size="sm" fw={500}>
                                   {entry.organizationName}
                                 </Text>
-                                <Badge
-                                  variant="outline"
-                                  size="xs"
-                                  color="gray"
-                                >
+                                <Badge variant="outline" size="xs" color="gray">
                                   {entry.natureOfInvolvement}
                                 </Badge>
                               </Group>

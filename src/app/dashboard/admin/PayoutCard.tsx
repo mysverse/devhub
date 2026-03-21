@@ -13,6 +13,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { toast } from "sonner";
+import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { markTransactionAsPaid } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
 
@@ -84,8 +85,7 @@ export default function PayoutCard({
               {developerName}
             </Text>
             <Text size="lg" fw={700} c="green">
-              {currency === "MYR" ? "RM" : "$"}
-              {amount.toFixed(2)} {currency}
+              {formatAmount(amount, currency as CurrencyCode)}
             </Text>
           </Group>
 

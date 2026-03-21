@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
+import { estimateToAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -26,45 +27,44 @@ export async function POST(req: Request) {
     const issueData = payload.data;
 
     // Check if it's marked as done. Let's assume state.type "completed"
-    if (issueData.state?.type === "completed") {
-      let pptAmount = 0;
+    if (
+      issueData.state?.type === "completed" &&
+      issueData.estimate &&
+      issueData.assignee?.email
+    ) {
+      const assigneeEmail = issueData.assignee.email;
 
-      if (issueData.estimate) {
-        pptAmount = issueData.estimate * 20; // e.g. 1 point = RM20
-      }
+      // Find the user by their Linear Email
+      const user = await prisma.userProfile.findFirst({
+        where: { linearEmail: assigneeEmail },
+      });
 
-      const assigneeEmail = issueData.assignee?.email;
+      if (user) {
+        const currency = getCurrencyForPaymentMethod(user.paymentMethod);
+        const pptAmount = estimateToAmount(issueData.estimate, currency);
 
-      if (pptAmount > 0 && assigneeEmail) {
-        // Find the user by their Linear Email
-        const user = await prisma.userProfile.findFirst({
-          where: { linearEmail: assigneeEmail },
+        // Use upsert to prevent double crediting the same issue if webhook fires twice
+        await prisma.transaction.upsert({
+          where: { linearIssueId: issueData.id },
+          update: {},
+          create: {
+            userId: user.id,
+            linearIssueId: issueData.id,
+            linearIssueIdentifier: issueData.identifier || null,
+            linearIssueTitle: issueData.title || null,
+            linearIssueUrl: issueData.url || null,
+            amount: pptAmount,
+            currency,
+            status: "PENDING",
+          },
         });
-
-        if (user) {
-          // Use upsert to prevent double crediting the same issue if webhook fires twice
-          await prisma.transaction.upsert({
-            where: { linearIssueId: issueData.id },
-            update: {},
-            create: {
-              userId: user.id,
-              linearIssueId: issueData.id,
-              linearIssueIdentifier: issueData.identifier || null,
-              linearIssueTitle: issueData.title || null,
-              linearIssueUrl: issueData.url || null,
-              amount: pptAmount,
-              currency: "MYR",
-              status: "PENDING",
-            },
-          });
-          console.log(
-            `PPT of ${pptAmount} credited to ${assigneeEmail} for issue ${issueData.id}`,
-          );
-        } else {
-          console.warn(
-            `Could not find a linked ${siteConfig.appName} user with Linear email: ${assigneeEmail}`,
-          );
-        }
+        console.log(
+          `PPT of ${pptAmount} ${currency} credited to ${assigneeEmail} for issue ${issueData.id}`,
+        );
+      } else {
+        console.warn(
+          `Could not find a linked ${siteConfig.appName} user with Linear email: ${assigneeEmail}`,
+        );
       }
     }
   }

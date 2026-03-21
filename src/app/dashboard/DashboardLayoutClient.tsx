@@ -19,11 +19,10 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { LogOut } from "lucide-react";
-import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Logo } from "@/components/Logo";
 import { signOut, useSession } from "@/lib/auth-client";
-import { siteConfig } from "@/lib/config";
 
 export default function DashboardLayoutClient({
   children,
@@ -66,13 +65,7 @@ export default function DashboardLayoutClient({
                   gap: "10px",
                 }}
               >
-                <Image
-                  src="/devhub.svg"
-                  alt={siteConfig.appName}
-                  width={32}
-                  height={32}
-                  style={{ height: "32px", width: "auto" }}
-                />
+                <Logo size={32} />
               </Link>
             </Group>
 

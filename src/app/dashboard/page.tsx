@@ -32,6 +32,12 @@ import {
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
+import type { CurrencyCode } from "@/lib/currency";
+import {
+  estimateToAmount,
+  formatAmount,
+  getCurrencyForPaymentMethod,
+} from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
@@ -94,9 +100,11 @@ function CarouselSkeleton() {
 async function UserWallet({
   userProfile,
   userId,
+  currency,
 }: {
   userProfile: UserProfile & { transactions: Transaction[] };
   userId: string;
+  currency: CurrencyCode;
 }) {
   let activeTasksPendingAmount = 0;
 
@@ -129,7 +137,10 @@ async function UserWallet({
             .map(({ issue }) => issue);
 
           return assignedIssues.reduce((sum, issue) => {
-            return sum + (issue.estimate ? issue.estimate * 20 : 0);
+            return (
+              sum +
+              (issue.estimate ? estimateToAmount(issue.estimate, currency) : 0)
+            );
           }, 0);
         },
       );
@@ -164,14 +175,15 @@ async function UserWallet({
                 Pending PPTs
               </Text>
               <Text fz="xl" fw={700}>
-                RM
+                {currency === "MYR" ? "RM" : ""}
                 <AnimatedNumber
                   value={totalPendingBalance}
                   format={{
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: currency === "MYR" ? 2 : 0,
+                    maximumFractionDigits: currency === "MYR" ? 2 : 0,
                   }}
                 />
+                {currency === "ROBUX" ? " Robux" : ""}
               </Text>
             </Card>
           </StaggerItem>
@@ -188,14 +200,15 @@ async function UserWallet({
                 Total Earned
               </Text>
               <Text fz="xl" fw={700}>
-                RM
+                {currency === "MYR" ? "RM" : ""}
                 <AnimatedNumber
                   value={totalEarned}
                   format={{
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
+                    minimumFractionDigits: currency === "MYR" ? 2 : 0,
+                    maximumFractionDigits: currency === "MYR" ? 2 : 0,
                   }}
                 />
+                {currency === "ROBUX" ? " Robux" : ""}
               </Text>
             </Card>
           </StaggerItem>
@@ -241,9 +254,11 @@ async function UserWallet({
 async function ActiveTasks({
   linearId,
   userId,
+  currency,
 }: {
   linearId: string;
   userId: string;
+  currency: CurrencyCode;
 }) {
   let assignedIssues: Issue[] = [];
   let linearError = null;
@@ -306,6 +321,7 @@ async function ActiveTasks({
                 url={issue.url}
                 estimate={issue.estimate}
                 variant="active"
+                currency={currency}
               />
             </StaggerItem>
           ))}
@@ -490,7 +506,13 @@ async function Leaderboard({ userId }: { userId: string }) {
   }
 }
 
-async function SuggestedPPTs({ userId }: { userId: string }) {
+async function SuggestedPPTs({
+  userId,
+  currency,
+}: {
+  userId: string;
+  currency: CurrencyCode;
+}) {
   let issues: Issue[] = [];
   try {
     issues = await withLinearFallback(userId, async (client) => {
@@ -539,6 +561,7 @@ async function SuggestedPPTs({ userId }: { userId: string }) {
               estimate={issue.estimate}
               description={issue.description}
               variant="compact"
+              currency={currency}
             />
           ))}
       />
@@ -583,6 +606,7 @@ export default async function DashboardPage() {
     }
   }
 
+  const userCurrency = getCurrencyForPaymentMethod(userProfile.paymentMethod);
   const transactions = userProfile.transactions;
   const rows = transactions.map((tx) => (
     <TableTr key={tx.id}>
@@ -606,8 +630,7 @@ export default async function DashboardPage() {
         )}
       </TableTd>
       <TableTd fw={500}>
-        {tx.currency === "MYR" ? "RM" : "$"}
-        {tx.amount.toFixed(2)} {tx.currency}
+        {formatAmount(tx.amount, tx.currency as CurrencyCode)}
       </TableTd>
       <TableTd>
         <Badge
@@ -652,11 +675,15 @@ export default async function DashboardPage() {
       )}
 
       <Suspense fallback={<WalletSkeletons />}>
-        <UserWallet userProfile={userProfile} userId={userId} />
+        <UserWallet
+          userProfile={userProfile}
+          userId={userId}
+          currency={userCurrency}
+        />
       </Suspense>
 
       <Suspense fallback={<CarouselSkeleton />}>
-        <SuggestedPPTs userId={userId} />
+        <SuggestedPPTs userId={userId} currency={userCurrency} />
       </Suspense>
 
       <Suspense fallback={<LeaderboardSkeleton />}>
@@ -669,7 +696,11 @@ export default async function DashboardPage() {
             Active Tasks
           </Title>
           <Suspense fallback={<ActiveTasksSkeleton />}>
-            <ActiveTasks linearId={userProfile.linearId} userId={userId} />
+            <ActiveTasks
+              linearId={userProfile.linearId}
+              userId={userId}
+              currency={userCurrency}
+            />
           </Suspense>
         </section>
       )}

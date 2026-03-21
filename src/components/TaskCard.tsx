@@ -11,6 +11,8 @@ import {
   Tooltip,
 } from "@mantine/core";
 import Markdown from "react-markdown";
+import type { CurrencyCode } from "@/lib/currency";
+import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
 import ClaimButton from "./ClaimButton";
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
@@ -81,6 +83,7 @@ type TaskCardProps = {
   hideProject?: boolean;
   subIssueCount?: number;
   variant?: "full" | "compact" | "active";
+  currency?: CurrencyCode;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -134,8 +137,9 @@ export default function TaskCard({
   hideProject,
   subIssueCount,
   variant = "full",
+  currency = "MYR",
 }: TaskCardProps) {
-  const pptEstimate = estimate ? estimate * 20 : 0;
+  const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
 
   if (variant === "compact") {
     return (
@@ -155,7 +159,7 @@ export default function TaskCard({
             {identifier}
           </Badge>
           <Text fw={700} c="green">
-            {pptEstimate > 0 ? `RM${pptEstimate}` : "RM20 - RM100"}
+            {formatEstimate(estimate, currency)}
           </Text>
         </Group>
         <Text fw={600} lineClamp={1} mb="sm">
@@ -183,7 +187,7 @@ export default function TaskCard({
           </Badge>
           {pptEstimate > 0 && (
             <Text fw={700} c="green" fz="sm">
-              RM{pptEstimate.toFixed(2)} (Pending)
+              {formatAmount(pptEstimate, currency)} (Pending)
             </Text>
           )}
         </Group>
@@ -242,15 +246,9 @@ export default function TaskCard({
             </Tooltip>
           )}
         </Group>
-        {pptEstimate > 0 ? (
-          <Text fw={700} c="green" fz="sm">
-            RM{pptEstimate}
-          </Text>
-        ) : (
-          <Text fz="sm" fw={700} c="green">
-            RM20 - RM100
-          </Text>
-        )}
+        <Text fw={700} c="green" fz="sm">
+          {formatEstimate(estimate, currency)}
+        </Text>
       </Group>
 
       <Title order={4} size="h5" lineClamp={2} mb="xs">

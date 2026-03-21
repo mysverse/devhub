@@ -11,11 +11,10 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import Image from "next/image";
 import Link from "next/link";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import { Logo } from "@/components/Logo";
 import { signIn, useSession } from "@/lib/auth-client";
-import { siteConfig } from "@/lib/config";
 
 export default function Home() {
   const { data: session, isPending } = useSession();
@@ -30,13 +29,7 @@ export default function Home() {
           style={{ alignItems: "center", justifyContent: "space-between" }}
         >
           <Group gap="sm">
-            <Image
-              src="/devhub.svg"
-              alt={siteConfig.appName}
-              width={32}
-              height={32}
-              style={{ height: "32px", width: "auto" }}
-            />
+            <Logo size={32} />
           </Group>
           <Box>
             {!isPending && !session && (

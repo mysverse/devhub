@@ -1,5 +1,6 @@
-import { Card, SimpleGrid, Text, Title } from "@mantine/core";
+import { Button, Card, Group, SimpleGrid, Text, Title } from "@mantine/core";
 import type { Transaction, UserProfile } from "@prisma/client";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
@@ -137,12 +138,26 @@ export default async function AdminPage() {
 
   return (
     <FadeIn>
-      <div style={{ marginBottom: "2rem" }}>
-        <Title order={1}>Admin Payouts</Title>
-        <Text c="dimmed" mt="xs">
-          Review pending PPTs and manually fulfill developer payouts.
-        </Text>
-      </div>
+      <Group justify="space-between" mb="xl">
+        <div>
+          <Title order={1}>Admin Payouts</Title>
+          <Text c="dimmed" mt="xs">
+            Review pending PPTs and manually fulfill developer payouts.
+          </Text>
+        </div>
+        <Group>
+          <Button component={Link} href="/dashboard/admin/users" variant="light">
+            Team Members
+          </Button>
+          <Button
+            component={Link}
+            href="/dashboard/admin/documents"
+            variant="light"
+          >
+            Document Compliance
+          </Button>
+        </Group>
+      </Group>
 
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">

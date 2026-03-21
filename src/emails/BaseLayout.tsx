@@ -47,12 +47,11 @@ export default function BaseLayout({
       {previewText && <Preview>{previewText}</Preview>}
       <Body style={main}>
         <Container style={container}>
-          <Section style={{ textAlign: "center" as const, marginBottom: "24px" }}>
+          <Section style={{ marginBottom: "24px" }}>
             <Img
               src={`${appUrl}/devhub.svg`}
               width="180"
               alt="MYSverse DevHub"
-              style={{ margin: "0 auto" }}
             />
           </Section>
           <Text

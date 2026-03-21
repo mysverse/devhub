@@ -174,19 +174,21 @@ export default function UsersTable({
 
       <Card withBorder radius="md" padding={0}>
         <Accordion chevronPosition="left" multiple>
-          <Table striped highlightOnHover>
+          <Table striped highlightOnHover layout="fixed">
             <TableThead>
               <TableTr>
-                <TableTh w={40} />
-                <TableTh>User</TableTh>
-                <TableTh>Role</TableTh>
-                <TableTh>Linked Accounts</TableTh>
+                <TableTh style={{ width: 40 }} />
+                <TableTh style={{ width: "20%" }}>User</TableTh>
+                <TableTh style={{ width: 80 }}>Role</TableTh>
+                <TableTh style={{ width: "15%" }}>Linked Accounts</TableTh>
                 {requiredDocuments.map((type) => (
-                  <TableTh key={type}>{type}</TableTh>
+                  <TableTh key={type} style={{ width: "12%" }}>
+                    {type}
+                  </TableTh>
                 ))}
-                <TableTh>Payment</TableTh>
-                <TableTh>Tasks</TableTh>
-                <TableTh w={50} />
+                <TableTh style={{ width: "10%" }}>Payment</TableTh>
+                <TableTh style={{ width: 60 }}>Tasks</TableTh>
+                <TableTh style={{ width: 50 }} />
               </TableTr>
             </TableThead>
             <TableTbody>
@@ -198,7 +200,11 @@ export default function UsersTable({
                 const hasCoiEntries = coiEntries.length > 0;
 
                 return (
-                  <AccordionItem key={user.id} value={user.id}>
+                  <AccordionItem
+                    key={user.id}
+                    value={user.id}
+                    style={{ display: "contents" }}
+                  >
                     <TableTr>
                       <TableTd>
                         {hasCoiEntries && (

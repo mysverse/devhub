@@ -171,9 +171,7 @@ export default function UsersTable({
                                   Signed
                                 </Badge>
                                 <Text size="xs" c="dimmed">
-                                  {new Date(
-                                    doc.signedAt,
-                                  ).toLocaleDateString()}
+                                  {new Date(doc.signedAt).toLocaleDateString()}
                                 </Text>
                               </Group>
                             ) : (

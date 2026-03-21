@@ -1,8 +1,8 @@
-import { Button, Card, Group, SimpleGrid, Text, Title } from "@mantine/core";
+import { Card, Group, SimpleGrid, Text, Title } from "@mantine/core";
 import type { Transaction, UserProfile } from "@prisma/client";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import LinkButton from "@/components/LinkButton";
 import { getSession } from "@/lib/auth-utils";
 import { getLinearClient } from "@/lib/linear";
 import prisma from "@/lib/prisma";
@@ -146,16 +146,12 @@ export default async function AdminPage() {
           </Text>
         </div>
         <Group>
-          <Button component={Link} href="/dashboard/admin/users" variant="light">
+          <LinkButton href="/dashboard/admin/users" variant="light">
             Team Members
-          </Button>
-          <Button
-            component={Link}
-            href="/dashboard/admin/documents"
-            variant="light"
-          >
+          </LinkButton>
+          <LinkButton href="/dashboard/admin/documents" variant="light">
             Document Compliance
-          </Button>
+          </LinkButton>
         </Group>
       </Group>
 

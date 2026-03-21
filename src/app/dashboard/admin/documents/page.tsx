@@ -1,15 +1,6 @@
-import {
-  Badge,
-  Button,
-  Card,
-  Group,
-  Stack,
-  Table,
-  Text,
-  Title,
-} from "@mantine/core";
-import Link from "next/link";
+import { Badge, Card, Group, Stack, Table, Text, Title } from "@mantine/core";
 import { redirect } from "next/navigation";
+import LinkButton from "@/components/LinkButton";
 import { getSession } from "@/lib/auth-utils";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -46,9 +37,9 @@ export default async function AdminDocumentsPage() {
     <Stack gap="lg">
       <Group justify="space-between">
         <Title order={2}>Document Compliance</Title>
-        <Button component={Link} href="/dashboard/admin" variant="subtle">
+        <LinkButton href="/dashboard/admin" variant="subtle">
           Back to Admin
-        </Button>
+        </LinkButton>
       </Group>
       <Text c="dimmed">
         Overview of all team members&apos; document signing status.

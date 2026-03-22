@@ -24,7 +24,7 @@ async function requireAdmin() {
   return userId;
 }
 
-async function getUserEmailAndName(userId: string) {
+export async function getUserEmailAndName(userId: string) {
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
     include: { user: { select: { email: true, name: true } } },

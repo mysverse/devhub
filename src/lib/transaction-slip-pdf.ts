@@ -3,6 +3,7 @@ import {
   G,
   Page,
   Path,
+  renderToBuffer,
   StyleSheet,
   Svg,
   Text,
@@ -10,6 +11,7 @@ import {
 } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { siteConfig } from "@/lib/config";
+import prisma from "@/lib/prisma";
 
 const LOGO_PATHS = [
   "M1762.433,97.406l146.473,0l0,191.509l-619.882,0l0,-191.509l47.962,-0l0,163.032l50.696,0l0,-78.613c10.497,-3.127 20.323,-4.69 31.043,-4.69l1.117,0c21.886,0 28.586,6.7 28.586,30.373l0,52.93l50.92,0l0,-69.679c0,-40.646 -15.857,-56.949 -53.823,-56.949l-1.563,0c-10.273,0 -24.343,0.67 -31.713,2.01l-24.566,15.633l0,-54.046l324.054,0l0,158.342c21.216,3.573 52.483,6.7 73.476,6.7l11.613,0c62.086,0 79.059,-14.963 79.059,-56.726l0,-14.963c0,-39.083 -16.303,-56.949 -55.386,-56.949l-1.563,0c-9.827,0 -23.896,0.67 -31.713,2.01l-24.79,15.857l0,-54.27Zm-128.415,116.579c-10.273,3.127 -19.876,4.69 -30.596,4.69l-0.893,0c-21.44,0 -28.363,-6.7 -28.363,-30.373l0,-52.93l-50.696,0l0,69.679c0,40.646 15.633,56.949 53.153,56.949l1.563,0c10.497,0 23.896,-0.67 31.49,-2.01l24.343,-15.633l0,16.08l50.92,0l0,-125.066l-50.92,0l0,78.613Zm190.948,-9.603c0,15.187 -6.923,19.653 -31.713,19.653c-9.603,0 -20.1,-0.67 -30.82,-2.457l0,-39.083c11.39,-3.35 22.556,-5.36 34.17,-5.36l0.893,0c20.1,0 27.47,4.243 27.47,21.216l0,6.03Z",
@@ -328,4 +330,54 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       ),
     ),
   );
+}
+
+export async function generateTransactionSlipBuffer(transactionId: string) {
+  const transaction = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    include: {
+      user: {
+        select: {
+          legalName: true,
+          paymentMethod: true,
+          paypalEmail: true,
+          duitNowId: true,
+          bankName: true,
+          bankAccountNumber: true,
+          bankAccountName: true,
+          robuxUsername: true,
+        },
+      },
+    },
+  });
+
+  if (!transaction) {
+    throw new Error("Transaction not found");
+  }
+
+  const slipData: TransactionSlipData = {
+    transactionId: transaction.id,
+    linearIssueIdentifier: transaction.linearIssueIdentifier,
+    linearIssueTitle: transaction.linearIssueTitle,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    status: transaction.status,
+    createdAt: transaction.createdAt,
+    paidAt: transaction.paidAt,
+    legalName: transaction.user.legalName,
+    paymentMethod: transaction.user.paymentMethod,
+    paypalEmail: transaction.user.paypalEmail,
+    duitNowId: transaction.user.duitNowId,
+    bankName: transaction.user.bankName,
+    bankAccountNumber: transaction.user.bankAccountNumber,
+    bankAccountName: transaction.user.bankAccountName,
+    robuxUsername: transaction.user.robuxUsername,
+  };
+
+  const pdfDoc = createTransactionSlipPdf(slipData);
+  const buffer = await renderToBuffer(pdfDoc);
+  const slipId = transaction.id.slice(-8);
+  const filename = `payment-slip-${slipId}.pdf`;
+
+  return { buffer, filename, transaction };
 }

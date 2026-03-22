@@ -10,16 +10,19 @@ export async function sendEmail({
   to,
   subject,
   react,
+  attachments,
 }: {
   to: string;
   subject: string;
   react: React.ReactElement;
+  attachments?: { filename: string; content: Buffer }[];
 }) {
   const { error } = await resend.emails.send({
     from: FROM_ADDRESS,
     to,
     subject,
     react,
+    attachments,
   });
 
   if (error) {

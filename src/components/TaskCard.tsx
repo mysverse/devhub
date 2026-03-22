@@ -94,6 +94,7 @@ function ComplexityDots({ points }: { points: number | null | undefined }) {
       <Group gap={3} align="center" style={{ cursor: "default" }}>
         {Array.from({ length: 5 }).map((_, i) => (
           <div
+            // biome-ignore lint/suspicious/noArrayIndexKey: static fixed-length dot indicators
             key={i}
             style={{
               width: 6,

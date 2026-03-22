@@ -45,6 +45,7 @@ function WalletSkeletons() {
   return (
     <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg" mb="xl">
       {[...Array(3)].map((_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
         <Card key={i} withBorder radius="md" padding="xl">
           <Skeleton height={12} width="40%" mb="sm" />
           <Skeleton height={32} width="60%" />
@@ -58,6 +59,7 @@ function ActiveTasksSkeleton() {
   return (
     <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
       {[...Array(2)].map((_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
         <Card key={i} withBorder radius="md" padding="lg">
           <Group justify="space-between" mb="xs">
             <Skeleton height={20} width={60} />
@@ -81,6 +83,7 @@ function CarouselSkeleton() {
       <div style={{ display: "flex", gap: "20px", overflow: "hidden" }}>
         {[...Array(3)].map((_, i) => (
           <Card
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
             key={i}
             withBorder
             radius="md"
@@ -337,6 +340,7 @@ function LeaderboardSkeleton() {
       <Stack gap={0}>
         {[...Array(5)].map((_, i) => (
           <Group
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
             key={i}
             p="md"
             style={

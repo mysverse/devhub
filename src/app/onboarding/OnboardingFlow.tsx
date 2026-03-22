@@ -608,6 +608,7 @@ function OnboardingCoiEntries({
         <Stack gap="xs">
           {entries.map((entry, index) => (
             <Card
+              // biome-ignore lint/suspicious/noArrayIndexKey: entries can share organizationName
               key={`${entry.organizationName}-${index}`}
               withBorder
               radius="sm"

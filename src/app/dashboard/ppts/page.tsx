@@ -52,10 +52,12 @@ function PPTSkeleton() {
   return (
     <Stack gap="xl">
       {[...Array(2)].map((_, g) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
         <div key={g}>
           <Skeleton height={24} width={160} mb="md" />
           <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
             {[...Array(3)].map((_, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
               <Card key={i} withBorder radius="md" padding="lg">
                 <Skeleton height={160} mb="md" />
                 <Group justify="space-between" mb="xs">

@@ -1,11 +1,7 @@
-import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
-import {
-  createTransactionSlipPdf,
-  type TransactionSlipData,
-} from "@/lib/transaction-slip-pdf";
+import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 
 type Params = Promise<{ id: string }>;
 
@@ -17,22 +13,10 @@ export async function GET(_request: Request, { params }: { params: Params }) {
   }
 
   try {
+    // Check ownership or admin access before generating
     const transaction = await prisma.transaction.findUnique({
       where: { id },
-      include: {
-        user: {
-          select: {
-            legalName: true,
-            paymentMethod: true,
-            paypalEmail: true,
-            duitNowId: true,
-            bankName: true,
-            bankAccountNumber: true,
-            bankAccountName: true,
-            robuxUsername: true,
-          },
-        },
-      },
+      select: { userId: true },
     });
 
     if (!transaction) {
@@ -42,7 +26,6 @@ export async function GET(_request: Request, { params }: { params: Params }) {
       );
     }
 
-    // Allow access if user owns the transaction or is an admin
     const requestingUser = await prisma.userProfile.findUnique({
       where: { id: userId },
       select: { role: true },
@@ -52,30 +35,7 @@ export async function GET(_request: Request, { params }: { params: Params }) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const slipData: TransactionSlipData = {
-      transactionId: transaction.id,
-      linearIssueIdentifier: transaction.linearIssueIdentifier,
-      linearIssueTitle: transaction.linearIssueTitle,
-      amount: transaction.amount,
-      currency: transaction.currency,
-      status: transaction.status,
-      createdAt: transaction.createdAt,
-      paidAt: transaction.paidAt,
-      legalName: transaction.user.legalName,
-      paymentMethod: transaction.user.paymentMethod,
-      paypalEmail: transaction.user.paypalEmail,
-      duitNowId: transaction.user.duitNowId,
-      bankName: transaction.user.bankName,
-      bankAccountNumber: transaction.user.bankAccountNumber,
-      bankAccountName: transaction.user.bankAccountName,
-      robuxUsername: transaction.user.robuxUsername,
-    };
-
-    const pdfDoc = createTransactionSlipPdf(slipData);
-    const buffer = await renderToBuffer(pdfDoc);
-
-    const slipId = transaction.id.slice(-8);
-    const filename = `payment-slip-${slipId}.pdf`;
+    const { buffer, filename } = await generateTransactionSlipBuffer(id);
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {

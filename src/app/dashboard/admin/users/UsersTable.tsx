@@ -14,6 +14,7 @@ import {
   MenuTarget,
   Stack,
   Table,
+  TableScrollContainer,
   TableTbody,
   TableTd,
   TableTh,
@@ -189,6 +190,7 @@ export default function UsersTable({
       </Group>
 
       <Card withBorder radius="md" padding={0}>
+        <TableScrollContainer minWidth={800}>
         <Table striped highlightOnHover layout="fixed">
           <TableThead>
             <TableTr>
@@ -367,6 +369,7 @@ export default function UsersTable({
             })}
           </TableTbody>
         </Table>
+        </TableScrollContainer>
       </Card>
     </Stack>
   );

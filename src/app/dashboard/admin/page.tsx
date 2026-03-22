@@ -181,6 +181,9 @@ export default async function AdminPage() {
                   taskTitle={tx.taskTitle}
                   paymentMethod={tx.user.paymentMethod}
                   paymentDetails={tx.paymentDetails}
+                  linearIssueIdentifier={tx.linearIssueIdentifier}
+                  linearIssueUrl={tx.linearIssueUrl}
+                  email={tx.user.linearEmail}
                 />
               </StaggerItem>
             ))

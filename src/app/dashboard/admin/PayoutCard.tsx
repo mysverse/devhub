@@ -1,14 +1,18 @@
 "use client";
 
+import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/16/solid";
 import {
+  ActionIcon,
   Box,
   Button,
   Card,
+  CopyButton,
   Group,
   Modal,
   Stack,
   Text,
   Textarea,
+  Tooltip,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
@@ -26,6 +30,9 @@ type PayoutCardProps = {
   taskTitle: string;
   paymentMethod: string;
   paymentDetails: React.ReactNode;
+  linearIssueIdentifier?: string | null;
+  linearIssueUrl?: string | null;
+  email?: string | null;
 };
 
 export default function PayoutCard({
@@ -37,6 +44,9 @@ export default function PayoutCard({
   taskTitle,
   paymentMethod,
   paymentDetails,
+  linearIssueIdentifier,
+  linearIssueUrl,
+  email,
 }: PayoutCardProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -105,6 +115,33 @@ export default function PayoutCard({
               {paymentDetails}
             </Text>
           </Box>
+
+          {currency === "MYR" && (
+            <Box
+              bg="var(--mantine-color-dark-6)"
+              p="sm"
+              style={{ borderRadius: "var(--mantine-radius-md)" }}
+            >
+              <Text size="sm" fw={600} mb="xs">
+                Bank Transfer Fields
+              </Text>
+              <Stack gap={6}>
+                <CopyField
+                  label="Recipient's Reference"
+                  value={`PPT task / ${linearIssueIdentifier || "N/A"}`}
+                />
+                <CopyField
+                  label="Other Payment Details"
+                  value={linearIssueUrl || ""}
+                />
+                <CopyField label="Email Address" value={email || ""} />
+                <CopyField
+                  label="Message to Beneficiary"
+                  value={`Payment of ${formatAmount(amount, currency as CurrencyCode)} for ${linearIssueIdentifier || "PPT task"}: ${taskTitle}. Thank you for your contribution to MYSverse!`}
+                />
+              </Stack>
+            </Box>
+          )}
         </Stack>
 
         <Box mt="auto">
@@ -179,5 +216,40 @@ export default function PayoutCard({
         </Stack>
       </Modal>
     </>
+  );
+}
+
+function CopyField({ label, value }: { label: string; value: string }) {
+  return (
+    <Box>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+      <Group gap={4} wrap="nowrap">
+        <Text size="xs" ff="monospace" style={{ wordBreak: "break-all" }}>
+          {value || "—"}
+        </Text>
+        {value && (
+          <CopyButton value={value}>
+            {({ copied, copy }) => (
+              <Tooltip label={copied ? "Copied" : "Copy"} withArrow>
+                <ActionIcon
+                  size="xs"
+                  variant="subtle"
+                  color={copied ? "teal" : "gray"}
+                  onClick={copy}
+                >
+                  {copied ? (
+                    <CheckIcon className="size-3" />
+                  ) : (
+                    <ClipboardDocumentIcon className="size-3" />
+                  )}
+                </ActionIcon>
+              </Tooltip>
+            )}
+          </CopyButton>
+        )}
+      </Group>
+    </Box>
   );
 }

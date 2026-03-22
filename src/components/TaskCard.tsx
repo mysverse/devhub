@@ -170,9 +170,7 @@ export default function TaskCard({
           <DescriptionContent text={description} lines={2} size="xs" />
         </div>
         <Group justify="space-between" mt="auto" align="center">
-          <Anchor href={url} target="_blank" fz="xs" fw={500}>
-            Linear &rarr;
-          </Anchor>
+          <LinearIcon url={url} />
           <ClaimButton issueId={issueId} />
         </Group>
       </Card>
@@ -199,9 +197,7 @@ export default function TaskCard({
           <Text fz="sm" c="dimmed">
             {estimate ? `${estimate} pts` : "Unestimated"}
           </Text>
-          <Anchor href={url} target="_blank" fz="sm" fw={500}>
-            Open in Linear &rarr;
-          </Anchor>
+          <LinearIcon url={url} />
         </Group>
       </Card>
     );

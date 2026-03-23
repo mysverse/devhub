@@ -15,6 +15,15 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  DUITNOW_INSTITUTIONS,
+  validateBankAccountName,
+  validateBankAccountNumber,
+  validateBankName,
+  validateDuitNowBankName,
+  validateDuitNowId,
+  validateRobuxUsername,
+} from "@/lib/payment-validation";
 import { updateProfileSettings } from "./actions";
 
 type ProfileProps = {
@@ -39,8 +48,70 @@ export default function SettingsForm({ profile }: ProfileProps) {
       ? "BANK"
       : "ID",
   );
+  const [duitNowBankName, setDuitNowBankName] = useState<string | null>(
+    profile.paymentMethod === "DUITNOW" ? profile.bankName : null,
+  );
+  const [errors, setErrors] = useState<Record<string, string | null>>({});
+
+  function setFieldError(field: string, error: string | null) {
+    setErrors((prev) => ({ ...prev, [field]: error }));
+  }
+
+  function clearErrors() {
+    setErrors({});
+  }
+
+  function validateAllFields(formData: FormData): boolean {
+    const newErrors: Record<string, string | null> = {};
+
+    if (paymentMethod === "PAYPAL") {
+      const email = formData.get("paypalEmail") as string;
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        newErrors.paypalEmail = "Please enter a valid email address";
+      }
+    }
+
+    if (paymentMethod === "ROBUX") {
+      newErrors.robuxUsername = validateRobuxUsername(
+        (formData.get("robuxUsername") as string) || "",
+      );
+    }
+
+    if (paymentMethod === "DUITNOW") {
+      if (duitNowType === "ID") {
+        newErrors.duitNowId = validateDuitNowId(
+          (formData.get("duitNowId") as string) || "",
+        );
+      } else {
+        newErrors.bankName = validateDuitNowBankName(duitNowBankName || "");
+        newErrors.bankAccountNumber = validateBankAccountNumber(
+          (formData.get("bankAccountNumber") as string) || "",
+        );
+        newErrors.bankAccountName = validateBankAccountName(
+          (formData.get("bankAccountName") as string) || "",
+        );
+      }
+    }
+
+    if (paymentMethod === "BANK_TRANSFER") {
+      newErrors.bankName = validateBankName(
+        (formData.get("bankName") as string) || "",
+      );
+      newErrors.bankAccountNumber = validateBankAccountNumber(
+        (formData.get("bankAccountNumber") as string) || "",
+      );
+      newErrors.bankAccountName = validateBankAccountName(
+        (formData.get("bankAccountName") as string) || "",
+      );
+    }
+
+    setErrors(newErrors);
+    return !Object.values(newErrors).some(Boolean);
+  }
 
   async function action(formData: FormData) {
+    if (!validateAllFields(formData)) return;
+
     setLoading(true);
 
     const res = await updateProfileSettings(formData);
@@ -84,16 +155,14 @@ export default function SettingsForm({ profile }: ProfileProps) {
             Payment Preferences
           </Title>
           <Stack gap="lg">
-            {/* 
-              Mantine Select component requires a hidden input to sync with native FormData 
-              because it's a custom UI component, not a native <select> by default unless we set name.
-              Alternatively, we can use a hidden input ourselves to guarantee it's passed.
-            */}
             <Select
               label="Preferred Payment Method"
               name="paymentMethod"
               value={paymentMethod}
-              onChange={(val) => setPaymentMethod(val as string)}
+              onChange={(val) => {
+                setPaymentMethod(val as string);
+                clearErrors();
+              }}
               data={[
                 { value: "PAYPAL", label: "PayPal" },
                 { value: "ROBUX", label: "Robux" },
@@ -111,6 +180,18 @@ export default function SettingsForm({ profile }: ProfileProps) {
                 defaultValue={profile.paypalEmail || ""}
                 placeholder="paypal@example.com"
                 required
+                error={errors.paypalEmail}
+                onBlur={(e) => {
+                  const val = e.currentTarget.value;
+                  if (val && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                    setFieldError(
+                      "paypalEmail",
+                      "Please enter a valid email address",
+                    );
+                  } else {
+                    setFieldError("paypalEmail", null);
+                  }
+                }}
               />
             )}
 
@@ -121,6 +202,13 @@ export default function SettingsForm({ profile }: ProfileProps) {
                 defaultValue={profile.robuxUsername || ""}
                 placeholder="Builderman"
                 required
+                error={errors.robuxUsername}
+                onBlur={(e) =>
+                  setFieldError(
+                    "robuxUsername",
+                    validateRobuxUsername(e.currentTarget.value),
+                  )
+                }
               />
             )}
 
@@ -128,21 +216,33 @@ export default function SettingsForm({ profile }: ProfileProps) {
               <Stack gap="sm">
                 <RadioGroup
                   value={duitNowType}
-                  onChange={(val) => setDuitNowType(val as "ID" | "BANK")}
+                  onChange={(val) => {
+                    setDuitNowType(val as "ID" | "BANK");
+                    clearErrors();
+                  }}
                 >
                   <Group mt="xs">
                     <Radio value="ID" label="Phone / NRIC ID" />
                     <Radio value="BANK" label="Bank Account" />
                   </Group>
                 </RadioGroup>
+                <input type="hidden" name="duitNowType" value={duitNowType} />
 
                 {duitNowType === "ID" ? (
                   <TextInput
                     label="DuitNow ID (Phone / NRIC)"
                     name="duitNowId"
                     defaultValue={profile.duitNowId || ""}
-                    placeholder="Enter DuitNow ID"
+                    placeholder="e.g. 0123456789 or 990101141234"
+                    description="Malaysian phone number (01X-XXXXXXXX) or NRIC (12 digits)"
                     required
+                    error={errors.duitNowId}
+                    onBlur={(e) =>
+                      setFieldError(
+                        "duitNowId",
+                        validateDuitNowId(e.currentTarget.value),
+                      )
+                    }
                   />
                 ) : (
                   <Box
@@ -152,12 +252,19 @@ export default function SettingsForm({ profile }: ProfileProps) {
                     }}
                   >
                     <Stack gap="sm">
-                      <TextInput
-                        label="Bank Name"
+                      <Select
+                        label="Bank / eWallet"
                         name="bankName"
-                        defaultValue={profile.bankName || ""}
-                        placeholder="Maybank, CIMB, etc."
+                        data={DUITNOW_INSTITUTIONS}
+                        value={duitNowBankName}
+                        onChange={(val) => {
+                          setDuitNowBankName(val);
+                          setFieldError("bankName", null);
+                        }}
+                        placeholder="Search for your bank or eWallet"
+                        searchable
                         required
+                        error={errors.bankName}
                       />
                       <TextInput
                         label="Account Number"
@@ -165,6 +272,13 @@ export default function SettingsForm({ profile }: ProfileProps) {
                         defaultValue={profile.bankAccountNumber || ""}
                         placeholder="1234567890"
                         required
+                        error={errors.bankAccountNumber}
+                        onBlur={(e) =>
+                          setFieldError(
+                            "bankAccountNumber",
+                            validateBankAccountNumber(e.currentTarget.value),
+                          )
+                        }
                       />
                       <TextInput
                         label="Account Holder Name"
@@ -174,6 +288,13 @@ export default function SettingsForm({ profile }: ProfileProps) {
                         }
                         placeholder="John Doe"
                         required
+                        error={errors.bankAccountName}
+                        onBlur={(e) =>
+                          setFieldError(
+                            "bankAccountName",
+                            validateBankAccountName(e.currentTarget.value),
+                          )
+                        }
                       />
                     </Stack>
                   </Box>
@@ -189,6 +310,13 @@ export default function SettingsForm({ profile }: ProfileProps) {
                   defaultValue={profile.bankName || ""}
                   placeholder="Chase, Bank of America, etc."
                   required
+                  error={errors.bankName}
+                  onBlur={(e) =>
+                    setFieldError(
+                      "bankName",
+                      validateBankName(e.currentTarget.value),
+                    )
+                  }
                 />
                 <TextInput
                   label="Account Number / IBAN"
@@ -196,6 +324,13 @@ export default function SettingsForm({ profile }: ProfileProps) {
                   defaultValue={profile.bankAccountNumber || ""}
                   placeholder="Account info"
                   required
+                  error={errors.bankAccountNumber}
+                  onBlur={(e) =>
+                    setFieldError(
+                      "bankAccountNumber",
+                      validateBankAccountNumber(e.currentTarget.value),
+                    )
+                  }
                 />
                 <TextInput
                   label="Account Holder Name"
@@ -205,6 +340,13 @@ export default function SettingsForm({ profile }: ProfileProps) {
                   }
                   placeholder="John Doe"
                   required
+                  error={errors.bankAccountName}
+                  onBlur={(e) =>
+                    setFieldError(
+                      "bankAccountName",
+                      validateBankAccountName(e.currentTarget.value),
+                    )
+                  }
                 />
               </Stack>
             )}

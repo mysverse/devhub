@@ -3,24 +3,27 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/auth-utils";
+import { paymentSuperRefine } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
-const SettingsSchema = z.object({
-  legalName: z.string().optional().nullable(),
-  paymentMethod: z.enum(["PAYPAL", "DUITNOW", "ROBUX", "BANK_TRANSFER"]),
-  paypalEmail: z
-    .string()
-    .email("Invalid PayPal email")
-    .or(z.literal(""))
-    .optional()
-    .nullable(),
-  duitNowId: z.string().optional().nullable(),
-  robuxUsername: z.string().optional().nullable(),
-  shippingAddress: z.string().optional().nullable(),
-  bankName: z.string().optional().nullable(),
-  bankAccountNumber: z.string().optional().nullable(),
-  bankAccountName: z.string().optional().nullable(),
-});
+const SettingsSchema = z
+  .object({
+    legalName: z.string().optional().nullable(),
+    paymentMethod: z.enum(["PAYPAL", "DUITNOW", "ROBUX", "BANK_TRANSFER"]),
+    paypalEmail: z
+      .email("Invalid PayPal email")
+      .or(z.literal(""))
+      .optional()
+      .nullable(),
+    duitNowId: z.string().optional().nullable(),
+    duitNowType: z.enum(["ID", "BANK"]).optional().nullable(),
+    robuxUsername: z.string().optional().nullable(),
+    shippingAddress: z.string().optional().nullable(),
+    bankName: z.string().optional().nullable(),
+    bankAccountNumber: z.string().optional().nullable(),
+    bankAccountName: z.string().optional().nullable(),
+  })
+  .superRefine(paymentSuperRefine);
 
 export async function updateProfileSettings(formData: FormData) {
   const { userId } = await getSession();
@@ -31,6 +34,7 @@ export async function updateProfileSettings(formData: FormData) {
     paymentMethod: formData.get("paymentMethod"),
     paypalEmail: formData.get("paypalEmail") || null,
     duitNowId: formData.get("duitNowId") || null,
+    duitNowType: formData.get("duitNowType") || null,
     robuxUsername: formData.get("robuxUsername") || null,
     shippingAddress: formData.get("shippingAddress") || null,
     bankName: formData.get("bankName") || null,
@@ -49,6 +53,7 @@ export async function updateProfileSettings(formData: FormData) {
     paymentMethod,
     paypalEmail,
     duitNowId,
+    // duitNowType is validation-only, not stored in DB
     robuxUsername,
     shippingAddress,
     bankName,

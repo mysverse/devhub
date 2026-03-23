@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth-utils";
 import { siteConfig } from "@/lib/config";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
+import { paymentSuperRefine } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 type OnboardingInput = {
@@ -27,34 +28,36 @@ type OnboardingInput = {
   }[];
 };
 
-const OnboardingSchema = z.object({
-  legalName: z.string().min(1, "Legal name is required"),
-  linearId: z.string().optional().nullable(),
-  linearEmail: z.string().email().or(z.literal("")).optional().nullable(),
-  discordId: z.string().optional().nullable(),
-  robuxUsername: z.string().optional().nullable(),
-  paymentMethod: z.enum(["PAYPAL", "DUITNOW", "ROBUX", "BANK_TRANSFER"]),
-  paypalEmail: z
-    .string()
-    .email("Invalid PayPal email")
-    .or(z.literal(""))
-    .optional()
-    .nullable(),
-  duitNowId: z.string().optional().nullable(),
-  bankName: z.string().optional().nullable(),
-  bankAccountNumber: z.string().optional().nullable(),
-  bankAccountName: z.string().optional().nullable(),
-  agreedDocuments: z.array(z.enum(["COI", "NDA"])),
-  coiEntries: z
-    .array(
-      z.object({
-        organizationName: z.string().min(1),
-        natureOfInvolvement: z.string().min(1),
-        description: z.string().min(1),
-      }),
-    )
-    .optional(),
-});
+const OnboardingSchema = z
+  .object({
+    legalName: z.string().min(1, "Legal name is required"),
+    linearId: z.string().optional().nullable(),
+    linearEmail: z.email().or(z.literal("")).optional().nullable(),
+    discordId: z.string().optional().nullable(),
+    robuxUsername: z.string().optional().nullable(),
+    paymentMethod: z.enum(["PAYPAL", "DUITNOW", "ROBUX", "BANK_TRANSFER"]),
+    paypalEmail: z
+      .email("Invalid PayPal email")
+      .or(z.literal(""))
+      .optional()
+      .nullable(),
+    duitNowId: z.string().optional().nullable(),
+    duitNowType: z.enum(["ID", "BANK"]).optional().nullable(),
+    bankName: z.string().optional().nullable(),
+    bankAccountNumber: z.string().optional().nullable(),
+    bankAccountName: z.string().optional().nullable(),
+    agreedDocuments: z.array(z.enum(["COI", "NDA"])),
+    coiEntries: z
+      .array(
+        z.object({
+          organizationName: z.string().min(1),
+          natureOfInvolvement: z.string().min(1),
+          description: z.string().min(1),
+        }),
+      )
+      .optional(),
+  })
+  .superRefine(paymentSuperRefine);
 
 export async function completeOnboarding(
   input: OnboardingInput,

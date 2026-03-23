@@ -10,7 +10,7 @@ export async function uploadTransactionPdf(
 ): Promise<string> {
   const { url } = await put(
     `payment-slips/${transactionId}.pdf`,
-    new Uint8Array(buffer),
+    buffer,
     {
       access: "public",
       addRandomSuffix: false,

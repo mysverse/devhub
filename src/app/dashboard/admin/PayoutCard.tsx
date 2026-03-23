@@ -143,7 +143,10 @@ export default function PayoutCard({
 
   async function handleReject() {
     setRejecting(true);
-    const res = await rejectTransaction(tx.id, rejectReason.trim() || undefined);
+    const res = await rejectTransaction(
+      tx.id,
+      rejectReason.trim() || undefined,
+    );
     if (res?.error) {
       toast.error(res.error);
     } else {
@@ -156,7 +159,10 @@ export default function PayoutCard({
 
   async function handleSendPaymentNotice() {
     setSendingNotice(true);
-    const res = await sendPaymentInfoNotice(tx.userId, reason.trim() || undefined);
+    const res = await sendPaymentInfoNotice(
+      tx.userId,
+      reason.trim() || undefined,
+    );
     if (res.error) {
       toast.error(res.error);
     } else {
@@ -363,8 +369,8 @@ export default function PayoutCard({
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            This will reject the payout for{" "}
-            <strong>{tx.developerName}</strong> and notify them via email.
+            This will reject the payout for <strong>{tx.developerName}</strong>{" "}
+            and notify them via email.
           </Text>
           <Textarea
             label="Reason (optional)"
@@ -379,11 +385,7 @@ export default function PayoutCard({
             <Button variant="default" onClick={closeRejectModal}>
               Cancel
             </Button>
-            <Button
-              onClick={handleReject}
-              loading={rejecting}
-              color="red"
-            >
+            <Button onClick={handleReject} loading={rejecting} color="red">
               Reject Payout
             </Button>
           </Group>

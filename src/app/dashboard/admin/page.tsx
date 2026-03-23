@@ -82,9 +82,14 @@ export default async function AdminPage() {
   // Enrich pending transactions with Linear issue details
   const pending: PayoutTransaction[] = await Promise.all(
     pendingTransactions.map(async (tx: TransactionWithUser) => {
-      let taskTitle = tx.linearIssueTitle || tx.linearIssueId || "Manual Payout";
+      let taskTitle =
+        tx.linearIssueTitle || tx.linearIssueId || "Manual Payout";
 
-      if (tx.linearIssueId && !tx.linearIssueId.includes(" ") && !tx.linearIssueTitle) {
+      if (
+        tx.linearIssueId &&
+        !tx.linearIssueId.includes(" ") &&
+        !tx.linearIssueTitle
+      ) {
         try {
           const issue = await linearClient.issue(tx.linearIssueId);
           taskTitle = `${issue.identifier} - ${issue.title}`;
@@ -137,11 +142,7 @@ export default async function AdminPage() {
         </Group>
       </Group>
 
-      <AdminPayoutTabs
-        pending={pending}
-        paid={paid}
-        rejected={rejected}
-      />
+      <AdminPayoutTabs pending={pending} paid={paid} rejected={rejected} />
     </FadeIn>
   );
 }

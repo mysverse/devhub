@@ -133,6 +133,7 @@ const styles = StyleSheet.create({
   statusPaid: { color: "#2b8a3e" },
   statusPending: { color: "#e67700" },
   statusCancelled: { color: "#c92a2a" },
+  statusRejected: { color: "#e03131" },
 });
 
 export type TransactionSlipData = {
@@ -141,7 +142,7 @@ export type TransactionSlipData = {
   linearIssueTitle: string | null;
   amount: number;
   currency: string;
-  status: "PENDING" | "PAID" | "CANCELLED";
+  status: "PENDING" | "PAID" | "CANCELLED" | "REJECTED";
   createdAt: Date;
   paidAt: Date | null;
   legalName: string | null;
@@ -196,6 +197,7 @@ function getPaymentDetails(data: TransactionSlipData): string {
 function statusStyle(status: string) {
   if (status === "PAID") return styles.statusPaid;
   if (status === "PENDING") return styles.statusPending;
+  if (status === "REJECTED") return styles.statusRejected;
   return styles.statusCancelled;
 }
 

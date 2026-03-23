@@ -11,6 +11,7 @@ import {
 } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { siteConfig } from "@/lib/config";
+import { getBankDisplayName } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 const LOGO_PATHS = [
@@ -183,11 +184,11 @@ function getPaymentDetails(data: TransactionSlipData): string {
       return data.duitNowId
         ? `ID: ${data.duitNowId}`
         : data.bankAccountNumber
-          ? `${data.bankName} - ${data.bankAccountNumber}`
+          ? `${getBankDisplayName(data.bankName)} - ${data.bankAccountNumber}`
           : "Not set";
     case "BANK_TRANSFER":
       return data.bankAccountNumber
-        ? `${data.bankName} - ${data.bankAccountNumber} (${data.bankAccountName})`
+        ? `${getBankDisplayName(data.bankName)} - ${data.bankAccountNumber} (${data.bankAccountName})`
         : "Not set";
     default:
       return "Not set";

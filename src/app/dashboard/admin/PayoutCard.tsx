@@ -19,6 +19,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
+import { getBankDisplayName } from "@/lib/payment-validation";
 import { markTransactionAsPaid, rejectTransaction } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
 import type { PayoutTransaction } from "./types";
@@ -47,7 +48,7 @@ function renderPaymentDetails(tx: PayoutTransaction) {
       <>
         <div>
           Bank:{" "}
-          {tx.bankName || (
+          {getBankDisplayName(tx.bankName) || (
             <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
           )}
         </div>
@@ -74,7 +75,7 @@ function renderPaymentDetails(tx: PayoutTransaction) {
       <>
         <div>
           Bank:{" "}
-          {tx.bankName || (
+          {getBankDisplayName(tx.bankName) || (
             <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
           )}
         </div>

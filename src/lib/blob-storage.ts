@@ -8,15 +8,11 @@ export async function uploadTransactionPdf(
   transactionId: string,
   buffer: Buffer,
 ): Promise<string> {
-  const { url } = await put(
-    `payment-slips/${transactionId}.pdf`,
-    buffer,
-    {
-      access: "public",
-      addRandomSuffix: false,
-      contentType: "application/pdf",
-    },
-  );
+  const { url } = await put(`payment-slips/${transactionId}.pdf`, buffer, {
+    access: "public",
+    addRandomSuffix: false,
+    contentType: "application/pdf",
+  });
   return url;
 }
 

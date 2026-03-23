@@ -31,6 +31,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { siteConfig } from "@/lib/config";
+import { DUITNOW_INSTITUTIONS } from "@/lib/payment-validation";
 import { completeOnboarding } from "./actions";
 
 type DocumentTemplate = {
@@ -471,11 +472,13 @@ export default function OnboardingFlow({
                 ) : (
                   <Box pl="md" style={cardStyle}>
                     <Stack gap="sm">
-                      <TextInput
-                        label="Bank Name"
-                        placeholder="Maybank, CIMB, etc."
-                        value={bankName}
-                        onChange={(e) => setBankName(e.target.value)}
+                      <Select
+                        label="Bank / eWallet"
+                        data={DUITNOW_INSTITUTIONS}
+                        value={bankName || null}
+                        onChange={(val) => setBankName(val || "")}
+                        placeholder="Search for your bank or eWallet"
+                        searchable
                         required
                       />
                       <TextInput

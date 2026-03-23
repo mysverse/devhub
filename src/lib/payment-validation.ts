@@ -16,6 +16,60 @@ const BANK_ACCOUNT_NUMBER_REGEX = /^\d{5,20}$/;
  * DuitNow-participating institutions sourced from PayNet's official list.
  * https://www.paynet.my/personal-solutions/duitnow-transfer.html
  */
+/**
+ * BIC/SWIFT code → display name mapping for DuitNow-participating institutions.
+ * Codes sourced from PayNet's official DuitNow participant list.
+ */
+export const DUITNOW_BANK_MAP: Record<string, string> = {
+  // Banks
+  ACDBMYK2: "Aeon Bank",
+  PHBMMYKL: "Affin Bank",
+  AGOBMYKL: "Agro Bank",
+  RJHIMYKL: "Al Rajhi Bank",
+  MFBBMYKL: "Alliance Bank",
+  ARBKMYKL: "AmBank",
+  BIMBMYKL: "Bank Islam",
+  BOFAMY2X: "Bank of America",
+  BKCHMYKL: "Bank of China",
+  BMMBMYKL: "Bank Muamalat",
+  BKRMMYKL: "Bank Rakyat",
+  BNPAMYKL: "BNP Paribas",
+  BOBEMYK2: "Boost Bank",
+  BSNAMYK1: "BSN",
+  PCBCMYKL: "China Construction Bank",
+  CIBBMYKL: "CIMB",
+  CITIMYKL: "Citibank",
+  DEUTMYKL: "Deutsche Bank",
+  GXSPMYKL: "GXBank",
+  HLBBMYKL: "Hong Leong Bank",
+  HBMBMYKL: "HSBC",
+  ICBKMYKL: "ICBC",
+  CHASMYKX: "JP Morgan",
+  KAFBMYK2: "KAF Digital Bank",
+  KFHOMYKL: "Kuwait Finance House",
+  MBBEMYKL: "Maybank",
+  AFBQMYKL: "MBSB",
+  MHCBMYKA: "Mizuho",
+  BOTKMYKX: "MUFG",
+  OCBCMYKL: "OCBC",
+  PBBEMYKL: "Public Bank",
+  RHBBMYKL: "RHB",
+  SCCHMYKL: "RYT Bank",
+  SMBCMYKL: "SMBC",
+  SCBLMYKX: "Standard Chartered",
+  UOVBMYKL: "UOB",
+  // eWallets
+  BGPYMYNB: "BigPay",
+  BOSTMYNB: "Boost",
+  FSPYMYNB: "Fasspay",
+  FNXSMYNB: "Finexus",
+  MASBMYNB: "Merchantrade",
+  SVSBMYNB: "Setel",
+  ARPYMYNB: "ShopeePay",
+  TNGDMYNB: "TnG E-Wallet",
+};
+
+/** Mantine Select-compatible grouped data (value = BIC code, label = display name) */
 export const DUITNOW_INSTITUTIONS: {
   group: string;
   items: { value: string; label: string }[];
@@ -23,76 +77,70 @@ export const DUITNOW_INSTITUTIONS: {
   {
     group: "Banks",
     items: [
-      { value: "Aeon Bank", label: "Aeon Bank" },
-      { value: "Affin Bank", label: "Affin Bank" },
-      { value: "Affin Islamic", label: "Affin Islamic" },
-      { value: "Agro Bank", label: "Agro Bank" },
-      { value: "Al Rajhi Bank", label: "Al Rajhi Bank" },
-      { value: "Alliance Bank", label: "Alliance Bank" },
-      { value: "Alliance Islamic", label: "Alliance Islamic" },
-      { value: "AmBank", label: "AmBank" },
-      { value: "AmBank Islamic", label: "AmBank Islamic" },
-      { value: "Bank Islam", label: "Bank Islam" },
-      { value: "Bank of America", label: "Bank of America" },
-      { value: "Bank of China", label: "Bank of China" },
-      { value: "Bank Muamalat", label: "Bank Muamalat" },
-      { value: "Bank Rakyat", label: "Bank Rakyat" },
-      { value: "BSN", label: "BSN" },
-      { value: "CCB", label: "CCB" },
-      { value: "CIMB", label: "CIMB" },
-      { value: "CIMB Islamic", label: "CIMB Islamic" },
-      { value: "Citibank", label: "Citibank" },
-      { value: "Deutsche Bank", label: "Deutsche Bank" },
-      { value: "GX Bank", label: "GX Bank" },
-      { value: "Hong Leong Bank", label: "Hong Leong Bank" },
-      { value: "Hong Leong Islamic", label: "Hong Leong Islamic" },
-      { value: "HSBC", label: "HSBC" },
-      { value: "HSBC Amanah", label: "HSBC Amanah" },
-      { value: "ICBC", label: "ICBC" },
-      { value: "JP Morgan", label: "JP Morgan" },
-      { value: "Kuwait Finance House", label: "Kuwait Finance House" },
-      { value: "Maybank", label: "Maybank" },
-      { value: "Maybank Islamic", label: "Maybank Islamic" },
-      { value: "MBSB", label: "MBSB" },
-      { value: "Mizuho", label: "Mizuho" },
-      { value: "MUFG", label: "MUFG" },
-      { value: "OCBC", label: "OCBC" },
-      { value: "OCBC Al-Amin", label: "OCBC Al-Amin" },
-      { value: "Public Bank", label: "Public Bank" },
-      { value: "Public Bank Islamic", label: "Public Bank Islamic" },
-      { value: "RHB", label: "RHB" },
-      { value: "RHB Islamic", label: "RHB Islamic" },
-      { value: "SMBC", label: "SMBC" },
-      { value: "Standard Chartered", label: "Standard Chartered" },
-      {
-        value: "Standard Chartered Saadiq",
-        label: "Standard Chartered Saadiq",
-      },
-      { value: "UOB", label: "UOB" },
+      { value: "ACDBMYK2", label: "Aeon Bank" },
+      { value: "PHBMMYKL", label: "Affin Bank" },
+      { value: "AGOBMYKL", label: "Agro Bank" },
+      { value: "RJHIMYKL", label: "Al Rajhi Bank" },
+      { value: "MFBBMYKL", label: "Alliance Bank" },
+      { value: "ARBKMYKL", label: "AmBank" },
+      { value: "BIMBMYKL", label: "Bank Islam" },
+      { value: "BOFAMY2X", label: "Bank of America" },
+      { value: "BKCHMYKL", label: "Bank of China" },
+      { value: "BMMBMYKL", label: "Bank Muamalat" },
+      { value: "BKRMMYKL", label: "Bank Rakyat" },
+      { value: "BNPAMYKL", label: "BNP Paribas" },
+      { value: "BOBEMYK2", label: "Boost Bank" },
+      { value: "BSNAMYK1", label: "BSN" },
+      { value: "PCBCMYKL", label: "China Construction Bank" },
+      { value: "CIBBMYKL", label: "CIMB" },
+      { value: "CITIMYKL", label: "Citibank" },
+      { value: "DEUTMYKL", label: "Deutsche Bank" },
+      { value: "GXSPMYKL", label: "GXBank" },
+      { value: "HLBBMYKL", label: "Hong Leong Bank" },
+      { value: "HBMBMYKL", label: "HSBC" },
+      { value: "ICBKMYKL", label: "ICBC" },
+      { value: "CHASMYKX", label: "JP Morgan" },
+      { value: "KAFBMYK2", label: "KAF Digital Bank" },
+      { value: "KFHOMYKL", label: "Kuwait Finance House" },
+      { value: "MBBEMYKL", label: "Maybank" },
+      { value: "AFBQMYKL", label: "MBSB" },
+      { value: "MHCBMYKA", label: "Mizuho" },
+      { value: "BOTKMYKX", label: "MUFG" },
+      { value: "OCBCMYKL", label: "OCBC" },
+      { value: "PBBEMYKL", label: "Public Bank" },
+      { value: "RHBBMYKL", label: "RHB" },
+      { value: "SCCHMYKL", label: "RYT Bank" },
+      { value: "SMBCMYKL", label: "SMBC" },
+      { value: "SCBLMYKX", label: "Standard Chartered" },
+      { value: "UOVBMYKL", label: "UOB" },
     ],
   },
   {
     group: "eWallets",
     items: [
-      { value: "BigPay", label: "BigPay" },
-      { value: "Boost", label: "Boost" },
-      { value: "Boost Bank", label: "Boost Bank" },
-      { value: "Fasspay", label: "Fasspay" },
-      { value: "Finexus", label: "Finexus" },
-      { value: "GrabPay", label: "GrabPay" },
-      { value: "MCash", label: "MCash" },
-      { value: "Merchantrade", label: "Merchantrade" },
-      { value: "Setel", label: "Setel" },
-      { value: "Shopee Pay", label: "Shopee Pay" },
-      { value: "TnG E-Wallet", label: "TnG E-Wallet" },
-      { value: "WannaPay", label: "WannaPay" },
+      { value: "BGPYMYNB", label: "BigPay" },
+      { value: "BOSTMYNB", label: "Boost" },
+      { value: "FSPYMYNB", label: "Fasspay" },
+      { value: "FNXSMYNB", label: "Finexus" },
+      { value: "MASBMYNB", label: "Merchantrade" },
+      { value: "SVSBMYNB", label: "Setel" },
+      { value: "ARPYMYNB", label: "ShopeePay" },
+      { value: "TNGDMYNB", label: "TnG E-Wallet" },
     ],
   },
 ];
 
-/** Flat list of all valid DuitNow institution names */
+/** Flat list of all valid DuitNow BIC codes */
 export const DUITNOW_INSTITUTION_VALUES: string[] =
-  DUITNOW_INSTITUTIONS.flatMap((group) => group.items.map((i) => i.value));
+  Object.keys(DUITNOW_BANK_MAP);
+
+/** Resolve a bank name for display — handles both BIC codes and legacy plain-text names */
+export function getBankDisplayName(
+  bankName: string | null | undefined,
+): string {
+  if (!bankName) return "";
+  return DUITNOW_BANK_MAP[bankName] ?? bankName;
+}
 
 function isValidNricDate(yymmdd: string): boolean {
   const mm = Number.parseInt(yymmdd.slice(2, 4), 10);

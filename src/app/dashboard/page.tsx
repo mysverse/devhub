@@ -39,6 +39,7 @@ import {
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
+import { getBankDisplayName } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 function WalletSkeletons() {
@@ -237,13 +238,13 @@ async function UserWallet({
                   (userProfile.robuxUsername || "Not set")}
                 {userProfile.paymentMethod === "BANK_TRANSFER" &&
                   (userProfile.bankAccountNumber
-                    ? `${userProfile.bankName} - ${userProfile.bankAccountNumber}`
+                    ? `${getBankDisplayName(userProfile.bankName)} - ${userProfile.bankAccountNumber}`
                     : "Not set")}
                 {userProfile.paymentMethod === "DUITNOW" &&
                   (userProfile.duitNowId
                     ? `ID: ${userProfile.duitNowId}`
                     : userProfile.bankAccountNumber
-                      ? `${userProfile.bankName} - ${userProfile.bankAccountNumber}`
+                      ? `${getBankDisplayName(userProfile.bankName)} - ${userProfile.bankAccountNumber}`
                       : "Not set")}
               </Text>
             </Card>

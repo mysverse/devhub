@@ -129,6 +129,7 @@ model Transaction {
   paidAt           DateTime?
   rejectedAt       DateTime?
   rejectionReason  String?
+  pdfBlobUrl       String?
 }
 
 enum TxStatus {

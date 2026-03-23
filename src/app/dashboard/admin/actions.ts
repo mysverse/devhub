@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import PaymentProcessed from "@/emails/PaymentProcessed";
 import PaymentRejected from "@/emails/PaymentRejected";
 import { getSession } from "@/lib/auth-utils";
+import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
 import prisma from "@/lib/prisma";
@@ -45,6 +46,18 @@ export async function markTransactionAsPaid(transactionId: string) {
     try {
       const { buffer, filename, transaction } =
         await generateTransactionSlipBuffer(transactionId);
+
+      // Store PDF in Vercel Blob for permanent access
+      try {
+        const pdfBlobUrl = await uploadTransactionPdf(transactionId, buffer);
+        await prisma.transaction.update({
+          where: { id: transactionId },
+          data: { pdfBlobUrl },
+        });
+      } catch (blobError) {
+        console.error("Failed to upload PDF to blob storage:", blobError);
+      }
+
       const { email, name } = await getUserEmailAndName(transaction.userId);
 
       const taskTitle =
@@ -93,6 +106,21 @@ export async function rejectTransaction(
     });
 
     revalidatePath("/dashboard/admin");
+
+    // Generate and store rejection slip in Vercel Blob
+    try {
+      const { buffer } = await generateTransactionSlipBuffer(transactionId);
+      const pdfBlobUrl = await uploadTransactionPdf(transactionId, buffer);
+      await prisma.transaction.update({
+        where: { id: transactionId },
+        data: { pdfBlobUrl },
+      });
+    } catch (blobError) {
+      console.error(
+        "Failed to upload rejection PDF to blob storage:",
+        blobError,
+      );
+    }
 
     // Send rejection notification email (non-blocking)
     try {

@@ -16,7 +16,7 @@ export async function GET(_request: Request, { params }: { params: Params }) {
     // Check ownership or admin access before generating
     const transaction = await prisma.transaction.findUnique({
       where: { id },
-      select: { userId: true },
+      select: { userId: true, pdfBlobUrl: true },
     });
 
     if (!transaction) {
@@ -35,6 +35,25 @@ export async function GET(_request: Request, { params }: { params: Params }) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const slipId = id.slice(-8);
+
+    // Serve stored blob if available (finalized transactions)
+    if (transaction.pdfBlobUrl) {
+      const blobResponse = await fetch(transaction.pdfBlobUrl);
+      if (blobResponse.ok) {
+        const arrayBuffer = await blobResponse.arrayBuffer();
+        return new NextResponse(new Uint8Array(arrayBuffer), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="payment-slip-${slipId}.pdf"`,
+            "Cache-Control": "private, max-age=3600",
+          },
+        });
+      }
+      // If blob fetch fails, fall through to on-the-fly generation
+    }
+
+    // Fallback: generate on-the-fly (for PENDING or legacy transactions)
     const { buffer, filename } = await generateTransactionSlipBuffer(id);
 
     return new NextResponse(new Uint8Array(buffer), {

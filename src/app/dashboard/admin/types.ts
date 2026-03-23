@@ -1,0 +1,22 @@
+export type PayoutTransaction = {
+  id: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  taskTitle: string;
+  developerName: string;
+  paymentMethod: string;
+  paypalEmail?: string | null;
+  duitNowId?: string | null;
+  bankName?: string | null;
+  bankAccountNumber?: string | null;
+  bankAccountName?: string | null;
+  robuxUsername?: string | null;
+  linearIssueIdentifier?: string | null;
+  linearIssueUrl?: string | null;
+  email?: string | null;
+  paidAt?: string | null;
+  rejectedAt?: string | null;
+  rejectionReason?: string | null;
+};

@@ -3,6 +3,7 @@
 import { CheckIcon, ClipboardDocumentIcon } from "@heroicons/react/16/solid";
 import {
   ActionIcon,
+  Badge,
   Box,
   Button,
   Card,
@@ -18,58 +19,144 @@ import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
-import { markTransactionAsPaid } from "./actions";
+import { markTransactionAsPaid, rejectTransaction } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
+import type { PayoutTransaction } from "./types";
 
-type PayoutCardProps = {
-  transactionId: string;
-  userId: string;
-  amount: number;
-  currency: string;
-  developerName: string;
-  taskTitle: string;
-  paymentMethod: string;
-  paymentDetails: React.ReactNode;
-  linearIssueIdentifier?: string | null;
-  linearIssueUrl?: string | null;
-  email?: string | null;
+function renderPaymentDetails(tx: PayoutTransaction) {
+  if (tx.paymentMethod === "PAYPAL") {
+    return (
+      tx.paypalEmail || (
+        <span style={{ color: "var(--mantine-color-red-6)" }}>
+          Missing Email
+        </span>
+      )
+    );
+  }
+  if (tx.paymentMethod === "ROBUX") {
+    return (
+      tx.robuxUsername || (
+        <span style={{ color: "var(--mantine-color-red-6)" }}>
+          Missing Username
+        </span>
+      )
+    );
+  }
+  if (tx.paymentMethod === "BANK_TRANSFER") {
+    return (
+      <>
+        <div>
+          Bank:{" "}
+          {tx.bankName || (
+            <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
+          )}
+        </div>
+        <div>
+          Acct:{" "}
+          {tx.bankAccountNumber || (
+            <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
+          )}
+        </div>
+        <div>
+          Name:{" "}
+          {tx.bankAccountName || (
+            <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
+          )}
+        </div>
+      </>
+    );
+  }
+  if (tx.paymentMethod === "DUITNOW") {
+    if (tx.duitNowId) {
+      return <>ID: {tx.duitNowId}</>;
+    }
+    return (
+      <>
+        <div>
+          Bank:{" "}
+          {tx.bankName || (
+            <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
+          )}
+        </div>
+        <div>
+          Acct:{" "}
+          {tx.bankAccountNumber || (
+            <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
+          )}
+        </div>
+        <div>
+          Name:{" "}
+          {tx.bankAccountName || (
+            <span style={{ color: "var(--mantine-color-red-6)" }}>Missing</span>
+          )}
+        </div>
+      </>
+    );
+  }
+  return null;
+}
+
+const statusConfig: Record<string, { color: string; label: string }> = {
+  PENDING: { color: "yellow", label: "Pending" },
+  PAID: { color: "green", label: "Paid" },
+  REJECTED: { color: "red", label: "Rejected" },
+  CANCELLED: { color: "gray", label: "Cancelled" },
 };
 
 export default function PayoutCard({
-  transactionId,
-  userId,
-  amount,
-  currency,
-  developerName,
-  taskTitle,
-  paymentMethod,
-  paymentDetails,
-  linearIssueIdentifier,
-  linearIssueUrl,
-  email,
-}: PayoutCardProps) {
+  transaction: tx,
+}: {
+  transaction: PayoutTransaction;
+}) {
   const [loading, setLoading] = useState(false);
+  const [rejecting, setRejecting] = useState(false);
   const [error, setError] = useState("");
   const [
     reasonModalOpened,
     { open: openReasonModal, close: closeReasonModal },
   ] = useDisclosure(false);
+  const [
+    rejectModalOpened,
+    { open: openRejectModal, close: closeRejectModal },
+  ] = useDisclosure(false);
   const [reason, setReason] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
   const [sendingNotice, setSendingNotice] = useState(false);
+
+  const isPending = tx.status === "PENDING";
+  const isPaid = tx.status === "PAID";
+  const isRejected = tx.status === "REJECTED";
+  const { color, label } = statusConfig[tx.status] ?? {
+    color: "gray",
+    label: tx.status,
+  };
 
   async function handleMarkPaid() {
     setLoading(true);
     setError("");
-    const res = await markTransactionAsPaid(transactionId);
+    const res = await markTransactionAsPaid(tx.id);
     if (res?.error) {
       setError(res.error);
     }
     setLoading(false);
   }
 
+  async function handleReject() {
+    setRejecting(true);
+    const res = await rejectTransaction(tx.id, rejectReason.trim() || undefined);
+    if (res?.error) {
+      toast.error(res.error);
+    } else {
+      toast.success("Payout rejected");
+    }
+    setRejecting(false);
+    setRejectReason("");
+    closeRejectModal();
+  }
+
   async function handleSendPaymentNotice() {
     setSendingNotice(true);
-    const res = await sendPaymentInfoNotice(userId, reason.trim() || undefined);
+    const res = await sendPaymentInfoNotice(tx.userId, reason.trim() || undefined);
     if (res.error) {
       toast.error(res.error);
     } else {
@@ -91,17 +178,52 @@ export default function PayoutCard({
       >
         <Stack flex={1} gap="xs">
           <Group justify="space-between" align="flex-start">
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" lts={1}>
-              {developerName}
-            </Text>
-            <Text size="lg" fw={700} c="green">
-              {formatAmount(amount, currency as CurrencyCode)}
+            <Group gap="xs">
+              <Text size="xs" fw={700} c="dimmed" tt="uppercase" lts={1}>
+                {tx.developerName}
+              </Text>
+              {!isPending && (
+                <Badge size="xs" color={color} variant="light">
+                  {label}
+                </Badge>
+              )}
+            </Group>
+            <Text size="lg" fw={700} c={isPending ? "green" : "dimmed"}>
+              {formatAmount(tx.amount, tx.currency as CurrencyCode)}
             </Text>
           </Group>
 
           <Text fw={600} mb="xs">
-            {taskTitle}
+            {tx.taskTitle}
           </Text>
+
+          {isPaid && tx.paidAt && (
+            <Text size="xs" c="dimmed">
+              Paid on {new Date(tx.paidAt).toLocaleDateString()}
+            </Text>
+          )}
+
+          {isRejected && (
+            <>
+              {tx.rejectedAt && (
+                <Text size="xs" c="dimmed">
+                  Rejected on {new Date(tx.rejectedAt).toLocaleDateString()}
+                </Text>
+              )}
+              {tx.rejectionReason && (
+                <Box
+                  bg="var(--mantine-color-red-light)"
+                  p="sm"
+                  style={{ borderRadius: "var(--mantine-radius-md)" }}
+                >
+                  <Text size="xs" fw={600} c="red" mb={2}>
+                    Reason
+                  </Text>
+                  <Text size="sm">{tx.rejectionReason}</Text>
+                </Box>
+              )}
+            </>
+          )}
 
           <Box
             bg="var(--mantine-color-default-hover)"
@@ -109,14 +231,14 @@ export default function PayoutCard({
             style={{ borderRadius: "var(--mantine-radius-md)" }}
           >
             <Text size="sm" fw={600} mb={4}>
-              Pay via {paymentMethod}
+              Pay via {tx.paymentMethod}
             </Text>
             <Text size="sm" c="dimmed" ff="monospace">
-              {paymentDetails}
+              {renderPaymentDetails(tx)}
             </Text>
           </Box>
 
-          {currency === "MYR" && (
+          {isPending && tx.currency === "MYR" && (
             <Box
               bg="var(--mantine-color-dark-6)"
               p="sm"
@@ -128,16 +250,16 @@ export default function PayoutCard({
               <Stack gap={6}>
                 <CopyField
                   label="Recipient's Reference"
-                  value={`PPT task / ${linearIssueIdentifier || "N/A"}`}
+                  value={`PPT task / ${tx.linearIssueIdentifier || "N/A"}`}
                 />
                 <CopyField
                   label="Other Payment Details"
-                  value={linearIssueUrl || ""}
+                  value={tx.linearIssueUrl || ""}
                 />
-                <CopyField label="Email Address" value={email || ""} />
+                <CopyField label="Email Address" value={tx.email || ""} />
                 <CopyField
                   label="Message to Beneficiary"
-                  value={`Payment of ${formatAmount(amount, currency as CurrencyCode)} for ${linearIssueIdentifier || "PPT task"}: ${taskTitle}. Thank you for your contribution to MYSverse!`}
+                  value={`Payment of ${formatAmount(tx.amount, tx.currency as CurrencyCode)} for ${tx.linearIssueIdentifier || "PPT task"}: ${tx.taskTitle}. Thank you for your contribution to MYSverse!`}
                 />
               </Stack>
             </Box>
@@ -150,37 +272,53 @@ export default function PayoutCard({
               {error}
             </Text>
           )}
-          <Button
-            fullWidth
-            onClick={handleMarkPaid}
-            loading={loading}
-            variant="light"
-            color="blue"
-          >
-            Mark as Paid
-          </Button>
-          <Button
-            fullWidth
-            onClick={openReasonModal}
-            variant="light"
-            color="yellow"
-            mt="xs"
-          >
-            Notify: Payment Issue
-          </Button>
-          <Button
-            component="a"
-            href={`/api/transactions/${transactionId}/pdf`}
-            fullWidth
-            variant="light"
-            color="gray"
-            mt="xs"
-          >
-            Download Slip
-          </Button>
+          {isPending && (
+            <>
+              <Button
+                fullWidth
+                onClick={handleMarkPaid}
+                loading={loading}
+                variant="light"
+                color="blue"
+              >
+                Mark as Paid
+              </Button>
+              <Button
+                fullWidth
+                onClick={openRejectModal}
+                variant="light"
+                color="red"
+                mt="xs"
+              >
+                Reject
+              </Button>
+              <Button
+                fullWidth
+                onClick={openReasonModal}
+                variant="light"
+                color="yellow"
+                mt="xs"
+              >
+                Notify: Payment Issue
+              </Button>
+            </>
+          )}
+          {(isPending || isPaid) && (
+            <Button
+              component="a"
+              href={`/api/transactions/${tx.id}/pdf`}
+              fullWidth
+              variant="light"
+              color="gray"
+              mt="xs"
+            >
+              Download Slip
+            </Button>
+          )}
         </Box>
       </Card>
 
+      {/* Payment Issue Notification Modal */}
       <Modal
         opened={reasonModalOpened}
         onClose={closeReasonModal}
@@ -189,7 +327,7 @@ export default function PayoutCard({
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">
-            Send an email to <strong>{developerName}</strong> notifying them
+            Send an email to <strong>{tx.developerName}</strong> notifying them
             that their payment information needs to be updated.
           </Text>
           <Textarea
@@ -211,6 +349,42 @@ export default function PayoutCard({
               color="yellow"
             >
               Send Notification
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      {/* Reject Payout Modal */}
+      <Modal
+        opened={rejectModalOpened}
+        onClose={closeRejectModal}
+        title="Reject Payout"
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            This will reject the payout for{" "}
+            <strong>{tx.developerName}</strong> and notify them via email.
+          </Text>
+          <Textarea
+            label="Reason (optional)"
+            placeholder="e.g. Duplicate task, issue not completed correctly"
+            value={rejectReason}
+            onChange={(e) => setRejectReason(e.currentTarget.value)}
+            autosize
+            minRows={2}
+            maxRows={4}
+          />
+          <Group justify="flex-end">
+            <Button variant="default" onClick={closeRejectModal}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleReject}
+              loading={rejecting}
+              color="red"
+            >
+              Reject Payout
             </Button>
           </Group>
         </Stack>

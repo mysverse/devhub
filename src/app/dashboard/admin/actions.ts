@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import PaymentProcessed from "@/emails/PaymentProcessed";
+import PaymentRejected from "@/emails/PaymentRejected";
 import { getSession } from "@/lib/auth-utils";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
@@ -72,5 +73,56 @@ export async function markTransactionAsPaid(transactionId: string) {
   } catch (error) {
     const err = error as Error;
     return { error: err.message || "Failed to update transaction" };
+  }
+}
+
+export async function rejectTransaction(
+  transactionId: string,
+  reason?: string,
+) {
+  await requireAdmin();
+
+  try {
+    const transaction = await prisma.transaction.update({
+      where: { id: transactionId },
+      data: {
+        status: "REJECTED",
+        rejectedAt: new Date(),
+        rejectionReason: reason || null,
+      },
+    });
+
+    revalidatePath("/dashboard/admin");
+
+    // Send rejection notification email (non-blocking)
+    try {
+      const { email, name } = await getUserEmailAndName(transaction.userId);
+
+      const taskTitle =
+        transaction.linearIssueTitle ||
+        transaction.linearIssueIdentifier ||
+        "Manual Bonus";
+
+      await sendEmail({
+        to: email,
+        subject: "Payout Rejected - MYSverse DevHub",
+        react: PaymentRejected({
+          userName: name,
+          amount: formatAmount(
+            transaction.amount,
+            transaction.currency as CurrencyCode,
+          ),
+          taskTitle,
+          reason: reason || undefined,
+        }),
+      });
+    } catch (emailError) {
+      console.error("Failed to send rejection notification email:", emailError);
+    }
+
+    return { success: true };
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "Failed to reject transaction" };
   }
 }

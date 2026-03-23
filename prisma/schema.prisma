@@ -124,15 +124,18 @@ model Transaction {
   linearIssueUrl   String?
   amount           Float
   currency         String   @default("USD") // Or "R$"
-  status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED
+  status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
   createdAt        DateTime @default(now())
   paidAt           DateTime?
+  rejectedAt       DateTime?
+  rejectionReason  String?
 }
 
 enum TxStatus {
   PENDING
   PAID
   CANCELLED
+  REJECTED
 }
 
 enum DocumentType {

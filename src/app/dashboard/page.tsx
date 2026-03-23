@@ -643,7 +643,9 @@ export default async function DashboardPage() {
               ? "green"
               : tx.status === "PENDING"
                 ? "yellow"
-                : "red"
+                : tx.status === "REJECTED"
+                  ? "red"
+                  : "gray"
           }
           variant="light"
         >

@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/auth-utils";
-import { paymentSuperRefine } from "@/lib/payment-validation";
+import {
+  normalizeMalaysianPhone,
+  paymentSuperRefine,
+} from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 const SettingsSchema = z
@@ -68,7 +71,7 @@ export async function updateProfileSettings(formData: FormData) {
         legalName: legalName || null,
         paymentMethod,
         paypalEmail: paypalEmail || null,
-        duitNowId: duitNowId || null,
+        duitNowId: duitNowId ? normalizeMalaysianPhone(duitNowId) : null,
         robuxUsername: robuxUsername || null,
         shippingAddress: shippingAddress || null,
         bankName: bankName || null,

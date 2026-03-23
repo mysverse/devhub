@@ -5,7 +5,10 @@ import { getSession } from "@/lib/auth-utils";
 import { siteConfig } from "@/lib/config";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
-import { paymentSuperRefine } from "@/lib/payment-validation";
+import {
+  normalizeMalaysianPhone,
+  paymentSuperRefine,
+} from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 type OnboardingInput = {
@@ -98,7 +101,9 @@ export async function completeOnboarding(
       robuxUsername: data.robuxUsername || null,
       paymentMethod: data.paymentMethod,
       paypalEmail: data.paypalEmail || null,
-      duitNowId: data.duitNowId || null,
+      duitNowId: data.duitNowId
+        ? normalizeMalaysianPhone(data.duitNowId)
+        : null,
       bankName: data.bankName || null,
       bankAccountNumber: data.bankAccountNumber || null,
       bankAccountName: data.bankAccountName || null,

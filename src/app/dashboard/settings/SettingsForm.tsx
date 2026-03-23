@@ -17,6 +17,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   DUITNOW_INSTITUTIONS,
+  normalizeMalaysianPhone,
   validateBankAccountName,
   validateBankAccountNumber,
   validateBankName,
@@ -233,16 +234,18 @@ export default function SettingsForm({ profile }: ProfileProps) {
                     label="DuitNow ID (Phone / NRIC)"
                     name="duitNowId"
                     defaultValue={profile.duitNowId || ""}
-                    placeholder="e.g. 0123456789 or 990101141234"
-                    description="Malaysian phone number (01X-XXXXXXXX) or NRIC (12 digits)"
+                    placeholder="e.g. +60123456789 or 990101141234"
+                    description="Malaysian phone number (+60XXXXXXXXX) or NRIC (12 digits)"
                     required
                     error={errors.duitNowId}
-                    onBlur={(e) =>
-                      setFieldError(
-                        "duitNowId",
-                        validateDuitNowId(e.currentTarget.value),
-                      )
-                    }
+                    onBlur={(e) => {
+                      const val = e.currentTarget.value;
+                      const normalized = normalizeMalaysianPhone(val);
+                      if (normalized !== val) {
+                        e.currentTarget.value = normalized;
+                      }
+                      setFieldError("duitNowId", validateDuitNowId(normalized));
+                    }}
                   />
                 ) : (
                   <Box

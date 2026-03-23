@@ -1,7 +1,7 @@
 import type { z } from "zod";
 
-// Malaysian phone number: starts with 01, 10-11 digits total
-const MY_PHONE_REGEX = /^01\d{8,9}$/;
+// Malaysian phone number with country code: +60 followed by 9-10 digits
+const MY_PHONE_REGEX = /^\+60\d{9,10}$/;
 
 // Malaysian NRIC: exactly 12 digits (YYMMDD-SS-NNNG)
 const MY_NRIC_REGEX = /^\d{12}$/;
@@ -148,12 +148,27 @@ function isValidNricDate(yymmdd: string): boolean {
   return mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
 }
 
+/** Normalize a Malaysian phone number to +60 format. Handles 01X, 601X, and +601X inputs. */
+export function normalizeMalaysianPhone(value: string): string {
+  const cleaned = value.replace(/[-\s]/g, "");
+  // Already in correct format
+  if (/^\+60\d{9,10}$/.test(cleaned)) return cleaned;
+  // Has 60 prefix without +
+  if (/^60\d{9,10}$/.test(cleaned)) return `+${cleaned}`;
+  // Local format 01X...
+  if (/^0\d{9,10}$/.test(cleaned)) return `+6${cleaned}`;
+  return cleaned;
+}
+
 export function validateDuitNowId(value: string): string | null {
   if (!value) return "DuitNow ID is required";
   const cleaned = value.replace(/[-\s]/g, "");
-  if (MY_PHONE_REGEX.test(cleaned)) return null;
+  // Check if it's a phone number (try normalizing first)
+  const normalized = normalizeMalaysianPhone(cleaned);
+  if (MY_PHONE_REGEX.test(normalized)) return null;
+  // Check if it's an NRIC
   if (MY_NRIC_REGEX.test(cleaned) && isValidNricDate(cleaned)) return null;
-  return "Must be a valid Malaysian phone number (e.g. 0123456789) or NRIC (12 digits)";
+  return "Must be a valid Malaysian phone number (e.g. +60123456789) or NRIC (12 digits)";
 }
 
 export function validateRobuxUsername(value: string): string | null {

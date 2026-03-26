@@ -1,6 +1,13 @@
 import { LinearClient } from "@linear/sdk";
 import prisma from "./prisma";
 
+export class LinearReauthRequiredError extends Error {
+  constructor(message = "Linear reauthentication required") {
+    super(message);
+    this.name = "LinearReauthRequiredError";
+  }
+}
+
 async function refreshLinearToken(
   accountId: string,
   refreshToken: string,
@@ -49,37 +56,49 @@ async function refreshLinearToken(
 }
 
 async function getValidLinearToken(userId: string): Promise<string | null> {
-  try {
-    const account = await prisma.account.findFirst({
-      where: { userId, providerId: "linear" },
-      select: {
-        id: true,
-        accessToken: true,
-        refreshToken: true,
-        accessTokenExpiresAt: true,
-      },
-    });
+  const account = await prisma.account.findFirst({
+    where: { userId, providerId: "linear" },
+    select: {
+      id: true,
+      accessToken: true,
+      refreshToken: true,
+      accessTokenExpiresAt: true,
+    },
+  });
 
-    if (!account?.accessToken) return null;
+  // No Linear account linked at all
+  if (!account) return null;
 
-    // Check if token is expired (with 5-minute buffer)
-    const isExpired =
-      account.accessTokenExpiresAt &&
-      account.accessTokenExpiresAt.getTime() < Date.now() + 5 * 60 * 1000;
-
-    if (isExpired && account.refreshToken) {
-      const newToken = await refreshLinearToken(
-        account.id,
-        account.refreshToken,
-      );
-      return newToken;
+  // Account exists but token is missing — needs reauth
+  if (!account.accessToken) {
+    if (!account.refreshToken) {
+      throw new LinearReauthRequiredError();
     }
-
-    return account.accessToken;
-  } catch (error) {
-    console.error("Error fetching Linear OAuth token:", error);
-    return null;
+    // Try refreshing
+    const newToken = await refreshLinearToken(account.id, account.refreshToken);
+    if (!newToken) {
+      throw new LinearReauthRequiredError();
+    }
+    return newToken;
   }
+
+  // Check if token is expired (with 5-minute buffer)
+  const isExpired =
+    account.accessTokenExpiresAt &&
+    account.accessTokenExpiresAt.getTime() < Date.now() + 5 * 60 * 1000;
+
+  if (isExpired) {
+    if (!account.refreshToken) {
+      throw new LinearReauthRequiredError();
+    }
+    const newToken = await refreshLinearToken(account.id, account.refreshToken);
+    if (!newToken) {
+      throw new LinearReauthRequiredError();
+    }
+    return newToken;
+  }
+
+  return account.accessToken;
 }
 
 function isAuthError(error: unknown): boolean {
@@ -106,18 +125,14 @@ export async function getLinearClient(userId: string) {
     return new LinearClient({ accessToken: token });
   }
 
-  if (process.env.LINEAR_API_KEY) {
-    return new LinearClient({ apiKey: process.env.LINEAR_API_KEY });
-  }
-
-  throw new Error(
-    "No Linear OAuth token found and no system API key configured.",
-  );
+  // No Linear account linked — user needs to authenticate
+  throw new LinearReauthRequiredError();
 }
 
 /**
- * Executes a Linear API call with automatic fallback to the system API key
- * if the user's token is invalid/revoked at runtime.
+ * Executes a Linear API call with the user's OAuth token.
+ * If the token is invalid/revoked at runtime, invalidates it and throws
+ * LinearReauthRequiredError to trigger reauthentication.
  */
 export async function withLinearFallback<T>(
   userId: string,
@@ -128,19 +143,16 @@ export async function withLinearFallback<T>(
   try {
     return await fn(client);
   } catch (error) {
-    if (isAuthError(error) && process.env.LINEAR_API_KEY) {
-      console.warn(
-        "Linear user token failed at runtime, falling back to system API key",
-      );
-      // Invalidate the stored token so it gets refreshed next time
+    if (error instanceof LinearReauthRequiredError) {
+      throw error;
+    }
+    if (isAuthError(error)) {
+      // Invalidate the stored token so reauth is triggered
       await prisma.account.updateMany({
         where: { userId, providerId: "linear" },
         data: { accessToken: null },
       });
-      const fallbackClient = new LinearClient({
-        apiKey: process.env.LINEAR_API_KEY,
-      });
-      return await fn(fallbackClient);
+      throw new LinearReauthRequiredError();
     }
     throw error;
   }

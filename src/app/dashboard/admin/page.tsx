@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { getSession } from "@/lib/auth-utils";
-import { getLinearClient } from "@/lib/linear";
+import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import AdminPayoutTabs from "./AdminPayoutTabs";
 import type { PayoutTransaction } from "./types";
@@ -77,7 +77,15 @@ export default async function AdminPage() {
       }),
     ]);
 
-  const linearClient = await getLinearClient(userId);
+  let linearClient: Awaited<ReturnType<typeof getLinearClient>>;
+  try {
+    linearClient = await getLinearClient(userId);
+  } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      redirect("/auth/reauth-linear?returnTo=/dashboard/admin");
+    }
+    throw e;
+  }
 
   // Enrich pending transactions with Linear issue details
   const pending: PayoutTransaction[] = await Promise.all(

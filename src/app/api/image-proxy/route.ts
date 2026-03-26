@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
-import { getLinearToken } from "@/lib/linear";
+import { getLinearToken, LinearReauthRequiredError } from "@/lib/linear";
 
 const ALLOWED_HOSTS = ["uploads.linear.app", "linear.app"];
 
@@ -30,7 +30,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Host not allowed" }, { status: 403 });
   }
 
-  const token = await getLinearToken(userId);
+  let token: string | null = null;
+  try {
+    token = await getLinearToken(userId);
+  } catch (e) {
+    if (!(e instanceof LinearReauthRequiredError)) {
+      throw e;
+    }
+    // Fall through to system API key for image proxy
+  }
   const headers: Record<string, string> = {};
   if (token) {
     headers.Authorization = `Bearer ${token}`;

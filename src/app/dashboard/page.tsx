@@ -38,7 +38,7 @@ import {
   formatAmount,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { getBankDisplayName } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
@@ -148,8 +148,11 @@ async function UserWallet({
           }, 0);
         },
       );
-    } catch (_e) {
-      console.error("Failed to fetch active tasks for wallet:", _e);
+    } catch (e) {
+      if (e instanceof LinearReauthRequiredError) {
+        redirect("/auth/reauth-linear?returnTo=/dashboard");
+      }
+      console.error("Failed to fetch active tasks for wallet:", e);
     }
   }
 
@@ -292,6 +295,9 @@ async function ActiveTasks({
         .map(({ issue }) => issue);
     });
   } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      redirect("/auth/reauth-linear?returnTo=/dashboard");
+    }
     const err = e as Error;
     linearError = err.message;
   }
@@ -506,6 +512,9 @@ async function Leaderboard({ userId }: { userId: string }) {
       </section>
     );
   } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      redirect("/auth/reauth-linear?returnTo=/dashboard");
+    }
     console.error("Failed to fetch leaderboard:", e);
     return null;
   }
@@ -535,6 +544,9 @@ async function SuggestedPPTs({
       );
     });
   } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      redirect("/auth/reauth-linear?returnTo=/dashboard");
+    }
     console.error("Failed to fetch suggested PPTs:", e);
     return null;
   }

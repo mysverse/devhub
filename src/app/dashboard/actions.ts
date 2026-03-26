@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getSession } from "@/lib/auth-utils";
-import { getLinearClient } from "@/lib/linear";
+import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 
 export async function claimIssue(issueId: string) {
   const { userId } = await getSession();
@@ -21,6 +21,9 @@ export async function claimIssue(issueId: string) {
 
     return { success: true };
   } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      return { error: "reauth_required", reauth: true };
+    }
     const err = e as Error;
     console.error("Failed to claim issue:", err);
     return { error: err.message || "Failed to claim task" };

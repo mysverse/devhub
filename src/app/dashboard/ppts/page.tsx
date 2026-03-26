@@ -25,7 +25,7 @@ import {
   formatEstimate,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
 type EnrichedIssue = {
@@ -302,6 +302,9 @@ async function PPTList({
     viewerId = result.viewerId;
     issues = result.issues;
   } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      redirect("/auth/reauth-linear?returnTo=/dashboard/ppts");
+    }
     const err = e as Error;
     console.error("Failed to fetch Linear issues:", err);
     return (

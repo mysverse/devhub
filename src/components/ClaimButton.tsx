@@ -5,6 +5,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { claimIssue } from "@/app/dashboard/actions";
+import { signIn } from "@/lib/auth-client";
 
 type ClaimButtonProps = {
   issueId: string;
@@ -24,6 +25,14 @@ export default function ClaimButton({
     setLoading(true);
     setError("");
     const result = await claimIssue(issueId);
+
+    if ("reauth" in result && result.reauth) {
+      signIn.oauth2({
+        providerId: "linear",
+        callbackURL: "/dashboard/ppts",
+      });
+      return;
+    }
 
     if (result.error) {
       setError(result.error);

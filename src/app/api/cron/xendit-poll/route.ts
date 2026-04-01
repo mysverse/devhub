@@ -17,7 +17,10 @@ export async function GET(req: Request) {
   }
 
   if (!isXenditEnabled()) {
-    return NextResponse.json({ skipped: true, reason: "Xendit not configured" });
+    return NextResponse.json({
+      skipped: true,
+      reason: "Xendit not configured",
+    });
   }
 
   const processingPayouts = await prisma.payout.findMany({

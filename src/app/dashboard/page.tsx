@@ -5,6 +5,8 @@ import {
   Badge,
   Card,
   Group,
+  List,
+  ListItem,
   ProgressRoot,
   ProgressSection,
   SimpleGrid,
@@ -17,6 +19,7 @@ import {
   TableThead,
   TableTr,
   Text,
+  ThemeIcon,
   Title,
 } from "@mantine/core";
 import type { Transaction, UserProfile } from "@prisma/client";
@@ -32,6 +35,11 @@ import {
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
+import {
+  getUserWeeklyUsage,
+  getWeekBounds,
+  WEEKLY_CREDIT_LIMITS,
+} from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import {
   estimateToAmount,
@@ -169,10 +177,17 @@ async function UserWallet({
     .filter((tx) => tx.status === "PAID")
     .reduce((sum: number, tx) => sum + tx.amount, 0);
 
+  const creditUsage = await getUserWeeklyUsage(userId, currency);
+  const { weekEnd } = getWeekBounds();
+  const usagePct =
+    creditUsage.limit > 0 ? (creditUsage.used / creditUsage.limit) * 100 : 0;
+  const progressColor =
+    usagePct >= 100 ? "red" : usagePct >= 70 ? "yellow" : "green";
+
   return (
     <FadeIn>
       <StaggerContainer>
-        <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg" mb="xl">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mb="xl">
           <StaggerItem className="h-full">
             <Card
               withBorder
@@ -252,6 +267,40 @@ async function UserWallet({
                     : userProfile.bankAccountNumber
                       ? `${getBankDisplayName(userProfile.bankName)} - ${userProfile.bankAccountNumber}`
                       : "Not set")}
+              </Text>
+            </Card>
+          </StaggerItem>
+
+          <StaggerItem className="h-full">
+            <Card
+              withBorder
+              radius="md"
+              padding="xl"
+              bg="var(--mantine-color-body)"
+              h="100%"
+            >
+              <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
+                Weekly Credit
+              </Text>
+              <Text fz="xl" fw={700}>
+                {formatAmount(creditUsage.used, currency)} /{" "}
+                {formatAmount(creditUsage.limit, currency)}
+              </Text>
+              <ProgressRoot size="sm" mt="sm">
+                <ProgressSection
+                  value={Math.min(usagePct, 100)}
+                  color={progressColor}
+                />
+              </ProgressRoot>
+              <Text fz="xs" c="dimmed" mt="xs">
+                Resets{" "}
+                {weekEnd.toLocaleDateString("en-US", {
+                  weekday: "short",
+                  month: "short",
+                  day: "numeric",
+                  timeZone: "UTC",
+                })}{" "}
+                23:59 UTC
               </Text>
             </Card>
           </StaggerItem>
@@ -523,6 +572,90 @@ async function Leaderboard({ userId }: { userId: string }) {
   }
 }
 
+function HowPPTsWork({ currency }: { currency: CurrencyCode }) {
+  const multiplier = currency === "MYR" ? 20 : 1200;
+  const limit = WEEKLY_CREDIT_LIMITS[currency];
+  const points = [1, 2, 3, 4, 5];
+
+  return (
+    <FadeIn>
+      <section style={{ marginBottom: "3rem" }}>
+        <Title order={2} mb="md">
+          How PPTs Work
+        </Title>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+          <Card withBorder radius="md" padding="lg">
+            <Text fz="sm" tt="uppercase" fw={700} c="dimmed" mb="sm">
+              Earning PPTs
+            </Text>
+            <Stack gap="sm">
+              <Text fz="sm">
+                A Linear issue generates a payout when all of these are met:
+              </Text>
+              <List size="sm" spacing="xs">
+                <ListItem>
+                  Issue has a{" "}
+                  <Badge size="xs" variant="light">
+                    PPT
+                  </Badge>{" "}
+                  label
+                </ListItem>
+                <ListItem>
+                  Issue has a complexity estimate (1-5 points)
+                </ListItem>
+                <ListItem>Issue is marked as completed</ListItem>
+                <ListItem>Issue is assigned to you</ListItem>
+              </List>
+              <Text fz="sm" fw={600} mt="xs">
+                Payout per point
+              </Text>
+              <Group gap="xs" wrap="wrap">
+                {points.map((pt) => (
+                  <Badge key={pt} variant="light" color="blue" size="lg">
+                    {pt}pt = {formatAmount(pt * multiplier, currency)}
+                  </Badge>
+                ))}
+              </Group>
+              <Text fz="xs" c="dimmed" mt="xs">
+                <strong>Pending PPTs</strong> = pending transactions + estimated
+                value of your active tasks. <strong>Total Earned</strong> = sum
+                of all paid transactions.
+              </Text>
+            </Stack>
+          </Card>
+
+          <Card withBorder radius="md" padding="lg">
+            <Text fz="sm" tt="uppercase" fw={700} c="dimmed" mb="sm">
+              Automated Payouts
+            </Text>
+            <Stack gap="sm">
+              <Text fz="sm">
+                Payouts within the weekly credit limit are auto-approved and
+                paid immediately. Payouts that exceed the limit stay pending for
+                manual admin review.
+              </Text>
+              <List size="sm" spacing="xs">
+                <ListItem>
+                  Weekly limit: <strong>{formatAmount(limit, currency)}</strong>
+                </ListItem>
+                <ListItem>Week runs Monday to Sunday (UTC)</ListItem>
+                <ListItem>
+                  Both pending and paid transactions count toward the limit
+                </ListItem>
+              </List>
+              <Text fz="xs" c="dimmed" mt="xs">
+                The <strong>Weekly Credit</strong> card above shows how much of
+                your limit has been used this week. Once the limit is reached,
+                any new payouts will require admin approval.
+              </Text>
+            </Stack>
+          </Card>
+        </SimpleGrid>
+      </section>
+    </FadeIn>
+  );
+}
+
 async function SuggestedPPTs({
   userId,
   currency,
@@ -703,6 +836,8 @@ export default async function DashboardPage() {
           currency={userCurrency}
         />
       </Suspense>
+
+      <HowPPTsWork currency={userCurrency} />
 
       <Suspense fallback={<CarouselSkeleton />}>
         <SuggestedPPTs userId={userId} currency={userCurrency} />

@@ -64,11 +64,28 @@ export async function POST(req: Request) {
           pptAmount,
         );
 
-        // Use upsert to prevent double crediting the same issue if webhook fires twice
-        const tx = await prisma.transaction.upsert({
+        // Check for existing transaction for this issue
+        const existing = await prisma.transaction.findUnique({
           where: { linearIssueId: issueData.id },
-          update: {},
-          create: {
+        });
+
+        // Skip if there's already a non-rejected transaction (PENDING/PAID)
+        if (existing && existing.status !== "REJECTED") {
+          return NextResponse.json({ success: true });
+        }
+
+        // Delete rejected transaction so we can recreate it
+        if (existing?.status === "REJECTED") {
+          await prisma.payout.deleteMany({
+            where: { transactionId: existing.id },
+          });
+          await prisma.transaction.delete({
+            where: { id: existing.id },
+          });
+        }
+
+        const tx = await prisma.transaction.create({
+          data: {
             userId: user.id,
             linearIssueId: issueData.id,
             linearIssueIdentifier: issueData.identifier || null,

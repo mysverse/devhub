@@ -48,12 +48,14 @@ export async function GET(req: Request) {
           data: { status: "PAID", paidAt: new Date() },
         });
 
-        sendPaymentConfirmation(payout.transactionId).catch((err) =>
+        try {
+          await sendPaymentConfirmation(payout.transactionId);
+        } catch (err) {
           console.error(
             `Failed to send payment confirmation for ${payout.transactionId}:`,
             err,
-          ),
-        );
+          );
+        }
 
         updated++;
       } else if (order.status === "failed") {

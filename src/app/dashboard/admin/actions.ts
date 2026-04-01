@@ -87,10 +87,12 @@ export async function markTransactionAsPaid(transactionId: string) {
 
     revalidatePath("/dashboard/admin");
 
-    // Send payment confirmation email with PDF slip (non-blocking)
-    sendPaymentConfirmation(transactionId).catch((err) =>
-      console.error("Failed to send payment confirmation email:", err),
-    );
+    // Send payment confirmation email with PDF slip
+    try {
+      await sendPaymentConfirmation(transactionId);
+    } catch (err) {
+      console.error("Failed to send payment confirmation email:", err);
+    }
 
     return { success: true };
   } catch (error) {

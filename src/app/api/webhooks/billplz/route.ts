@@ -59,13 +59,15 @@ export async function POST(req: Request) {
       },
     });
 
-    // Send payment confirmation email + PDF (non-blocking)
-    sendPaymentConfirmation(payout.transactionId).catch((err) =>
+    // Send payment confirmation email + PDF
+    try {
+      await sendPaymentConfirmation(payout.transactionId);
+    } catch (err) {
       console.error(
         "Failed to send payment confirmation from Billplz callback:",
         err,
-      ),
-    );
+      );
+    }
   } else if (status === "failed") {
     await prisma.payout.update({
       where: { id: payout.id },

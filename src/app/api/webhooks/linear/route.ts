@@ -57,8 +57,15 @@ export async function POST(req: Request) {
         const currency = getCurrencyForPaymentMethod(user.paymentMethod);
         const pptAmount = estimateToAmount(issueData.estimate, currency);
 
+        // Check credit limit BEFORE creating the transaction to avoid double-counting
+        const withinLimit = await isWithinCreditLimit(
+          user.id,
+          currency as CurrencyCode,
+          pptAmount,
+        );
+
         // Use upsert to prevent double crediting the same issue if webhook fires twice
-        await prisma.transaction.upsert({
+        const tx = await prisma.transaction.upsert({
           where: { linearIssueId: issueData.id },
           update: {},
           create: {
@@ -70,20 +77,11 @@ export async function POST(req: Request) {
             amount: pptAmount,
             currency,
             status: "PENDING",
+            autoApproved: withinLimit,
           },
         });
-        // Auto-approve if within weekly credit limit
-        const withinLimit = await isWithinCreditLimit(
-          user.id,
-          currency as CurrencyCode,
-          pptAmount,
-        );
-        if (withinLimit) {
-          const tx = await prisma.transaction.update({
-            where: { linearIssueId: issueData.id },
-            data: { autoApproved: true },
-          });
 
+        if (withinLimit) {
           // Auto-payout via Billplz if eligible (non-blocking)
           initiateBillplzPayout(tx.id).catch((err) =>
             console.error(`Auto-payout failed for transaction ${tx.id}:`, err),

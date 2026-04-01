@@ -8,9 +8,19 @@ import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
-import { initiateBillplzPayout } from "@/lib/payout";
+import {
+  initiateBillplzPayout,
+  initiateRobloxPayout,
+  initiateXenditPayout,
+} from "@/lib/payout";
 import prisma from "@/lib/prisma";
-import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
+import {
+  BILLPLZ_COLLECTION_ID_KEY,
+  getKV,
+  ROBLOX_COOKIE_KEY,
+  setKV,
+} from "@/lib/redis";
+import { setRobloxCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getBaseUrl } from "@/lib/url";
 import { getUserEmailAndName } from "./email-actions";
@@ -211,4 +221,61 @@ export async function getBillplzCollectionId() {
   const redisId = await getKV(BILLPLZ_COLLECTION_ID_KEY);
   const envId = process.env.BILLPLZ_PAYMENT_ORDER_COLLECTION_ID || null;
   return { redisId, envId };
+}
+
+export async function payViaXendit(transactionId: string) {
+  await requireAdmin();
+
+  try {
+    const result = await initiateXenditPayout(transactionId);
+    if (!result) {
+      return { error: "Transaction is not eligible for Xendit payout" };
+    }
+
+    revalidatePath("/dashboard/admin");
+    return { success: true };
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "Failed to process Xendit payout" };
+  }
+}
+
+export async function payViaRoblox(transactionId: string) {
+  await requireAdmin();
+
+  try {
+    const result = await initiateRobloxPayout(transactionId);
+    if (!result) {
+      return { error: "Transaction is not eligible for Roblox payout" };
+    }
+
+    revalidatePath("/dashboard/admin");
+    return { success: true };
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "Failed to process Roblox payout" };
+  }
+}
+
+export async function updateRobloxCookie(cookie: string) {
+  await requireAdmin();
+
+  try {
+    await setRobloxCookie(cookie.trim());
+    return { success: true };
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "Failed to update Roblox cookie" };
+  }
+}
+
+export async function getRobloxCookieStatus() {
+  await requireAdmin();
+
+  const redisCookie = await getKV(ROBLOX_COOKIE_KEY);
+  const envCookie = process.env.ROBLOX_COOKIE;
+  return {
+    hasRedisCookie: !!redisCookie,
+    hasEnvCookie: !!envCookie,
+  };
 }

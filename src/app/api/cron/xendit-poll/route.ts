@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { getPaymentOrder } from "@/lib/billplz";
 import { handlePayoutCompletion, handlePayoutFailure } from "@/lib/payout";
 import prisma from "@/lib/prisma";
+import { getDisbursement, isXenditEnabled } from "@/lib/xendit";
 
 /**
- * Polls Billplz for all PROCESSING payouts and updates their status.
+ * Polls Xendit for all PROCESSING payouts and updates their status.
  * Intended to be called via Vercel Cron or an external scheduler.
  * Protected by CRON_SECRET to prevent unauthorized access.
  */
@@ -16,9 +16,13 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  if (!isXenditEnabled()) {
+    return NextResponse.json({ skipped: true, reason: "Xendit not configured" });
+  }
+
   const processingPayouts = await prisma.payout.findMany({
     where: {
-      provider: "BILLPLZ",
+      provider: "XENDIT",
       status: "PROCESSING",
       providerPayoutId: { not: null },
     },
@@ -35,18 +39,21 @@ export async function GET(req: Request) {
   for (const payout of processingPayouts) {
     try {
       if (!payout.providerPayoutId) continue;
-      const order = await getPaymentOrder(payout.providerPayoutId);
+      const disbursement = await getDisbursement(payout.providerPayoutId);
 
-      if (order.status === "completed") {
+      if (disbursement.status === "COMPLETED") {
         await handlePayoutCompletion(payout.id, payout.transactionId);
         updated++;
-      } else if (order.status === "failed") {
-        await handlePayoutFailure(payout.id, "Payment order failed");
+      } else if (disbursement.status === "FAILED") {
+        await handlePayoutFailure(
+          payout.id,
+          disbursement.failure_code || "Disbursement failed",
+        );
         errors++;
       }
-      // "pending"/"processing" → no action, check again next run
+      // "PENDING" → no action, check again next run
     } catch (err) {
-      console.error(`Failed to poll Billplz for payout ${payout.id}:`, err);
+      console.error(`Failed to poll Xendit for payout ${payout.id}:`, err);
       errors++;
     }
   }

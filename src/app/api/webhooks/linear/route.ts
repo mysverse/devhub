@@ -7,7 +7,7 @@ import {
   estimateToAmount,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { initiateBillplzPayout } from "@/lib/payout";
+import { initiateAutoPayout } from "@/lib/payout";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -99,10 +99,10 @@ export async function POST(req: Request) {
         });
 
         if (withinLimit) {
-          // Auto-payout via Billplz if eligible — must await to prevent
+          // Auto-payout via best available provider — must await to prevent
           // serverless function from terminating before the API call completes
           try {
-            await initiateBillplzPayout(tx.id);
+            await initiateAutoPayout(tx.id);
           } catch (err) {
             console.error(`Auto-payout failed for transaction ${tx.id}:`, err);
           }

@@ -8,6 +8,7 @@ import {
   paymentSuperRefine,
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
+import { getRobloxUserByUsername } from "@/lib/roblox";
 
 const SettingsSchema = z
   .object({
@@ -65,6 +66,16 @@ export async function updateProfileSettings(formData: FormData) {
   } = parsed.data;
 
   try {
+    // Resolve Roblox username to user ID when payment method is ROBUX
+    let robloxId: string | null = null;
+    if (paymentMethod === "ROBUX" && robuxUsername) {
+      const robloxUser = await getRobloxUserByUsername(robuxUsername);
+      if (!robloxUser) {
+        return { error: "Roblox username not found" };
+      }
+      robloxId = String(robloxUser.id);
+    }
+
     await prisma.userProfile.update({
       where: { id: userId },
       data: {
@@ -73,6 +84,7 @@ export async function updateProfileSettings(formData: FormData) {
         paypalEmail: paypalEmail || null,
         duitNowId: duitNowId ? normalizeMalaysianPhone(duitNowId) : null,
         robuxUsername: robuxUsername || null,
+        robloxId: paymentMethod === "ROBUX" ? robloxId : undefined,
         shippingAddress: shippingAddress || null,
         bankName: bankName || null,
         bankAccountNumber: bankAccountNumber || null,

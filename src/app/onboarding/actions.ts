@@ -10,6 +10,7 @@ import {
   paymentSuperRefine,
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
+import { getRobloxUserByUsername } from "@/lib/roblox";
 
 type OnboardingInput = {
   legalName: string;
@@ -93,12 +94,26 @@ export async function completeOnboarding(
   }
 
   try {
+    // Resolve Roblox username to user ID when payment method is ROBUX
+    let robloxId: string | null = null;
+    if (data.paymentMethod === "ROBUX" && data.robuxUsername) {
+      try {
+        const robloxUser = await getRobloxUserByUsername(data.robuxUsername);
+        if (robloxUser) {
+          robloxId = String(robloxUser.id);
+        }
+      } catch {
+        // Roblox lookup failed; continue without resolving the ID
+      }
+    }
+
     const profileData = {
       legalName: data.legalName,
       linearId: resolvedLinearId,
       linearEmail: resolvedLinearEmail,
       discordId: data.discordId || null,
       robuxUsername: data.robuxUsername || null,
+      robloxId,
       paymentMethod: data.paymentMethod,
       paypalEmail: data.paypalEmail || null,
       duitNowId: data.duitNowId

@@ -9,6 +9,7 @@ import type { CurrencyCode } from "@/lib/currency";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
+import { isXenditEnabled } from "@/lib/xendit";
 import AdminPayoutTabs from "./AdminPayoutTabs";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
@@ -39,6 +40,7 @@ function buildPayoutTransaction(
     bankName: user.bankName,
     bankAccountNumber: user.bankAccountNumber,
     bankAccountName: user.bankAccountName,
+    robloxId: user.robloxId,
     robuxUsername: user.robuxUsername,
     linearIssueIdentifier: tx.linearIssueIdentifier,
     linearIssueUrl: tx.linearIssueUrl,
@@ -56,6 +58,7 @@ function buildPayoutTransaction(
         }
       : null,
     creditLimitUsage: creditLimitUsage ?? null,
+    xenditEnabled: isXenditEnabled(),
   };
 }
 

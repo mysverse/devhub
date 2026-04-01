@@ -12,6 +12,7 @@ export type PayoutTransaction = {
   bankName?: string | null;
   bankAccountNumber?: string | null;
   bankAccountName?: string | null;
+  robloxId?: string | null;
   robuxUsername?: string | null;
   linearIssueIdentifier?: string | null;
   linearIssueUrl?: string | null;
@@ -31,4 +32,5 @@ export type PayoutTransaction = {
     limit: number;
     remaining: number;
   } | null;
+  xenditEnabled?: boolean;
 };

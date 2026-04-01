@@ -23,10 +23,13 @@ import {
   getBankDisplayName,
   getPaymentMethodLabel,
   isBillplzSupported,
+  isXenditSupported,
 } from "@/lib/payment-validation";
 import {
   markTransactionAsPaid,
   payViaBillplz,
+  payViaRoblox,
+  payViaXendit,
   rejectTransaction,
 } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
@@ -119,6 +122,8 @@ export default function PayoutCard({
 }) {
   const [loading, setLoading] = useState(false);
   const [billplzLoading, setBillplzLoading] = useState(false);
+  const [xenditLoading, setXenditLoading] = useState(false);
+  const [robloxLoading, setRobloxLoading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [error, setError] = useState("");
   const [
@@ -151,6 +156,25 @@ export default function PayoutCard({
     !!tx.bankAccountName &&
     (!tx.payout || tx.payout.status === "FAILED");
 
+  // Xendit eligibility: enabled + MYR + Xendit-supported bank + bank details present + no active payout
+  const xenditEligible =
+    !!tx.xenditEnabled &&
+    isPending &&
+    tx.currency === "MYR" &&
+    (tx.paymentMethod === "DUITNOW" || tx.paymentMethod === "BANK_TRANSFER") &&
+    isXenditSupported(tx.bankName) &&
+    !!tx.bankAccountNumber &&
+    !!tx.bankAccountName &&
+    (!tx.payout || tx.payout.status === "FAILED");
+
+  // Roblox eligibility: ROBUX currency + robloxId present + no active payout
+  const robloxEligible =
+    isPending &&
+    tx.currency === "ROBUX" &&
+    tx.paymentMethod === "ROBUX" &&
+    !!tx.robloxId &&
+    (!tx.payout || tx.payout.status === "FAILED");
+
   const payoutProcessing = tx.payout?.status === "PROCESSING";
   const payoutFailed = tx.payout?.status === "FAILED";
 
@@ -174,6 +198,30 @@ export default function PayoutCard({
       toast.success("Billplz payout initiated");
     }
     setBillplzLoading(false);
+  }
+
+  async function handlePayViaXendit() {
+    setXenditLoading(true);
+    setError("");
+    const res = await payViaXendit(tx.id);
+    if (res?.error) {
+      setError(res.error);
+    } else {
+      toast.success("Xendit payout initiated");
+    }
+    setXenditLoading(false);
+  }
+
+  async function handlePayViaRoblox() {
+    setRobloxLoading(true);
+    setError("");
+    const res = await payViaRoblox(tx.id);
+    if (res?.error) {
+      setError(res.error);
+    } else {
+      toast.success("Roblox payout completed");
+    }
+    setRobloxLoading(false);
   }
 
   async function handleReject() {
@@ -353,6 +401,17 @@ export default function PayoutCard({
           )}
           {isPending && (
             <>
+              {robloxEligible && (
+                <Button
+                  fullWidth
+                  onClick={handlePayViaRoblox}
+                  loading={robloxLoading}
+                  variant="filled"
+                  color="green"
+                >
+                  {payoutFailed ? "Retry via Roblox" : "Pay via Roblox"}
+                </Button>
+              )}
               {billplzEligible && (
                 <Button
                   fullWidth
@@ -360,13 +419,38 @@ export default function PayoutCard({
                   loading={billplzLoading}
                   variant="filled"
                   color="green"
+                  mt={robloxEligible ? "xs" : undefined}
                 >
                   {payoutFailed ? "Retry via Billplz" : "Pay via Billplz"}
                 </Button>
               )}
+              {xenditEligible && !billplzEligible && (
+                <Button
+                  fullWidth
+                  onClick={handlePayViaXendit}
+                  loading={xenditLoading}
+                  variant="filled"
+                  color="green"
+                  mt={robloxEligible ? "xs" : undefined}
+                >
+                  {payoutFailed ? "Retry via Xendit" : "Pay via Xendit"}
+                </Button>
+              )}
+              {xenditEligible && billplzEligible && (
+                <Button
+                  fullWidth
+                  onClick={handlePayViaXendit}
+                  loading={xenditLoading}
+                  variant="light"
+                  color="green"
+                  mt="xs"
+                >
+                  {payoutFailed ? "Retry via Xendit" : "Pay via Xendit"}
+                </Button>
+              )}
               {payoutProcessing ? (
-                <Button fullWidth variant="light" color="blue" disabled>
-                  Billplz Processing...
+                <Button fullWidth variant="light" color="blue" disabled mt="xs">
+                  {tx.payout?.provider} Processing...
                 </Button>
               ) : (
                 <Button
@@ -375,7 +459,7 @@ export default function PayoutCard({
                   loading={loading}
                   variant="light"
                   color="blue"
-                  mt={billplzEligible ? "xs" : undefined}
+                  mt="xs"
                 >
                   Mark as Paid
                 </Button>

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { sendPaymentConfirmation } from "@/app/dashboard/admin/actions";
 import { verifyCallbackSignature } from "@/lib/billplz";
+import { handlePayoutCompletion, handlePayoutFailure } from "@/lib/payout";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -42,40 +42,12 @@ export async function POST(req: Request) {
   }
 
   if (status === "completed") {
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        status: "COMPLETED",
-        completedAt: new Date(),
-      },
-    });
-
-    // Mark the parent transaction as paid
-    await prisma.transaction.update({
-      where: { id: payout.transactionId },
-      data: {
-        status: "PAID",
-        paidAt: new Date(),
-      },
-    });
-
-    // Send payment confirmation email + PDF
-    try {
-      await sendPaymentConfirmation(payout.transactionId);
-    } catch (err) {
-      console.error(
-        "Failed to send payment confirmation from Billplz callback:",
-        err,
-      );
-    }
+    await handlePayoutCompletion(payout.id, payout.transactionId);
   } else if (status === "failed") {
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        status: "FAILED",
-        errorMessage: params.error_message || "Payment order failed",
-      },
-    });
+    await handlePayoutFailure(
+      payout.id,
+      params.error_message || "Payment order failed",
+    );
   }
 
   return NextResponse.json({ success: true });

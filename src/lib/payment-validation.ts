@@ -161,6 +161,54 @@ export const BILLPLZ_SUPPORTED_BANKS = new Set([
   "UOVBMYKL", // UOB
 ]);
 
+/**
+ * BIC/SWIFT code → Xendit bank code mapping for Malaysian disbursements.
+ * Xendit uses its own bank code format for the disbursement API.
+ * Codes sourced from Xendit documentation for Malaysia.
+ */
+export const BIC_TO_XENDIT_BANK_CODE: Record<string, string> = {
+  PHBMMYKL: "AFFIN_BANK",
+  AGOBMYKL: "AGRO_BANK",
+  MFBBMYKL: "ALLIANCE_BANK",
+  ARBKMYKL: "AMBANK",
+  BIMBMYKL: "BANK_ISLAM",
+  BKRMMYKL: "BANK_RAKYAT",
+  BMMBMYKL: "BANK_MUAMALAT",
+  BSNAMYK1: "BSN",
+  CIBBMYKL: "CIMB",
+  CITIMYKL: "CITIBANK",
+  HLBBMYKL: "HONG_LEONG_BANK",
+  HBMBMYKL: "HSBC",
+  KFHOMYKL: "KFH",
+  MBBEMYKL: "MAYBANK",
+  OCBCMYKL: "OCBC",
+  PBBEMYKL: "PUBLIC_BANK",
+  RHBBMYKL: "RHB",
+  SCBLMYKX: "STANDARD_CHARTERED",
+  UOVBMYKL: "UOB",
+  RJHIMYKL: "AL_RAJHI_BANK",
+  ACDBMYK2: "AEON_BANK",
+  BOBEMYK2: "BOOST_BANK",
+  GXSPMYKL: "GX_BANK",
+};
+
+export const XENDIT_SUPPORTED_BANKS = new Set(
+  Object.keys(BIC_TO_XENDIT_BANK_CODE),
+);
+
+/** Check if a bank code is supported by Xendit for automated disbursements */
+export function isXenditSupported(
+  bankCode: string | null | undefined,
+): boolean {
+  if (!bankCode) return false;
+  return XENDIT_SUPPORTED_BANKS.has(bankCode);
+}
+
+/** Convert a BIC code to its Xendit bank code equivalent, or null if unsupported */
+export function getXenditBankCode(bicCode: string): string | null {
+  return BIC_TO_XENDIT_BANK_CODE[bicCode] ?? null;
+}
+
 /** Display-friendly payment method labels */
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   PAYPAL: "PayPal",

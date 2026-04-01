@@ -150,6 +150,8 @@ model Payout {
 
 enum PayoutProvider {
   BILLPLZ
+  XENDIT
+  ROBLOX
 }
 
 enum PayoutStatus {

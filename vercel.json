@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/billplz-poll",
       "schedule": "*/1 * * * *"
+    },
+    {
+      "path": "/api/cron/xendit-poll",
+      "schedule": "*/1 * * * *"
     }
   ]
 }

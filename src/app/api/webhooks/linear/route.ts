@@ -31,9 +31,18 @@ export async function POST(req: Request) {
   if (payload.action === "update" && payload.type === "Issue") {
     const issueData = payload.data;
 
-    // Check if it's marked as done. Let's assume state.type "completed"
+    // Check if it has a PPT label
+    const hasPptLabel = Array.isArray(issueData.labels)
+      ? issueData.labels.some(
+          (label: { name: string }) =>
+            label.name.toUpperCase() === "PPT",
+        )
+      : false;
+
+    // Must be completed, have a PPT label, a complexity estimate, and an assignee
     if (
       issueData.state?.type === "completed" &&
+      hasPptLabel &&
       issueData.estimate &&
       issueData.assignee?.email
     ) {

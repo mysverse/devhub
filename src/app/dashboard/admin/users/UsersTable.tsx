@@ -33,6 +33,7 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { getPaymentMethodLabel } from "@/lib/payment-validation";
 import {
   sendDocumentInvalidatedNotice,
   sendLegalNameReminder,
@@ -67,12 +68,6 @@ type UserRow = {
   signedDocuments: SignedDoc[];
 };
 
-const PAYMENT_LABELS: Record<string, string> = {
-  PAYPAL: "PayPal",
-  DUITNOW: "DuitNow",
-  ROBUX: "Robux",
-  BANK_TRANSFER: "Bank Transfer",
-};
 
 function UserActions({
   user,
@@ -319,8 +314,7 @@ export default function UsersTable({
                       })}
                       <TableTd>
                         <Text size="sm">
-                          {PAYMENT_LABELS[user.paymentMethod] ??
-                            user.paymentMethod}
+                          {getPaymentMethodLabel(user.paymentMethod)}
                         </Text>
                       </TableTd>
                       <TableTd>

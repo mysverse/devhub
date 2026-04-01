@@ -134,6 +134,52 @@ export const DUITNOW_INSTITUTIONS: {
 export const DUITNOW_INSTITUTION_VALUES: string[] =
   Object.keys(DUITNOW_BANK_MAP);
 
+/**
+ * Banks supported by Billplz for automated payouts (Payment Orders).
+ * BIC/SWIFT codes sourced from Billplz documentation.
+ */
+export const BILLPLZ_SUPPORTED_BANKS = new Set([
+  "PHBMMYKL", // Affin Bank
+  "AGOBMYKL", // Agrobank
+  "MFBBMYKL", // Alliance Bank
+  "RJHIMYKL", // Al Rajhi Bank
+  "ARBKMYKL", // AmBank
+  "BIMBMYKL", // Bank Islam
+  "BKRMMYKL", // Bank Rakyat
+  "BMMBMYKL", // Bank Muamalat
+  "BSNAMYK1", // BSN
+  "CIBBMYKL", // CIMB
+  "CITIMYKL", // Citibank
+  "HLBBMYKL", // Hong Leong Bank
+  "HBMBMYKL", // HSBC
+  "KFHOMYKL", // Kuwait Finance House
+  "MBBEMYKL", // Maybank
+  "OCBCMYKL", // OCBC
+  "PBBEMYKL", // Public Bank
+  "RHBBMYKL", // RHB
+  "SCBLMYKX", // Standard Chartered
+  "UOVBMYKL", // UOB
+]);
+
+/** Display-friendly payment method labels */
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  PAYPAL: "PayPal",
+  DUITNOW: "DuitNow",
+  ROBUX: "Robux",
+  BANK_TRANSFER: "International Bank Transfer",
+};
+
+/** Get a display-friendly label for a payment method enum value */
+export function getPaymentMethodLabel(method: string): string {
+  return PAYMENT_METHOD_LABELS[method] ?? method;
+}
+
+/** Check if a bank code is supported by Billplz for automated payouts */
+export function isBillplzSupported(bankCode: string | null | undefined): boolean {
+  if (!bankCode) return false;
+  return BILLPLZ_SUPPORTED_BANKS.has(bankCode);
+}
+
 /** Resolve a bank name for display — handles both BIC codes and legacy plain-text names */
 export function getBankDisplayName(
   bankName: string | null | undefined,

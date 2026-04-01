@@ -11,7 +11,10 @@ import {
 } from "@react-pdf/renderer";
 import { createElement } from "react";
 import { siteConfig } from "@/lib/config";
-import { getBankDisplayName } from "@/lib/payment-validation";
+import {
+  getBankDisplayName,
+  getPaymentMethodLabel,
+} from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 const LOGO_PATHS = [
@@ -165,13 +168,7 @@ function formatDate(date: Date): string {
 }
 
 function formatPaymentMethod(method: string): string {
-  const map: Record<string, string> = {
-    PAYPAL: "PayPal",
-    DUITNOW: "DuitNow",
-    ROBUX: "Robux",
-    BANK_TRANSFER: "Bank Transfer",
-  };
-  return map[method] || method;
+  return getPaymentMethodLabel(method);
 }
 
 function getPaymentDetails(data: TransactionSlipData): string {

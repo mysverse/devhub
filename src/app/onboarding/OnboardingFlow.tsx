@@ -3,6 +3,7 @@
 import {
   ActionIcon,
   Alert,
+  Badge,
   Box,
   Button,
   Card,
@@ -31,7 +32,10 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { siteConfig } from "@/lib/config";
-import { DUITNOW_INSTITUTIONS } from "@/lib/payment-validation";
+import {
+  DUITNOW_INSTITUTIONS,
+  isBillplzSupported,
+} from "@/lib/payment-validation";
 import { completeOnboarding } from "./actions";
 
 type DocumentTemplate = {
@@ -422,7 +426,10 @@ export default function OnboardingFlow({
                 { value: "PAYPAL", label: "PayPal" },
                 { value: "ROBUX", label: "Robux" },
                 { value: "DUITNOW", label: "DuitNow" },
-                { value: "BANK_TRANSFER", label: "Bank Transfer" },
+                {
+                  value: "BANK_TRANSFER",
+                  label: "International Bank Transfer",
+                },
               ]}
             />
 
@@ -480,7 +487,39 @@ export default function OnboardingFlow({
                         placeholder="Search for your bank or eWallet"
                         searchable
                         required
+                        renderOption={({ option }) => (
+                          <Group
+                            gap="xs"
+                            justify="space-between"
+                            wrap="nowrap"
+                            w="100%"
+                          >
+                            <Text size="sm">{option.label}</Text>
+                            {isBillplzSupported(option.value) && (
+                              <Badge
+                                size="xs"
+                                variant="light"
+                                color="teal"
+                                style={{ flexShrink: 0 }}
+                              >
+                                Auto payout
+                              </Badge>
+                            )}
+                          </Group>
+                        )}
                       />
+                      {bankName && (
+                        <Text
+                          size="xs"
+                          c={
+                            isBillplzSupported(bankName) ? "teal" : "dimmed"
+                          }
+                        >
+                          {isBillplzSupported(bankName)
+                            ? "Automated payouts supported via Billplz"
+                            : "Manual payouts only"}
+                        </Text>
+                      )}
                       <TextInput
                         label="Account Number"
                         placeholder="1234567890"

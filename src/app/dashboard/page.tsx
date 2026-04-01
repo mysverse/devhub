@@ -39,7 +39,10 @@ import {
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
-import { getBankDisplayName } from "@/lib/payment-validation";
+import {
+  getBankDisplayName,
+  getPaymentMethodLabel,
+} from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 function WalletSkeletons() {
@@ -232,7 +235,7 @@ async function UserWallet({
                 Payment Method
               </Text>
               <Text fz="lg" fw={500}>
-                {userProfile.paymentMethod}
+                {getPaymentMethodLabel(userProfile.paymentMethod)}
               </Text>
               <Text fz="sm" c="dimmed" mt={5}>
                 {userProfile.paymentMethod === "PAYPAL" &&

@@ -19,7 +19,11 @@ import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { toast } from "sonner";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
-import { getBankDisplayName } from "@/lib/payment-validation";
+import {
+  getBankDisplayName,
+  getPaymentMethodLabel,
+  isBillplzSupported,
+} from "@/lib/payment-validation";
 import {
   markTransactionAsPaid,
   payViaBillplz,
@@ -137,12 +141,12 @@ export default function PayoutCard({
     label: tx.status,
   };
 
-  // Billplz eligibility: MYR + bank details present + no active payout
+  // Billplz eligibility: MYR + DuitNow with Billplz-supported bank + bank details present + no active payout
   const billplzEligible =
     isPending &&
     tx.currency === "MYR" &&
-    (tx.paymentMethod === "DUITNOW" || tx.paymentMethod === "BANK_TRANSFER") &&
-    !!tx.bankName &&
+    tx.paymentMethod === "DUITNOW" &&
+    isBillplzSupported(tx.bankName) &&
     !!tx.bankAccountNumber &&
     !!tx.bankAccountName &&
     (!tx.payout || tx.payout.status === "FAILED");
@@ -273,7 +277,7 @@ export default function PayoutCard({
             style={{ borderRadius: "var(--mantine-radius-md)" }}
           >
             <Text size="sm" fw={600} mb={4}>
-              Pay via {tx.paymentMethod}
+              Pay via {getPaymentMethodLabel(tx.paymentMethod)}
             </Text>
             <Text size="sm" c="dimmed" ff="monospace">
               {renderPaymentDetails(tx)}

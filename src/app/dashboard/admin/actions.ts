@@ -8,6 +8,7 @@ import {
   createPaymentOrder,
   createPaymentOrderCollection,
 } from "@/lib/billplz";
+import { isBillplzSupported } from "@/lib/payment-validation";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
@@ -119,6 +120,11 @@ export async function payViaBillplz(transactionId: string) {
     const { user } = transaction;
     if (!user.bankName || !user.bankAccountNumber || !user.bankAccountName) {
       throw new Error("User is missing bank account details");
+    }
+    if (!isBillplzSupported(user.bankName)) {
+      throw new Error(
+        "User's bank is not supported by Billplz for automated payouts",
+      );
     }
 
     // If there's an existing failed payout, delete it so we can retry

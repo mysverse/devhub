@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Badge,
   Box,
   Button,
   Card,
@@ -9,6 +10,7 @@ import {
   RadioGroup,
   Select,
   Stack,
+  Text,
   Textarea,
   TextInput,
   Title,
@@ -17,6 +19,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   DUITNOW_INSTITUTIONS,
+  isBillplzSupported,
   normalizeMalaysianPhone,
   validateBankAccountName,
   validateBankAccountNumber,
@@ -168,7 +171,10 @@ export default function SettingsForm({ profile }: ProfileProps) {
                 { value: "PAYPAL", label: "PayPal" },
                 { value: "ROBUX", label: "Robux" },
                 { value: "DUITNOW", label: "DuitNow" },
-                { value: "BANK_TRANSFER", label: "Bank Transfer" },
+                {
+                  value: "BANK_TRANSFER",
+                  label: "International Bank Transfer",
+                },
               ]}
             />
             <input type="hidden" name="paymentMethod" value={paymentMethod} />
@@ -268,7 +274,41 @@ export default function SettingsForm({ profile }: ProfileProps) {
                         searchable
                         required
                         error={errors.bankName}
+                        renderOption={({ option, checked }) => (
+                          <Group
+                            gap="xs"
+                            justify="space-between"
+                            wrap="nowrap"
+                            w="100%"
+                          >
+                            <Text size="sm">{option.label}</Text>
+                            {isBillplzSupported(option.value) && (
+                              <Badge
+                                size="xs"
+                                variant="light"
+                                color="teal"
+                                style={{ flexShrink: 0 }}
+                              >
+                                Auto payout
+                              </Badge>
+                            )}
+                          </Group>
+                        )}
                       />
+                      {duitNowBankName && (
+                        <Text
+                          size="xs"
+                          c={
+                            isBillplzSupported(duitNowBankName)
+                              ? "teal"
+                              : "dimmed"
+                          }
+                        >
+                          {isBillplzSupported(duitNowBankName)
+                            ? "Automated payouts supported via Billplz"
+                            : "Manual payouts only"}
+                        </Text>
+                      )}
                       <TextInput
                         label="Account Number"
                         name="bankAccountNumber"

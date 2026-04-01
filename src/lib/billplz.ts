@@ -172,7 +172,19 @@ export async function createPaymentOrderCollection(params: {
   title: string;
   callbackUrl?: string;
 }): Promise<PaymentOrderCollectionResponse> {
-  const body: Record<string, string> = { title: params.title };
+  const epoch = Math.floor(Date.now() / 1000);
+
+  const checksumValues: (string | number)[] = [params.title];
+  if (params.callbackUrl) checksumValues.push(params.callbackUrl);
+  checksumValues.push(epoch);
+
+  const checksum = computeChecksum(checksumValues);
+
+  const body: Record<string, string | number> = {
+    title: params.title,
+    epoch,
+    checksum,
+  };
   if (params.callbackUrl) body.callback_url = params.callbackUrl;
 
   const response = await fetch(

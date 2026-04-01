@@ -82,10 +82,13 @@ export async function POST(req: Request) {
         });
 
         if (withinLimit) {
-          // Auto-payout via Billplz if eligible (non-blocking)
-          initiateBillplzPayout(tx.id).catch((err) =>
-            console.error(`Auto-payout failed for transaction ${tx.id}:`, err),
-          );
+          // Auto-payout via Billplz if eligible — must await to prevent
+          // serverless function from terminating before the API call completes
+          try {
+            await initiateBillplzPayout(tx.id);
+          } catch (err) {
+            console.error(`Auto-payout failed for transaction ${tx.id}:`, err);
+          }
         }
 
         console.log(

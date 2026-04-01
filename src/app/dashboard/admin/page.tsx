@@ -13,6 +13,7 @@ import { isXenditEnabled } from "@/lib/xendit";
 import AdminPayoutTabs from "./AdminPayoutTabs";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
+import type { PptRequestData } from "./PptRequestCard";
 import type { PayoutTransaction } from "./types";
 
 type TransactionWithUser = Transaction & {
@@ -78,26 +79,39 @@ export default async function AdminPage() {
     redirect("/dashboard");
   }
 
-  const [pendingTransactions, paidTransactions, rejectedTransactions] =
-    await Promise.all([
-      prisma.transaction.findMany({
-        where: { status: "PENDING" },
-        include: { user: true, payout: true },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.transaction.findMany({
-        where: { status: "PAID" },
-        include: { user: true, payout: true },
-        orderBy: { paidAt: "desc" },
-        take: 50,
-      }),
-      prisma.transaction.findMany({
-        where: { status: "REJECTED" },
-        include: { user: true, payout: true },
-        orderBy: { rejectedAt: "desc" },
-        take: 50,
-      }),
-    ]);
+  const [
+    pendingTransactions,
+    paidTransactions,
+    rejectedTransactions,
+    pendingPptRequests,
+  ] = await Promise.all([
+    prisma.transaction.findMany({
+      where: { status: "PENDING" },
+      include: { user: true, payout: true },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.transaction.findMany({
+      where: { status: "PAID" },
+      include: { user: true, payout: true },
+      orderBy: { paidAt: "desc" },
+      take: 50,
+    }),
+    prisma.transaction.findMany({
+      where: { status: "REJECTED" },
+      include: { user: true, payout: true },
+      orderBy: { rejectedAt: "desc" },
+      take: 50,
+    }),
+    prisma.pptRequest.findMany({
+      where: { status: "PENDING" },
+      include: {
+        requester: {
+          include: { user: { select: { name: true } } },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    }),
+  ]);
 
   const { redisId, envId } = await getBillplzCollectionId();
   const currentCollectionId = redisId || envId;
@@ -208,7 +222,31 @@ export default async function AdminPage() {
         callbackUrl={callbackUrl}
       />
 
-      <AdminPayoutTabs pending={pending} paid={paid} rejected={rejected} />
+      <AdminPayoutTabs
+        pending={pending}
+        paid={paid}
+        rejected={rejected}
+        pptRequests={pendingPptRequests.map(
+          (req): PptRequestData => ({
+            id: req.id,
+            requesterName:
+              req.requester.legalName ||
+              req.requester.user.name ||
+              "Unknown Developer",
+            requesterLinearId: req.requester.linearId,
+            linearIssueId: req.linearIssueId,
+            linearIssueIdentifier: req.linearIssueIdentifier,
+            linearIssueTitle: req.linearIssueTitle,
+            linearIssueUrl: req.linearIssueUrl,
+            linearTeamId: req.linearTeamId,
+            requestedEstimate: req.requestedEstimate,
+            projectedDueDate: req.projectedDueDate.toISOString(),
+            description: req.description,
+            note: req.note,
+            createdAt: req.createdAt.toISOString(),
+          }),
+        )}
+      />
     </FadeIn>
   );
 }

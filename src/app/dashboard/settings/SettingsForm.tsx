@@ -274,7 +274,7 @@ export default function SettingsForm({ profile }: ProfileProps) {
                         searchable
                         required
                         error={errors.bankName}
-                        renderOption={({ option, checked }) => (
+                        renderOption={({ option, checked: _checked }) => (
                           <Group
                             gap="xs"
                             justify="space-between"

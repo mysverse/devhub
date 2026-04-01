@@ -19,7 +19,6 @@ import {
   TableThead,
   TableTr,
   Text,
-  ThemeIcon,
   Title,
 } from "@mantine/core";
 import type { Transaction, UserProfile } from "@prisma/client";

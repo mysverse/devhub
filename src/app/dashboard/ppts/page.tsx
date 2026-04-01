@@ -27,6 +27,8 @@ import {
 } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
+import MyPptRequests from "./MyPptRequests";
+import PptRequestButton from "./PptRequestButton";
 
 type EnrichedIssue = {
   issue: Issue;
@@ -517,17 +519,26 @@ export default async function PPTsPage() {
 
   return (
     <FadeIn>
-      <div style={{ marginBottom: "2rem" }}>
-        <Title order={1}>PPT Board</Title>
-        <Text c="dimmed" mt="xs">
-          Find available tasks labeled as PPT (Pay Per Task). Claim a task to
-          earn its payout.
-        </Text>
-      </div>
+      <Group justify="space-between" align="flex-start" mb="2rem" wrap="wrap">
+        <div>
+          <Title order={1}>PPT Board</Title>
+          <Text c="dimmed" mt="xs">
+            Find available tasks labeled as PPT (Pay Per Task). Claim a task to
+            earn its payout.
+          </Text>
+        </div>
+        <PptRequestButton />
+      </Group>
 
       <Suspense fallback={<PPTSkeleton />}>
         <PPTList userId={userId} currency={userCurrency} />
       </Suspense>
+
+      <div style={{ marginTop: "2rem" }}>
+        <Suspense>
+          <MyPptRequests userId={userId} />
+        </Suspense>
+      </div>
     </FadeIn>
   );
 }

@@ -11,6 +11,8 @@ import {
 } from "@mantine/core";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import PayoutCard from "./PayoutCard";
+import type { PptRequestData } from "./PptRequestCard";
+import PptRequestsTab from "./PptRequestsTab";
 import type { PayoutTransaction } from "./types";
 
 function TransactionGrid({
@@ -45,18 +47,31 @@ export default function AdminPayoutTabs({
   pending,
   paid,
   rejected,
+  pptRequests,
 }: {
   pending: PayoutTransaction[];
   paid: PayoutTransaction[];
   rejected: PayoutTransaction[];
+  pptRequests: PptRequestData[];
 }) {
   return (
-    <Tabs defaultValue="pending">
+    <Tabs defaultValue={pptRequests.length > 0 ? "ppt-requests" : "pending"}>
       <TabsList mb="lg">
+        {pptRequests.length > 0 && (
+          <TabsTab value="ppt-requests">
+            PPT Requests ({pptRequests.length})
+          </TabsTab>
+        )}
         <TabsTab value="pending">Pending ({pending.length})</TabsTab>
         <TabsTab value="paid">Paid ({paid.length})</TabsTab>
         <TabsTab value="rejected">Rejected ({rejected.length})</TabsTab>
       </TabsList>
+
+      {pptRequests.length > 0 && (
+        <TabsPanel value="ppt-requests">
+          <PptRequestsTab requests={pptRequests} />
+        </TabsPanel>
+      )}
 
       <TabsPanel value="pending">
         <TransactionGrid

@@ -90,6 +90,8 @@ model UserProfile {
   transactions     Transaction[]
   invites          Invite[]
   signedDocuments  SignedDocument[]
+  pptRequestsMade     PptRequest[] @relation("PptRequestRequester")
+  pptRequestsReviewed PptRequest[] @relation("PptRequestReviewer")
 }
 
 model Invite {
@@ -198,4 +200,42 @@ model CoiEntry {
   description         String
   createdAt           DateTime       @default(now())
   updatedAt           DateTime       @updatedAt
+}
+
+// ── PPT Request tables ──────────────────────────────────────────────────────
+
+enum PptRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model PptRequest {
+  id                    String           @id @default(cuid())
+  requesterId           String
+  requester             UserProfile      @relation("PptRequestRequester", fields: [requesterId], references: [id])
+  reviewerId            String?
+  reviewer              UserProfile?     @relation("PptRequestReviewer", fields: [reviewerId], references: [id])
+
+  // Linear issue data (null linearIssueId means issue will be created on approval)
+  linearIssueId         String?          @unique
+  linearIssueIdentifier String?
+  linearIssueTitle      String
+  linearIssueUrl        String?
+  linearTeamId          String
+
+  // Request details
+  requestedEstimate     Int
+  projectedDueDate      DateTime
+  description           String?
+  note                  String?
+
+  // Status
+  status                PptRequestStatus @default(PENDING)
+  rejectionReason       String?
+  createdAt             DateTime         @default(now())
+  reviewedAt            DateTime?
+
+  @@index([requesterId])
+  @@index([status])
 }

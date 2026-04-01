@@ -62,6 +62,8 @@ LINEAR_WEBHOOK_SECRET    # HMAC-SHA256 webhook verification
 RESEND_API_KEY           # Resend email service API key
 EMAIL_FROM               # Sender address (default: "MYSverse DevHub <devhub@mysver.se>")
 NEXT_PUBLIC_APP_URL      # Public app URL for email CTA links (default: http://localhost:3000)
+KV_REST_API_URL          # Redis REST API URL (Vercel KV / Upstash)
+KV_REST_API_TOKEN        # Redis REST API token
 ```
 
 ### Linting & Formatting

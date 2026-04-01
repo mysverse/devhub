@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { BILLPLZ_COLLECTION_ID_KEY, getKV } from "@/lib/redis";
 
 const BILLPLZ_BASE_URL =
   process.env.BILLPLZ_SANDBOX === "true"
@@ -17,10 +18,16 @@ function getXSignatureKey(): string {
   return key;
 }
 
-function getCollectionId(): string {
-  const id = process.env.BILLPLZ_PAYMENT_ORDER_COLLECTION_ID;
-  if (!id) throw new Error("BILLPLZ_PAYMENT_ORDER_COLLECTION_ID is not set");
-  return id;
+async function getCollectionId(): Promise<string> {
+  const redisId = await getKV(BILLPLZ_COLLECTION_ID_KEY);
+  if (redisId) return redisId;
+
+  const envId = process.env.BILLPLZ_PAYMENT_ORDER_COLLECTION_ID;
+  if (envId) return envId;
+
+  throw new Error(
+    "Billplz payment order collection ID not found in Redis or environment",
+  );
 }
 
 function getAuthHeader(): string {
@@ -74,7 +81,7 @@ export interface PaymentOrderResponse {
 export async function createPaymentOrder(
   params: PaymentOrderParams,
 ): Promise<PaymentOrderResponse> {
-  const collectionId = getCollectionId();
+  const collectionId = await getCollectionId();
   const epoch = Math.floor(Date.now() / 1000);
 
   // Build checksum values in order:
@@ -140,6 +147,45 @@ export async function getPaymentOrder(
     method: "GET",
     headers: { Authorization: getAuthHeader() },
   });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Billplz API error (${response.status}): ${errorBody}`);
+  }
+
+  return response.json();
+}
+
+// -- Collection Types --
+
+export interface PaymentOrderCollectionResponse {
+  id: string;
+  title: string;
+  status: string;
+}
+
+/**
+ * Create a Billplz V5 Payment Order Collection.
+ * Allows setting the callback URL which cannot be configured via the Billplz dashboard.
+ */
+export async function createPaymentOrderCollection(params: {
+  title: string;
+  callbackUrl?: string;
+}): Promise<PaymentOrderCollectionResponse> {
+  const body: Record<string, string> = { title: params.title };
+  if (params.callbackUrl) body.callback_url = params.callbackUrl;
+
+  const response = await fetch(
+    `${BILLPLZ_BASE_URL}/payment_order_collections`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: getAuthHeader(),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
 
   if (!response.ok) {
     const errorBody = await response.text();

@@ -8,7 +8,10 @@ import { getUserWeeklyUsage } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import prisma from "@/lib/prisma";
+import { getBaseUrl } from "@/lib/url";
 import AdminPayoutTabs from "./AdminPayoutTabs";
+import BillplzCollectionCard from "./BillplzCollectionCard";
+import { getBillplzCollectionId } from "./actions";
 import type { PayoutTransaction } from "./types";
 
 type TransactionWithUser = Transaction & {
@@ -92,6 +95,15 @@ export default async function AdminPage() {
         take: 50,
       }),
     ]);
+
+  const { redisId, envId } = await getBillplzCollectionId();
+  const currentCollectionId = redisId || envId;
+  const collectionSource: "redis" | "env" | "none" = redisId
+    ? "redis"
+    : envId
+      ? "env"
+      : "none";
+  const callbackUrl = `${getBaseUrl()}/api/webhooks/billplz`;
 
   let linearClient: Awaited<ReturnType<typeof getLinearClient>>;
   try {
@@ -186,6 +198,12 @@ export default async function AdminPage() {
           </LinkButton>
         </Group>
       </Group>
+
+      <BillplzCollectionCard
+        currentCollectionId={currentCollectionId}
+        source={collectionSource}
+        callbackUrl={callbackUrl}
+      />
 
       <AdminPayoutTabs pending={pending} paid={paid} rejected={rejected} />
     </FadeIn>

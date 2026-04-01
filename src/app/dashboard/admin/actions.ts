@@ -4,9 +4,14 @@ import { revalidatePath } from "next/cache";
 import PaymentProcessed from "@/emails/PaymentProcessed";
 import PaymentRejected from "@/emails/PaymentRejected";
 import { getSession } from "@/lib/auth-utils";
-import { createPaymentOrder } from "@/lib/billplz";
+import {
+  createPaymentOrder,
+  createPaymentOrderCollection,
+} from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
+import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
+import { getBaseUrl } from "@/lib/url";
 import { sendEmail } from "@/lib/email";
 import prisma from "@/lib/prisma";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
@@ -257,4 +262,33 @@ export async function rejectTransaction(
     const err = error as Error;
     return { error: err.message || "Failed to reject transaction" };
   }
+}
+
+export async function createBillplzCollection(title: string) {
+  await requireAdmin();
+
+  try {
+    const callbackUrl = `${getBaseUrl()}/api/webhooks/billplz`;
+
+    const collection = await createPaymentOrderCollection({
+      title: title.trim(),
+      callbackUrl,
+    });
+
+    await setKV(BILLPLZ_COLLECTION_ID_KEY, collection.id);
+
+    revalidatePath("/dashboard/admin");
+    return { success: true, collection };
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "Failed to create collection" };
+  }
+}
+
+export async function getBillplzCollectionId() {
+  await requireAdmin();
+
+  const redisId = await getKV(BILLPLZ_COLLECTION_ID_KEY);
+  const envId = process.env.BILLPLZ_PAYMENT_ORDER_COLLECTION_ID || null;
+  return { redisId, envId };
 }

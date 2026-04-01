@@ -1,7 +1,12 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { siteConfig } from "@/lib/config";
-import { estimateToAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
+import { isWithinCreditLimit } from "@/lib/credit-limit";
+import {
+  type CurrencyCode,
+  estimateToAmount,
+  getCurrencyForPaymentMethod,
+} from "@/lib/currency";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -58,8 +63,21 @@ export async function POST(req: Request) {
             status: "PENDING",
           },
         });
+        // Auto-approve if within weekly credit limit
+        const withinLimit = await isWithinCreditLimit(
+          user.id,
+          currency as CurrencyCode,
+          pptAmount,
+        );
+        if (withinLimit) {
+          await prisma.transaction.update({
+            where: { linearIssueId: issueData.id },
+            data: { autoApproved: true },
+          });
+        }
+
         console.log(
-          `PPT of ${pptAmount} ${currency} credited to ${assigneeEmail} for issue ${issueData.id}`,
+          `PPT of ${pptAmount} ${currency} credited to ${assigneeEmail} for issue ${issueData.id}${withinLimit ? " (auto-approved)" : ""}`,
         );
       } else {
         console.warn(

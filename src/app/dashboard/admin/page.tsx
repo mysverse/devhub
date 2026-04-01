@@ -1,19 +1,25 @@
 import { Group, Text, Title } from "@mantine/core";
-import type { Transaction, UserProfile } from "@prisma/client";
+import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { getSession } from "@/lib/auth-utils";
+import { getUserWeeklyUsage } from "@/lib/credit-limit";
+import type { CurrencyCode } from "@/lib/currency";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import AdminPayoutTabs from "./AdminPayoutTabs";
 import type { PayoutTransaction } from "./types";
 
-type TransactionWithUser = Transaction & { user: UserProfile };
+type TransactionWithUser = Transaction & {
+  user: UserProfile;
+  payout: Payout | null;
+};
 
 function buildPayoutTransaction(
   tx: TransactionWithUser,
   taskTitle: string,
+  creditLimitUsage?: { used: number; limit: number; remaining: number } | null,
 ): PayoutTransaction {
   const { user } = tx;
   return {
@@ -37,6 +43,16 @@ function buildPayoutTransaction(
     paidAt: tx.paidAt?.toISOString() ?? null,
     rejectedAt: tx.rejectedAt?.toISOString() ?? null,
     rejectionReason: tx.rejectionReason,
+    autoApproved: tx.autoApproved,
+    payout: tx.payout
+      ? {
+          id: tx.payout.id,
+          provider: tx.payout.provider,
+          status: tx.payout.status,
+          errorMessage: tx.payout.errorMessage,
+        }
+      : null,
+    creditLimitUsage: creditLimitUsage ?? null,
   };
 }
 
@@ -60,18 +76,18 @@ export default async function AdminPage() {
     await Promise.all([
       prisma.transaction.findMany({
         where: { status: "PENDING" },
-        include: { user: true },
+        include: { user: true, payout: true },
         orderBy: { createdAt: "asc" },
       }),
       prisma.transaction.findMany({
         where: { status: "PAID" },
-        include: { user: true },
+        include: { user: true, payout: true },
         orderBy: { paidAt: "desc" },
         take: 50,
       }),
       prisma.transaction.findMany({
         where: { status: "REJECTED" },
-        include: { user: true },
+        include: { user: true, payout: true },
         orderBy: { rejectedAt: "desc" },
         take: 50,
       }),
@@ -86,6 +102,26 @@ export default async function AdminPage() {
     }
     throw e;
   }
+
+  // Compute credit limit usage per unique userId+currency for pending transactions
+  const creditUsageMap = new Map<
+    string,
+    { used: number; limit: number; remaining: number }
+  >();
+  const uniqueUserCurrencies = new Set(
+    pendingTransactions.map((tx) => `${tx.userId}:${tx.currency}`),
+  );
+  await Promise.all(
+    [...uniqueUserCurrencies].map(async (key) => {
+      const [uid, curr] = key.split(":");
+      try {
+        const usage = await getUserWeeklyUsage(uid, curr as CurrencyCode);
+        creditUsageMap.set(key, usage);
+      } catch {
+        // Credit limit data is non-critical
+      }
+    }),
+  );
 
   // Enrich pending transactions with Linear issue details
   const pending: PayoutTransaction[] = await Promise.all(
@@ -106,7 +142,8 @@ export default async function AdminPage() {
         }
       }
 
-      return buildPayoutTransaction(tx, taskTitle);
+      const creditUsage = creditUsageMap.get(`${tx.userId}:${tx.currency}`);
+      return buildPayoutTransaction(tx, taskTitle, creditUsage);
     }),
   );
 

@@ -19,4 +19,16 @@ export type PayoutTransaction = {
   paidAt?: string | null;
   rejectedAt?: string | null;
   rejectionReason?: string | null;
+  autoApproved?: boolean;
+  payout?: {
+    id: string;
+    provider: string;
+    status: string;
+    errorMessage?: string | null;
+  } | null;
+  creditLimitUsage?: {
+    used: number;
+    limit: number;
+    remaining: number;
+  } | null;
 };

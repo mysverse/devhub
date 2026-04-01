@@ -20,7 +20,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { getBankDisplayName } from "@/lib/payment-validation";
-import { markTransactionAsPaid, rejectTransaction } from "./actions";
+import {
+  markTransactionAsPaid,
+  payViaBillplz,
+  rejectTransaction,
+} from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
 import type { PayoutTransaction } from "./types";
 
@@ -110,6 +114,7 @@ export default function PayoutCard({
   transaction: PayoutTransaction;
 }) {
   const [loading, setLoading] = useState(false);
+  const [billplzLoading, setBillplzLoading] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [error, setError] = useState("");
   const [
@@ -132,6 +137,19 @@ export default function PayoutCard({
     label: tx.status,
   };
 
+  // Billplz eligibility: MYR + bank details present + no active payout
+  const billplzEligible =
+    isPending &&
+    tx.currency === "MYR" &&
+    (tx.paymentMethod === "DUITNOW" || tx.paymentMethod === "BANK_TRANSFER") &&
+    !!tx.bankName &&
+    !!tx.bankAccountNumber &&
+    !!tx.bankAccountName &&
+    (!tx.payout || tx.payout.status === "FAILED");
+
+  const payoutProcessing = tx.payout?.status === "PROCESSING";
+  const payoutFailed = tx.payout?.status === "FAILED";
+
   async function handleMarkPaid() {
     setLoading(true);
     setError("");
@@ -140,6 +158,18 @@ export default function PayoutCard({
       setError(res.error);
     }
     setLoading(false);
+  }
+
+  async function handlePayViaBillplz() {
+    setBillplzLoading(true);
+    setError("");
+    const res = await payViaBillplz(tx.id);
+    if (res?.error) {
+      setError(res.error);
+    } else {
+      toast.success("Billplz payout initiated");
+    }
+    setBillplzLoading(false);
   }
 
   async function handleReject() {
@@ -194,6 +224,11 @@ export default function PayoutCard({
                   {label}
                 </Badge>
               )}
+              {tx.autoApproved && isPending && (
+                <Badge size="xs" color="teal" variant="light">
+                  Auto-approved
+                </Badge>
+              )}
             </Group>
             <Text size="lg" fw={700} c={isPending ? "green" : "dimmed"}>
               {formatAmount(tx.amount, tx.currency as CurrencyCode)}
@@ -245,6 +280,39 @@ export default function PayoutCard({
             </Text>
           </Box>
 
+          {tx.payout && (
+            <Badge
+              size="sm"
+              variant="light"
+              color={
+                tx.payout.status === "COMPLETED"
+                  ? "green"
+                  : tx.payout.status === "PROCESSING"
+                    ? "blue"
+                    : tx.payout.status === "FAILED"
+                      ? "red"
+                      : "yellow"
+              }
+            >
+              {tx.payout.provider}: {tx.payout.status.toLowerCase()}
+            </Badge>
+          )}
+
+          {payoutFailed && tx.payout?.errorMessage && (
+            <Text size="xs" c="red">
+              {tx.payout.errorMessage}
+            </Text>
+          )}
+
+          {isPending &&
+            tx.creditLimitUsage &&
+            tx.creditLimitUsage.limit > 0 && (
+              <Text size="xs" c="dimmed">
+                Credit limit: RM{tx.creditLimitUsage.used.toFixed(0)}/RM
+                {tx.creditLimitUsage.limit} this week
+              </Text>
+            )}
+
           {isPending && tx.currency === "MYR" && (
             <Box
               bg="var(--mantine-color-dark-6)"
@@ -281,15 +349,33 @@ export default function PayoutCard({
           )}
           {isPending && (
             <>
-              <Button
-                fullWidth
-                onClick={handleMarkPaid}
-                loading={loading}
-                variant="light"
-                color="blue"
-              >
-                Mark as Paid
-              </Button>
+              {billplzEligible && (
+                <Button
+                  fullWidth
+                  onClick={handlePayViaBillplz}
+                  loading={billplzLoading}
+                  variant="filled"
+                  color="green"
+                >
+                  {payoutFailed ? "Retry via Billplz" : "Pay via Billplz"}
+                </Button>
+              )}
+              {payoutProcessing ? (
+                <Button fullWidth variant="light" color="blue" disabled>
+                  Billplz Processing...
+                </Button>
+              ) : (
+                <Button
+                  fullWidth
+                  onClick={handleMarkPaid}
+                  loading={loading}
+                  variant="light"
+                  color="blue"
+                  mt={billplzEligible ? "xs" : undefined}
+                >
+                  Mark as Paid
+                </Button>
+              )}
               <Button
                 fullWidth
                 onClick={openRejectModal}

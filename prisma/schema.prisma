@@ -125,11 +125,38 @@ model Transaction {
   amount           Float
   currency         String   @default("USD") // Or "R$"
   status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
+  autoApproved     Boolean  @default(false) // Pre-vetted under weekly credit limit
   createdAt        DateTime @default(now())
   paidAt           DateTime?
   rejectedAt       DateTime?
   rejectionReason  String?
   pdfBlobUrl       String?
+  payout           Payout?
+}
+
+model Payout {
+  id               String         @id @default(cuid())
+  transactionId    String         @unique
+  transaction      Transaction    @relation(fields: [transactionId], references: [id])
+  provider         PayoutProvider
+  providerPayoutId String?        @unique // External ID from provider (e.g. Billplz payment order ID)
+  status           PayoutStatus   @default(PENDING)
+  providerData     Json?          // Provider-specific request/response data
+  errorMessage     String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  completedAt      DateTime?
+}
+
+enum PayoutProvider {
+  BILLPLZ
+}
+
+enum PayoutStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 enum TxStatus {

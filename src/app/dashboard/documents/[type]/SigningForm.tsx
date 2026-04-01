@@ -14,7 +14,7 @@ import {
   Textarea,
   TextInput,
   Title,
-  TypographyStylesProvider,
+  Typography,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import Link from "next/link";
@@ -134,9 +134,9 @@ export default function SigningForm({
       )}
 
       <Card withBorder radius="md" padding="xl">
-        <TypographyStylesProvider>
+        <Typography>
           <Markdown remarkPlugins={[remarkGfm]}>{content}</Markdown>
-        </TypographyStylesProvider>
+        </Typography>
       </Card>
 
       {!signed && (

@@ -17,7 +17,7 @@ function ReauthContent() {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/dashboard";
   const attempt = searchParams.get("attempt");
-  const [failed, setFailed] = useState(!!attempt);
+  const [failed] = useState(!!attempt);
 
   useEffect(() => {
     if (!attempt) {

@@ -21,7 +21,7 @@ import {
   Textarea,
   TextInput,
   Title,
-  TypographyStylesProvider,
+  Typography,
   UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
@@ -360,14 +360,14 @@ export default function OnboardingFlow({
                 <Stack gap="sm">
                   <Title order={5}>{doc.title}</Title>
                   <ScrollArea h={200}>
-                    <TypographyStylesProvider>
+                    <Typography>
                       <Markdown remarkPlugins={[remarkGfm]}>
                         {doc.content.replace(
                           /\{\{LEGAL_NAME\}\}/g,
                           legalName || "_______________",
                         )}
                       </Markdown>
-                    </TypographyStylesProvider>
+                    </Typography>
                   </ScrollArea>
                   <Checkbox
                     label={`I, ${legalName || "[Legal Name]"}, have read and agree to this ${doc.title}.`}

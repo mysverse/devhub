@@ -7,6 +7,7 @@ import {
   estimateToAmount,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
+import { initiateBillplzPayout } from "@/lib/payout";
 import prisma from "@/lib/prisma";
 
 export async function POST(req: Request) {
@@ -34,8 +35,7 @@ export async function POST(req: Request) {
     // Check if it has a PPT label
     const hasPptLabel = Array.isArray(issueData.labels)
       ? issueData.labels.some(
-          (label: { name: string }) =>
-            label.name.toUpperCase() === "PPT",
+          (label: { name: string }) => label.name.toUpperCase() === "PPT",
         )
       : false;
 
@@ -79,10 +79,15 @@ export async function POST(req: Request) {
           pptAmount,
         );
         if (withinLimit) {
-          await prisma.transaction.update({
+          const tx = await prisma.transaction.update({
             where: { linearIssueId: issueData.id },
             data: { autoApproved: true },
           });
+
+          // Auto-payout via Billplz if eligible (non-blocking)
+          initiateBillplzPayout(tx.id).catch((err) =>
+            console.error(`Auto-payout failed for transaction ${tx.id}:`, err),
+          );
         }
 
         console.log(

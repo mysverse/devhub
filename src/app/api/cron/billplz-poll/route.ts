@@ -34,7 +34,8 @@ export async function GET(req: Request) {
 
   for (const payout of processingPayouts) {
     try {
-      const order = await getPaymentOrder(payout.providerPayoutId!);
+      if (!payout.providerPayoutId) continue;
+      const order = await getPaymentOrder(payout.providerPayoutId);
 
       if (order.status === "completed") {
         await prisma.payout.update({
@@ -65,10 +66,7 @@ export async function GET(req: Request) {
       }
       // "pending"/"processing" → no action, check again next run
     } catch (err) {
-      console.error(
-        `Failed to poll Billplz for payout ${payout.id}:`,
-        err,
-      );
+      console.error(`Failed to poll Billplz for payout ${payout.id}:`, err);
       errors++;
     }
   }

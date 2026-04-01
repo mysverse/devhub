@@ -10,8 +10,8 @@ import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
 import AdminPayoutTabs from "./AdminPayoutTabs";
-import BillplzCollectionCard from "./BillplzCollectionCard";
 import { getBillplzCollectionId } from "./actions";
+import BillplzCollectionCard from "./BillplzCollectionCard";
 import type { PayoutTransaction } from "./types";
 
 type TransactionWithUser = Transaction & {

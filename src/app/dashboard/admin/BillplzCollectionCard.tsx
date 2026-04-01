@@ -87,7 +87,12 @@ export default function BillplzCollectionCard({
             label="Callback URL"
             value={callbackUrl}
             readOnly
-            styles={{ input: { fontFamily: "monospace", fontSize: "var(--mantine-font-size-xs)" } }}
+            styles={{
+              input: {
+                fontFamily: "monospace",
+                fontSize: "var(--mantine-font-size-xs)",
+              },
+            }}
           />
           <Text size="xs" c="dimmed">
             The new collection ID will be saved to Redis and used for all future

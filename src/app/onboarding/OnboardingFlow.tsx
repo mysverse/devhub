@@ -511,9 +511,7 @@ export default function OnboardingFlow({
                       {bankName && (
                         <Text
                           size="xs"
-                          c={
-                            isBillplzSupported(bankName) ? "teal" : "dimmed"
-                          }
+                          c={isBillplzSupported(bankName) ? "teal" : "dimmed"}
                         >
                           {isBillplzSupported(bankName)
                             ? "Automated payouts supported via Billplz"

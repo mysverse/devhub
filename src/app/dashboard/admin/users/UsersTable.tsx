@@ -68,7 +68,6 @@ type UserRow = {
   signedDocuments: SignedDoc[];
 };
 
-
 function UserActions({
   user,
   requiredDocuments,

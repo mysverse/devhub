@@ -4,18 +4,15 @@ import { revalidatePath } from "next/cache";
 import PaymentProcessed from "@/emails/PaymentProcessed";
 import PaymentRejected from "@/emails/PaymentRejected";
 import { getSession } from "@/lib/auth-utils";
-import {
-  createPaymentOrder,
-  createPaymentOrderCollection,
-} from "@/lib/billplz";
-import { isBillplzSupported } from "@/lib/payment-validation";
+import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
-import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
-import { getBaseUrl } from "@/lib/url";
 import { sendEmail } from "@/lib/email";
+import { initiateBillplzPayout } from "@/lib/payout";
 import prisma from "@/lib/prisma";
+import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
+import { getBaseUrl } from "@/lib/url";
 import { getUserEmailAndName } from "./email-actions";
 
 // In a real application, you should verify if the user has an ADMIN role in Clerk/Database.
@@ -106,94 +103,9 @@ export async function payViaBillplz(transactionId: string) {
   await requireAdmin();
 
   try {
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-      include: { user: true, payout: true },
-    });
-
-    if (!transaction) throw new Error("Transaction not found");
-    if (transaction.status !== "PENDING")
-      throw new Error("Transaction is not pending");
-    if (transaction.currency !== "MYR")
-      throw new Error("Billplz only supports MYR payouts");
-
-    const { user } = transaction;
-    if (!user.bankName || !user.bankAccountNumber || !user.bankAccountName) {
-      throw new Error("User is missing bank account details");
-    }
-    if (!isBillplzSupported(user.bankName)) {
-      throw new Error(
-        "User's bank is not supported by Billplz for automated payouts",
-      );
-    }
-
-    // If there's an existing failed payout, delete it so we can retry
-    if (transaction.payout) {
-      if (
-        transaction.payout.status === "PROCESSING" ||
-        transaction.payout.status === "COMPLETED"
-      ) {
-        throw new Error(
-          `Payout already ${transaction.payout.status.toLowerCase()}`,
-        );
-      }
-      // Delete the failed payout to allow retry
-      await prisma.payout.delete({
-        where: { id: transaction.payout.id },
-      });
-    }
-
-    const amountCents = Math.round(transaction.amount * 100);
-    const description = transaction.linearIssueIdentifier
-      ? `PPT: ${transaction.linearIssueIdentifier} - ${transaction.linearIssueTitle || ""}`
-      : "PPT Payout";
-
-    // Create local payout record
-    const payout = await prisma.payout.create({
-      data: {
-        transactionId,
-        provider: "BILLPLZ",
-        status: "PENDING",
-        providerData: {
-          bankCode: user.bankName,
-          bankAccountNumber: user.bankAccountNumber,
-          accountName: user.bankAccountName,
-          description,
-          amountCents,
-        },
-      },
-    });
-
-    // Call Billplz API
-    try {
-      const result = await createPaymentOrder({
-        bankCode: user.bankName,
-        bankAccountNumber: user.bankAccountNumber,
-        name: user.bankAccountName,
-        description,
-        totalCents: amountCents,
-        reference1: transactionId,
-        reference2: transaction.linearIssueUrl || undefined,
-      });
-
-      await prisma.payout.update({
-        where: { id: payout.id },
-        data: {
-          providerPayoutId: result.id,
-          status: "PROCESSING",
-        },
-      });
-    } catch (apiError) {
-      const errorMsg =
-        apiError instanceof Error ? apiError.message : "Billplz API error";
-      await prisma.payout.update({
-        where: { id: payout.id },
-        data: {
-          status: "FAILED",
-          errorMessage: errorMsg,
-        },
-      });
-      throw new Error(`Billplz payout failed: ${errorMsg}`);
+    const result = await initiateBillplzPayout(transactionId);
+    if (!result) {
+      return { error: "Transaction is not eligible for Billplz payout" };
     }
 
     revalidatePath("/dashboard/admin");

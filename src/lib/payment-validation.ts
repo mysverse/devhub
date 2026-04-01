@@ -175,7 +175,9 @@ export function getPaymentMethodLabel(method: string): string {
 }
 
 /** Check if a bank code is supported by Billplz for automated payouts */
-export function isBillplzSupported(bankCode: string | null | undefined): boolean {
+export function isBillplzSupported(
+  bankCode: string | null | undefined,
+): boolean {
   if (!bankCode) return false;
   return BILLPLZ_SUPPORTED_BANKS.has(bankCode);
 }

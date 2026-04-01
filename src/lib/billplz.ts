@@ -85,19 +85,14 @@ export async function createPaymentOrder(
   const collectionId = await getCollectionId();
   const epoch = Math.floor(Date.now() / 1000);
 
-  // Build checksum values in order:
-  // payment_order_collection_id, bank_code, bank_account_number, name, description, total, [reference_1], [reference_2], epoch
+  // Checksum order per Billplz V5 docs:
+  // [ payment_order_collection_id, bank_account_number, total, epoch ]
   const checksumValues: (string | number)[] = [
     collectionId,
-    params.bankCode,
     params.bankAccountNumber,
-    params.name,
-    params.description,
     params.totalCents,
+    epoch,
   ];
-  if (params.reference1) checksumValues.push(params.reference1);
-  if (params.reference2) checksumValues.push(params.reference2);
-  checksumValues.push(epoch);
 
   const checksum = computeChecksum(checksumValues);
 

@@ -61,6 +61,9 @@ export async function initiateBillplzPayout(transactionId: string) {
   });
 
   // Call Billplz API
+  console.log(
+    `[payout] Calling Billplz API for payout ${payout.id} (tx: ${transactionId})`,
+  );
   try {
     const result = await createPaymentOrder({
       bankCode: user.bankName,
@@ -71,6 +74,9 @@ export async function initiateBillplzPayout(transactionId: string) {
       reference1: transactionId,
       reference2: transaction.linearIssueUrl || undefined,
     });
+    console.log(
+      `[payout] Billplz API returned id=${result.id} status=${result.status}`,
+    );
 
     await prisma.payout.update({
       where: { id: payout.id },
@@ -83,14 +89,25 @@ export async function initiateBillplzPayout(transactionId: string) {
     return payout;
   } catch (apiError) {
     const errorMsg =
-      apiError instanceof Error ? apiError.message : "Billplz API error";
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        status: "FAILED",
-        errorMessage: errorMsg,
-      },
-    });
+      apiError instanceof Error ? apiError.message : String(apiError);
+    console.error(
+      `[payout] Billplz API failed for payout ${payout.id}:`,
+      apiError,
+    );
+    try {
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          status: "FAILED",
+          errorMessage: errorMsg,
+        },
+      });
+    } catch (dbError) {
+      console.error(
+        `[payout] Failed to update payout ${payout.id} to FAILED:`,
+        dbError,
+      );
+    }
     throw new Error(`Billplz payout failed: ${errorMsg}`);
   }
 }

@@ -36,10 +36,11 @@ function getAuthHeader(): string {
 
 /**
  * Compute HMAC-SHA512 checksum for Billplz V5 API requests.
- * Values are joined with `|` pipe separator.
+ * Per Billplz docs, values are concatenated directly with no separator.
+ * e.g. "My payment order title1681724303"
  */
 function computeChecksum(values: (string | number)[]): string {
-  const data = values.join("|");
+  const data = values.join("");
   return crypto
     .createHmac("sha512", getXSignatureKey())
     .update(data)
@@ -174,6 +175,8 @@ export async function createPaymentOrderCollection(params: {
 }): Promise<PaymentOrderCollectionResponse> {
   const epoch = Math.floor(Date.now() / 1000);
 
+  // Checksum order per Billplz V5 docs: [ title, callback_url*, epoch ]
+  // Optional values (marked with *) are only included when provided
   const checksumValues: (string | number)[] = [params.title];
   if (params.callbackUrl) checksumValues.push(params.callbackUrl);
   checksumValues.push(epoch);

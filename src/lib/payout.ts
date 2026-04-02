@@ -6,7 +6,7 @@ import {
   isXenditSupported,
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
-import { sendGroupPayout, verifyGroupMembership } from "@/lib/roblox";
+import { createFinSysPayout, verifyGroupMembership } from "@/lib/roblox";
 import { createDisbursement, isXenditEnabled } from "@/lib/xendit";
 
 /**
@@ -317,18 +317,34 @@ export async function initiateRobloxPayout(transactionId: string) {
   });
 
   console.log(
-    `[payout] Sending Roblox group payout ${payout.id} (tx: ${transactionId}, ${transaction.amount} Robux to ${user.robuxUsername})`,
+    `[payout] Sending FinSys payout ${payout.id} (tx: ${transactionId}, ${transaction.amount} Robux to ${user.robuxUsername})`,
   );
   try {
-    const result = await sendGroupPayout({
-      robloxUserId: user.robloxId,
+    const result = await createFinSysPayout({
+      robloxUserId: Number(user.robloxId),
       amount: transaction.amount,
+      reason: `DevHub payout: tx ${transactionId}`,
     });
 
     if (!result.success) {
-      const errorMsg = result.errorMessage || "Roblox group payout failed";
+      const errorMsg = result.message || "FinSys payout failed";
       await handlePayoutFailure(payout.id, errorMsg);
       throw new Error(`Roblox payout failed: ${errorMsg}`);
+    }
+
+    // Store FinSys request ID in provider data
+    if (result.id) {
+      await prisma.payout.update({
+        where: { id: payout.id },
+        data: {
+          providerData: {
+            robloxUserId: user.robloxId,
+            robuxUsername: user.robuxUsername,
+            amount: transaction.amount,
+            finSysRequestId: result.id,
+          },
+        },
+      });
     }
 
     // Synchronous success — go directly to COMPLETED
@@ -342,7 +358,7 @@ export async function initiateRobloxPayout(transactionId: string) {
       throw error;
     }
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[payout] Roblox payout failed for ${payout.id}:`, error);
+    console.error(`[payout] FinSys payout failed for ${payout.id}:`, error);
     try {
       await handlePayoutFailure(payout.id, errorMsg);
     } catch (dbError) {

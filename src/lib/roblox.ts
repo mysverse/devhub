@@ -1,13 +1,130 @@
 /**
- * Roblox API client for group payouts and user resolution.
- * Authentication uses .ROBLOSECURITY cookie stored in Redis (fallback to env var).
- * Handles CSRF token requirement (Roblox APIs return 403 with x-csrf-token on first call).
+ * Roblox user resolution + FinSys payout client.
+ *
+ * Username→ID resolution and group membership checks hit Roblox APIs directly (no auth needed).
+ * Payouts are delegated to FinSys (self-hosted VPS) which handles Roblox auth internally.
  */
 
-import { getKV, ROBLOX_COOKIE_KEY, setKV } from "@/lib/redis";
+// -- FinSys client --
 
-// Module-level CSRF token cache (short-lived, refreshed on 403)
-let csrfToken: string | null = null;
+function getFinSysConfig(): { url: string; apiKey: string } {
+  const url = process.env.FINSYS_API_URL;
+  const apiKey = process.env.FINSYS_API_KEY;
+  if (!url || !apiKey) {
+    throw new Error("FINSYS_API_URL and FINSYS_API_KEY must be set");
+  }
+  return { url: url.replace(/\/+$/, ""), apiKey };
+}
+
+async function finSysFetch(
+  path: string,
+  options: RequestInit = {},
+): Promise<Response> {
+  const { url, apiKey } = getFinSysConfig();
+  return fetch(`${url}${path}`, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": apiKey,
+      ...(options.headers as Record<string, string>),
+    },
+  });
+}
+
+// -- FinSys API functions --
+
+export interface FinSysPayoutResult {
+  success: boolean;
+  message: string;
+  id?: number;
+  error?: string;
+}
+
+/**
+ * Create a payout request via FinSys.
+ * FinSys handles Roblox auth, CSRF, and group payout execution on its side.
+ */
+export async function createFinSysPayout(params: {
+  robloxUserId: number;
+  amount: number;
+  reason: string;
+}): Promise<FinSysPayoutResult> {
+  const response = await finSysFetch("/create-payout", {
+    method: "POST",
+    body: JSON.stringify({
+      userId: params.robloxUserId,
+      amount: params.amount,
+      reason: params.reason,
+    }),
+  });
+
+  const data = (await response.json()) as FinSysPayoutResult;
+
+  if (!response.ok) {
+    return {
+      success: false,
+      message: data.error || `FinSys error (HTTP ${response.status})`,
+    };
+  }
+
+  return data;
+}
+
+export interface FinSysHealthStatus {
+  authenticated: boolean;
+  userId: number | null;
+  userName: string | null;
+  lastHealthCheck: string | null;
+  healthy: boolean;
+  uptime: number;
+}
+
+/**
+ * Check FinSys service health and Roblox auth status.
+ */
+export async function checkFinSysHealth(): Promise<FinSysHealthStatus> {
+  const response = await finSysFetch("/health");
+
+  if (!response.ok) {
+    throw new Error(`FinSys health check failed (HTTP ${response.status})`);
+  }
+
+  return (await response.json()) as FinSysHealthStatus;
+}
+
+export interface FinSysCookieRefreshResult {
+  success: boolean;
+  message: string;
+  userId?: number;
+  userName?: string;
+  error?: string;
+}
+
+/**
+ * Rotate the Roblox cookie on the FinSys VPS without restart.
+ */
+export async function refreshFinSysCookie(
+  cookie: string,
+): Promise<FinSysCookieRefreshResult> {
+  const response = await finSysFetch("/admin/refresh-cookie", {
+    method: "POST",
+    body: JSON.stringify({ cookie }),
+  });
+
+  const data = (await response.json()) as FinSysCookieRefreshResult;
+
+  if (!response.ok) {
+    return {
+      success: false,
+      message:
+        data.error || `FinSys cookie refresh failed (HTTP ${response.status})`,
+    };
+  }
+
+  return data;
+}
+
+// -- Roblox direct API functions (no auth needed) --
 
 function getGroupId(): string {
   const id = process.env.ROBLOX_GROUP_ID;
@@ -15,82 +132,11 @@ function getGroupId(): string {
   return id;
 }
 
-/**
- * Get the .ROBLOSECURITY cookie from Redis first, then env var.
- */
-export async function getRobloxCookie(): Promise<string> {
-  const redisCookie = await getKV(ROBLOX_COOKIE_KEY);
-  if (redisCookie) return redisCookie;
-
-  const envCookie = process.env.ROBLOX_COOKIE;
-  if (envCookie) return envCookie;
-
-  throw new Error(
-    "Roblox cookie not found in Redis or environment. An admin must configure it.",
-  );
-}
-
-/**
- * Store a new .ROBLOSECURITY cookie in Redis.
- * Used by admin action to rotate the cookie without redeployment.
- */
-export async function setRobloxCookie(cookie: string): Promise<void> {
-  await setKV(ROBLOX_COOKIE_KEY, cookie);
-}
-
-/**
- * Make an authenticated request to Roblox API with CSRF token handling.
- * On 403 with x-csrf-token header, caches the token and retries once.
- */
-async function robloxFetch(
-  url: string,
-  options: RequestInit = {},
-): Promise<Response> {
-  const cookie = await getRobloxCookie();
-  const headers: Record<string, string> = {
-    Cookie: `.ROBLOSECURITY=${cookie}`,
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string>),
-  };
-
-  if (csrfToken) {
-    headers["x-csrf-token"] = csrfToken;
-  }
-
-  const response = await fetch(url, { ...options, headers });
-
-  // Handle CSRF token challenge: 403 with new token in header
-  if (response.status === 403) {
-    const newToken = response.headers.get("x-csrf-token");
-    if (newToken) {
-      csrfToken = newToken;
-      headers["x-csrf-token"] = newToken;
-      return fetch(url, { ...options, headers });
-    }
-    // 403 without CSRF token means auth failure (cookie expired)
-    throw new Error(
-      "Roblox authentication failed — .ROBLOSECURITY cookie may be expired. An admin must rotate it.",
-    );
-  }
-
-  return response;
-}
-
-// -- Types --
-
 export interface RobloxUser {
   id: number;
   name: string;
   displayName: string;
 }
-
-export interface GroupPayoutResult {
-  success: boolean;
-  errorCode?: string;
-  errorMessage?: string;
-}
-
-// -- API Functions --
 
 /**
  * Resolve a Roblox username to a user ID.
@@ -140,50 +186,4 @@ export async function verifyGroupMembership(
     data: { group: { id: number } }[];
   };
   return data.data.some((entry) => String(entry.group.id) === groupId);
-}
-
-/**
- * Send Robux to a user via group payout.
- * This is synchronous — succeeds or fails immediately.
- * Requires the cookie account to be the group owner.
- */
-export async function sendGroupPayout(params: {
-  robloxUserId: string;
-  amount: number;
-  description?: string;
-}): Promise<GroupPayoutResult> {
-  const groupId = getGroupId();
-
-  const response = await robloxFetch(
-    `https://groups.roblox.com/v1/groups/${groupId}/payouts`,
-    {
-      method: "POST",
-      body: JSON.stringify({
-        PayoutType: "FixedAmount",
-        Recipients: [
-          {
-            recipientId: Number(params.robloxUserId),
-            recipientType: "User",
-            amount: params.amount,
-          },
-        ],
-      }),
-    },
-  );
-
-  if (!response.ok) {
-    const errorBody = await response.text();
-    let errorCode = "UNKNOWN";
-    let errorMessage = errorBody;
-    try {
-      const parsed = JSON.parse(errorBody);
-      errorCode = parsed.errors?.[0]?.code?.toString() ?? "UNKNOWN";
-      errorMessage = parsed.errors?.[0]?.message ?? errorBody;
-    } catch {
-      // Use raw error body
-    }
-    return { success: false, errorCode, errorMessage };
-  }
-
-  return { success: true };
 }

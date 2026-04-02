@@ -14,13 +14,8 @@ import {
   initiateXenditPayout,
 } from "@/lib/payout";
 import prisma from "@/lib/prisma";
-import {
-  BILLPLZ_COLLECTION_ID_KEY,
-  getKV,
-  ROBLOX_COOKIE_KEY,
-  setKV,
-} from "@/lib/redis";
-import { setRobloxCookie } from "@/lib/roblox";
+import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
+import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getBaseUrl } from "@/lib/url";
 import { getUserEmailAndName } from "./email-actions";
@@ -261,7 +256,10 @@ export async function updateRobloxCookie(cookie: string) {
   await requireAdmin();
 
   try {
-    await setRobloxCookie(cookie.trim());
+    const result = await refreshFinSysCookie(cookie.trim());
+    if (!result.success) {
+      return { error: result.message };
+    }
     return { success: true };
   } catch (error) {
     const err = error as Error;
@@ -272,10 +270,27 @@ export async function updateRobloxCookie(cookie: string) {
 export async function getRobloxCookieStatus() {
   await requireAdmin();
 
-  const redisCookie = await getKV(ROBLOX_COOKIE_KEY);
-  const envCookie = process.env.ROBLOX_COOKIE;
-  return {
-    hasRedisCookie: !!redisCookie,
-    hasEnvCookie: !!envCookie,
-  };
+  try {
+    const health = await checkFinSysHealth();
+    return {
+      hasRedisCookie: health.authenticated,
+      hasEnvCookie: false,
+      health: {
+        valid: health.healthy && health.authenticated,
+        userId: health.userId ?? undefined,
+        username: health.userName ?? undefined,
+        checkedAt: Date.now(),
+      },
+    };
+  } catch (error) {
+    return {
+      hasRedisCookie: false,
+      hasEnvCookie: false,
+      health: {
+        valid: false,
+        error: error instanceof Error ? error.message : "FinSys unreachable",
+        checkedAt: Date.now(),
+      },
+    };
+  }
 }

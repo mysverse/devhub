@@ -19,7 +19,6 @@ export default redis;
 const REDIS_KEY_PREFIX = "devhub:";
 
 export const BILLPLZ_COLLECTION_ID_KEY = "billplz:payment_order_collection_id";
-export const ROBLOX_COOKIE_KEY = "roblox:cookie";
 
 export async function getKV(key: string): Promise<string | null> {
   return redis.get<string>(`${REDIS_KEY_PREFIX}${key}`);

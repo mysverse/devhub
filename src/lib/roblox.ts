@@ -49,18 +49,30 @@ export async function createFinSysPayout(params: {
   amount: number;
   reason: string;
 }): Promise<FinSysPayoutResult> {
+  const payload = {
+    userId: params.robloxUserId,
+    amount: params.amount,
+    reason: params.reason,
+  };
+  console.log("[finsys] Creating payout:", JSON.stringify(payload));
+
   const response = await finSysFetch("/create-payout", {
     method: "POST",
-    body: JSON.stringify({
-      userId: params.robloxUserId,
-      amount: params.amount,
-      reason: params.reason,
-    }),
+    body: JSON.stringify(payload),
   });
 
   const data = (await response.json()) as FinSysPayoutResult;
 
+  console.log(
+    `[finsys] Response HTTP ${response.status}:`,
+    JSON.stringify(data),
+  );
+
   if (!response.ok) {
+    console.error(
+      `[finsys] Payout failed (HTTP ${response.status}):`,
+      JSON.stringify(data),
+    );
     return {
       success: false,
       message: data.error || `FinSys error (HTTP ${response.status})`,

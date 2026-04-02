@@ -17,6 +17,10 @@ export async function handlePayoutCompletion(
   payoutId: string,
   transactionId: string,
 ) {
+  console.log(
+    `[payout] Marking payout ${payoutId} as COMPLETED (tx: ${transactionId})`,
+  );
+
   await prisma.payout.update({
     where: { id: payoutId },
     data: { status: "COMPLETED", completedAt: new Date() },
@@ -297,6 +301,9 @@ export async function initiateRobloxPayout(transactionId: string) {
 
   // Verify group membership before attempting payout
   const isMember = await verifyGroupMembership(user.robloxId);
+  console.log(
+    `[payout] Group membership check for ${user.robuxUsername || user.robloxId}: ${isMember ? "member" : "NOT a member"}`,
+  );
   if (!isMember) {
     throw new Error(
       `Roblox user ${user.robuxUsername || user.robloxId} is not a member of the group`,
@@ -326,28 +333,35 @@ export async function initiateRobloxPayout(transactionId: string) {
       reason: `DevHub payout: tx ${transactionId}`,
     });
 
+    console.log(
+      `[payout] FinSys response for payout ${payout.id}:`,
+      JSON.stringify(result),
+    );
+
     if (!result.success) {
       const errorMsg = result.message || "FinSys payout failed";
       await handlePayoutFailure(payout.id, errorMsg);
       throw new Error(`Roblox payout failed: ${errorMsg}`);
     }
 
-    // Store FinSys request ID in provider data
-    if (result.id) {
-      await prisma.payout.update({
-        where: { id: payout.id },
-        data: {
-          providerData: {
-            robloxUserId: user.robloxId,
-            robuxUsername: user.robuxUsername,
-            amount: transaction.amount,
-            finSysRequestId: result.id,
-          },
+    // Store full FinSys response in provider data
+    await prisma.payout.update({
+      where: { id: payout.id },
+      data: {
+        providerPayoutId: result.id ? String(result.id) : undefined,
+        providerData: {
+          robloxUserId: user.robloxId,
+          robuxUsername: user.robuxUsername,
+          amount: transaction.amount,
+          finSysResponse: { ...result },
         },
-      });
-    }
+      },
+    });
 
     // Synchronous success — go directly to COMPLETED
+    console.log(
+      `[payout] FinSys reported success for payout ${payout.id}, marking as COMPLETED`,
+    );
     await handlePayoutCompletion(payout.id, transactionId);
     return payout;
   } catch (error) {

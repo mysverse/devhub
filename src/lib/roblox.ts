@@ -41,8 +41,8 @@ export interface FinSysPayoutResult {
 }
 
 /**
- * Create a payout request via FinSys.
- * FinSys handles Roblox auth, CSRF, and group payout execution on its side.
+ * Disburse Robux to a user via FinSys.
+ * Creates a payout request, auto-approves it, and disburses in a single operation.
  */
 export async function createFinSysPayout(params: {
   robloxUserId: number;
@@ -54,9 +54,9 @@ export async function createFinSysPayout(params: {
     amount: params.amount,
     reason: params.reason,
   };
-  console.log("[finsys] Creating payout:", JSON.stringify(payload));
+  console.log("[finsys] Disbursing payout:", JSON.stringify(payload));
 
-  const response = await finSysFetch("/create-payout", {
+  const response = await finSysFetch("/disburse", {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -70,7 +70,7 @@ export async function createFinSysPayout(params: {
 
   if (!response.ok) {
     console.error(
-      `[finsys] Payout failed (HTTP ${response.status}):`,
+      `[finsys] Disburse failed (HTTP ${response.status}):`,
       JSON.stringify(data),
     );
     return {

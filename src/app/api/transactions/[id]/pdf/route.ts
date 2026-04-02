@@ -1,3 +1,4 @@
+import { getDownloadUrl } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
@@ -39,7 +40,8 @@ export async function GET(_request: Request, { params }: { params: Params }) {
 
     // Serve stored blob if available (finalized transactions)
     if (transaction.pdfBlobUrl) {
-      const blobResponse = await fetch(transaction.pdfBlobUrl);
+      const downloadUrl = await getDownloadUrl(transaction.pdfBlobUrl);
+      const blobResponse = await fetch(downloadUrl);
       if (blobResponse.ok) {
         const arrayBuffer = await blobResponse.arrayBuffer();
         return new NextResponse(new Uint8Array(arrayBuffer), {

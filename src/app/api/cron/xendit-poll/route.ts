@@ -45,8 +45,11 @@ export async function GET(req: Request) {
       const disbursement = await getDisbursement(payout.providerPayoutId);
 
       if (disbursement.status === "COMPLETED") {
-        await handlePayoutCompletion(payout.id, payout.transactionId);
-        updated++;
+        const wasUpdated = await handlePayoutCompletion(
+          payout.id,
+          payout.transactionId,
+        );
+        if (wasUpdated) updated++;
       } else if (disbursement.status === "FAILED") {
         await handlePayoutFailure(
           payout.id,

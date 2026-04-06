@@ -82,13 +82,21 @@ export async function markTransactionAsPaid(transactionId: string) {
   await requireAdmin();
 
   try {
-    await prisma.transaction.update({
-      where: { id: transactionId },
+    // Atomically transition only if still PENDING — prevents duplicate emails
+    const result = await prisma.transaction.updateMany({
+      where: { id: transactionId, status: "PENDING" },
       data: {
         status: "PAID",
         paidAt: new Date(),
       },
     });
+
+    if (result.count === 0) {
+      return {
+        error:
+          "Transaction is not in PENDING status (may have already been processed)",
+      };
+    }
 
     revalidatePath("/dashboard/admin");
 
@@ -130,8 +138,9 @@ export async function rejectTransaction(
   await requireAdmin();
 
   try {
-    const transaction = await prisma.transaction.update({
-      where: { id: transactionId },
+    // Atomically transition only if still PENDING — prevents duplicate rejections
+    const result = await prisma.transaction.updateMany({
+      where: { id: transactionId, status: "PENDING" },
       data: {
         status: "REJECTED",
         rejectedAt: new Date(),
@@ -139,7 +148,23 @@ export async function rejectTransaction(
       },
     });
 
+    if (result.count === 0) {
+      return {
+        error:
+          "Transaction is not in PENDING status (may have already been processed)",
+      };
+    }
+
     revalidatePath("/dashboard/admin");
+
+    // Fetch the transaction for email and PDF generation
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+    });
+
+    if (!transaction) {
+      return { success: true };
+    }
 
     // Generate and store rejection slip in Vercel Blob
     try {

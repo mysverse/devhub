@@ -38,8 +38,11 @@ export async function GET(req: Request) {
       const order = await getPaymentOrder(payout.providerPayoutId);
 
       if (order.status === "completed") {
-        await handlePayoutCompletion(payout.id, payout.transactionId);
-        updated++;
+        const wasUpdated = await handlePayoutCompletion(
+          payout.id,
+          payout.transactionId,
+        );
+        if (wasUpdated) updated++;
       } else if (order.status === "failed") {
         await handlePayoutFailure(payout.id, "Payment order failed");
         errors++;

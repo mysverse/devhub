@@ -16,20 +16,36 @@ import { createDisbursement, isXenditEnabled } from "@/lib/xendit";
 export async function handlePayoutCompletion(
   payoutId: string,
   transactionId: string,
-) {
+): Promise<boolean> {
   console.log(
     `[payout] Marking payout ${payoutId} as COMPLETED (tx: ${transactionId})`,
   );
 
-  await prisma.payout.update({
-    where: { id: payoutId },
+  // Atomically transition payout to COMPLETED only if not already terminal
+  const payoutResult = await prisma.payout.updateMany({
+    where: { id: payoutId, status: { notIn: ["COMPLETED", "FAILED"] } },
     data: { status: "COMPLETED", completedAt: new Date() },
   });
 
-  await prisma.transaction.update({
-    where: { id: transactionId },
+  if (payoutResult.count === 0) {
+    console.log(
+      `[payout] Payout ${payoutId} already in terminal state, skipping`,
+    );
+    return false;
+  }
+
+  // Atomically transition transaction to PAID only if still PENDING
+  const txResult = await prisma.transaction.updateMany({
+    where: { id: transactionId, status: "PENDING" },
     data: { status: "PAID", paidAt: new Date() },
   });
+
+  if (txResult.count === 0) {
+    console.log(
+      `[payout] Transaction ${transactionId} already moved from PENDING, skipping email`,
+    );
+    return false;
+  }
 
   try {
     await sendPaymentConfirmation(transactionId);
@@ -39,6 +55,8 @@ export async function handlePayoutCompletion(
       err,
     );
   }
+
+  return true;
 }
 
 /**
@@ -48,10 +66,16 @@ export async function handlePayoutFailure(
   payoutId: string,
   errorMessage: string,
 ) {
-  await prisma.payout.update({
-    where: { id: payoutId },
+  const result = await prisma.payout.updateMany({
+    where: { id: payoutId, status: { notIn: ["COMPLETED", "FAILED"] } },
     data: { status: "FAILED", errorMessage },
   });
+
+  if (result.count === 0) {
+    console.log(
+      `[payout] Payout ${payoutId} already in terminal state, skipping failure update`,
+    );
+  }
 }
 
 /**

@@ -307,7 +307,6 @@ export function paymentSuperRefine(
   data: {
     paymentMethod: string;
     paypalEmail?: string | null;
-    robuxUsername?: string | null;
     duitNowId?: string | null;
     duitNowType?: string | null;
     bankName?: string | null;
@@ -328,12 +327,7 @@ export function paymentSuperRefine(
     }
   }
 
-  if (paymentMethod === "ROBUX") {
-    const err = validateRobuxUsername(data.robuxUsername || "");
-    if (err) {
-      ctx.addIssue({ code: "custom", message: err, path: ["robuxUsername"] });
-    }
-  }
+  // ROBUX payment validation is handled server-side by checking OAuth-linked account
 
   if (paymentMethod === "DUITNOW") {
     // Determine mode: explicit duitNowType field, or infer from populated fields

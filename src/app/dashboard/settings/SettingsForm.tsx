@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -26,7 +27,6 @@ import {
   validateBankName,
   validateDuitNowBankName,
   validateDuitNowId,
-  validateRobuxUsername,
 } from "@/lib/payment-validation";
 import { updateProfileSettings } from "./actions";
 
@@ -42,9 +42,10 @@ type ProfileProps = {
     robuxUsername: string | null;
     shippingAddress: string | null;
   };
+  robloxLinked: boolean;
 };
 
-export default function SettingsForm({ profile }: ProfileProps) {
+export default function SettingsForm({ profile, robloxLinked }: ProfileProps) {
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(profile.paymentMethod);
   const [duitNowType, setDuitNowType] = useState<"ID" | "BANK">(
@@ -75,10 +76,9 @@ export default function SettingsForm({ profile }: ProfileProps) {
       }
     }
 
-    if (paymentMethod === "ROBUX") {
-      newErrors.robuxUsername = validateRobuxUsername(
-        (formData.get("robuxUsername") as string) || "",
-      );
+    if (paymentMethod === "ROBUX" && !robloxLinked) {
+      newErrors.robux =
+        "Link your Roblox account in the Linked Accounts section above first.";
     }
 
     if (paymentMethod === "DUITNOW") {
@@ -202,22 +202,17 @@ export default function SettingsForm({ profile }: ProfileProps) {
               />
             )}
 
-            {paymentMethod === "ROBUX" && (
-              <TextInput
-                label="Roblox Username"
-                name="robuxUsername"
-                defaultValue={profile.robuxUsername || ""}
-                placeholder="Builderman"
-                required
-                error={errors.robuxUsername}
-                onBlur={(e) =>
-                  setFieldError(
-                    "robuxUsername",
-                    validateRobuxUsername(e.currentTarget.value),
-                  )
-                }
-              />
-            )}
+            {paymentMethod === "ROBUX" &&
+              (robloxLinked ? (
+                <Alert color="green" title="Roblox account linked">
+                  Robux payments will be sent to your linked Roblox account.
+                </Alert>
+              ) : (
+                <Alert color="yellow" title="Roblox account required">
+                  Link your Roblox account in the Linked Accounts section above
+                  before selecting Robux as your payment method.
+                </Alert>
+              ))}
 
             {paymentMethod === "DUITNOW" && (
               <Stack gap="sm">

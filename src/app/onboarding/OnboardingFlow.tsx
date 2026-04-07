@@ -31,6 +31,7 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import { signIn } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 import {
   DUITNOW_INSTITUTIONS,
@@ -48,6 +49,8 @@ type Props = {
   initialName: string | null;
   detectedLinearId: string | null;
   detectedLinearEmail: string | null;
+  detectedDiscordId: string | null;
+  detectedRobloxId: string | null;
   documentTemplates: DocumentTemplate[];
 };
 
@@ -55,6 +58,8 @@ export default function OnboardingFlow({
   initialName,
   detectedLinearId,
   detectedLinearEmail,
+  detectedDiscordId,
+  detectedRobloxId,
   documentTemplates,
 }: Props) {
   const router = useRouter();
@@ -69,8 +74,7 @@ export default function OnboardingFlow({
 
   // Step 2: accounts
   const [linearEmail, setLinearEmail] = useState(detectedLinearEmail ?? "");
-  const [discordId, setDiscordId] = useState("");
-  const [robuxUsername, setRobuxUsername] = useState("");
+  const [linkingProvider, setLinkingProvider] = useState<string | null>(null);
 
   // Step 3: agreements
   const [agreedDocuments, setAgreedDocuments] = useState<Set<string>>(
@@ -120,8 +124,10 @@ export default function OnboardingFlow({
       toast.error("Please enter your PayPal email.");
       return;
     }
-    if (paymentMethod === "ROBUX" && !robuxUsername.trim()) {
-      toast.error("Please enter your Roblox username.");
+    if (paymentMethod === "ROBUX" && !detectedRobloxId) {
+      toast.error(
+        "Please link your Roblox account before selecting Robux payments.",
+      );
       return;
     }
     if (
@@ -149,8 +155,6 @@ export default function OnboardingFlow({
       legalName: legalName.trim(),
       linearId: detectedLinearId,
       linearEmail: linearEmail.trim() || null,
-      discordId: discordId.trim() || null,
-      robuxUsername: robuxUsername.trim() || null,
       paymentMethod,
       paypalEmail:
         paymentMethod === "PAYPAL" ? paypalEmail.trim() || null : null,
@@ -328,22 +332,72 @@ export default function OnboardingFlow({
             </Box>
 
             {/* Discord */}
-            <TextInput
-              label={`Discord User ID${userType === "new" ? " (optional)" : ""}`}
-              placeholder="123456789012345678"
-              value={discordId}
-              onChange={(e) => setDiscordId(e.target.value)}
-              description="To find your ID: open Discord Settings → Advanced → enable Developer Mode, then right-click your username and choose Copy User ID."
-            />
+            <Box>
+              <Text fw={600} mb="xs">
+                Discord Account
+              </Text>
+              {detectedDiscordId ? (
+                <Alert color="green" title="Discord account linked">
+                  Your Discord account is connected (ID: {detectedDiscordId}).
+                  No action needed.
+                </Alert>
+              ) : (
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">
+                    Link your Discord account so we can identify you in the
+                    server.
+                  </Text>
+                  <Button
+                    variant="light"
+                    color="indigo"
+                    loading={linkingProvider === "discord"}
+                    onClick={() => {
+                      setLinkingProvider("discord");
+                      signIn.oauth2({
+                        providerId: "discord",
+                        callbackURL: "/onboarding",
+                      });
+                    }}
+                  >
+                    Link Discord
+                  </Button>
+                </Stack>
+              )}
+            </Box>
 
             {/* Roblox */}
-            <TextInput
-              label={`Roblox Username${userType === "new" ? " (optional)" : ""}`}
-              placeholder="Builderman"
-              value={robuxUsername}
-              onChange={(e) => setRobuxUsername(e.target.value)}
-              description="Your Roblox display name. Required if you want to receive Robux payments."
-            />
+            <Box>
+              <Text fw={600} mb="xs">
+                Roblox Account
+              </Text>
+              {detectedRobloxId ? (
+                <Alert color="green" title="Roblox account linked">
+                  Your Roblox account is connected (ID: {detectedRobloxId}). No
+                  action needed.
+                </Alert>
+              ) : (
+                <Stack gap="xs">
+                  <Text size="sm" c="dimmed">
+                    Link your Roblox account. Required if you want to receive
+                    Robux payments.
+                  </Text>
+                  <Button
+                    variant="light"
+                    color="red"
+                    loading={linkingProvider === "roblox"}
+                    onClick={() => {
+                      setLinkingProvider("roblox");
+                      signIn.oauth2({
+                        providerId: "roblox",
+                        callbackURL: "/onboarding",
+                      });
+                    }}
+                  >
+                    Link Roblox
+                  </Button>
+                </Stack>
+              )}
+            </Box>
           </Stack>
         </Card>
       )}
@@ -444,16 +498,19 @@ export default function OnboardingFlow({
               />
             )}
 
-            {paymentMethod === "ROBUX" && (
-              <TextInput
-                label="Roblox Username"
-                placeholder="Builderman"
-                value={robuxUsername}
-                onChange={(e) => setRobuxUsername(e.target.value)}
-                required
-                description="We'll send Robux directly to this account."
-              />
-            )}
+            {paymentMethod === "ROBUX" &&
+              (detectedRobloxId ? (
+                <Alert color="green" title="Roblox account linked">
+                  Robux payments will be sent to your linked Roblox account (ID:{" "}
+                  {detectedRobloxId}).
+                </Alert>
+              ) : (
+                <Alert color="yellow" title="Roblox account required">
+                  You must link your Roblox account in Step 3 (Accounts) before
+                  you can receive Robux payments. Go back and link your account
+                  first.
+                </Alert>
+              ))}
 
             {paymentMethod === "DUITNOW" && (
               <Stack gap="sm">

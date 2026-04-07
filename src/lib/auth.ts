@@ -7,6 +7,31 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  databaseHooks: {
+    account: {
+      create: {
+        after: async (account) => {
+          const { providerId, accountId, userId } = account;
+          if (providerId === "discord") {
+            await prisma.userProfile.updateMany({
+              where: { id: userId },
+              data: { discordId: accountId },
+            });
+          } else if (providerId === "roblox") {
+            await prisma.userProfile.updateMany({
+              where: { id: userId },
+              data: { robloxId: accountId, robuxUsername: null },
+            });
+          } else if (providerId === "linear") {
+            await prisma.userProfile.updateMany({
+              where: { id: userId },
+              data: { linearId: accountId },
+            });
+          }
+        },
+      },
+    },
+  },
   plugins: [
     genericOAuth({
       config: [
@@ -44,6 +69,65 @@ export const auth = betterAuth({
               email: data.viewer.email,
               emailVerified: true,
               image: data.viewer.avatarUrl ?? undefined,
+            };
+          },
+        },
+        {
+          providerId: "discord",
+          clientId: process.env.DISCORD_CLIENT_ID ?? "",
+          clientSecret: process.env.DISCORD_CLIENT_SECRET ?? "",
+          authorizationUrl: "https://discord.com/oauth2/authorize",
+          tokenUrl: "https://discord.com/api/oauth2/token",
+          scopes: ["identify"],
+          getUserInfo: async (tokens) => {
+            const response = await fetch("https://discord.com/api/users/@me", {
+              headers: {
+                Authorization: `Bearer ${tokens.accessToken}`,
+              },
+            });
+            const data = (await response.json()) as {
+              id: string;
+              username: string;
+              avatar: string | null;
+            };
+            return {
+              id: data.id,
+              name: data.username,
+              emailVerified: false,
+              image: data.avatar
+                ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png`
+                : undefined,
+            };
+          },
+        },
+        {
+          providerId: "roblox",
+          clientId: process.env.ROBLOX_CLIENT_ID ?? "",
+          clientSecret: process.env.ROBLOX_CLIENT_SECRET ?? "",
+          authorizationUrl: "https://apis.roblox.com/oauth/v1/authorize",
+          tokenUrl: "https://apis.roblox.com/oauth/v1/token",
+          scopes: ["openid", "profile"],
+          pkce: true,
+          getUserInfo: async (tokens) => {
+            const response = await fetch(
+              "https://apis.roblox.com/oauth/v1/userinfo",
+              {
+                headers: {
+                  Authorization: `Bearer ${tokens.accessToken}`,
+                },
+              },
+            );
+            const data = (await response.json()) as {
+              sub: string;
+              preferred_username: string;
+              nickname: string;
+              picture: string | null;
+            };
+            return {
+              id: data.sub,
+              name: data.preferred_username || data.nickname,
+              emailVerified: false,
+              image: data.picture ?? undefined,
             };
           },
         },

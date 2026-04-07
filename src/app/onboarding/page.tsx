@@ -15,15 +15,27 @@ export default async function OnboardingPage() {
   });
   if (existingProfile) redirect("/dashboard");
 
-  // Get Linear account data from better-auth's account table
-  const linearAccount = await prisma.account.findFirst({
-    where: { userId, providerId: "linear" },
-    select: { accountId: true },
-  });
+  // Get linked account data from better-auth's account table
+  const [linearAccount, discordAccount, robloxAccount] = await Promise.all([
+    prisma.account.findFirst({
+      where: { userId, providerId: "linear" },
+      select: { accountId: true },
+    }),
+    prisma.account.findFirst({
+      where: { userId, providerId: "discord" },
+      select: { accountId: true },
+    }),
+    prisma.account.findFirst({
+      where: { userId, providerId: "roblox" },
+      select: { accountId: true },
+    }),
+  ]);
 
   const initialName = user?.name ?? null;
   const detectedLinearId = linearAccount?.accountId ?? null;
   const detectedLinearEmail = user?.email ?? null;
+  const detectedDiscordId = discordAccount?.accountId ?? null;
+  const detectedRobloxId = robloxAccount?.accountId ?? null;
 
   // Load document templates for the agreements step
   const documentTemplates = REQUIRED_DOCUMENTS.map((type) => {
@@ -40,6 +52,8 @@ export default async function OnboardingPage() {
       initialName={initialName}
       detectedLinearId={detectedLinearId}
       detectedLinearEmail={detectedLinearEmail}
+      detectedDiscordId={detectedDiscordId}
+      detectedRobloxId={detectedRobloxId}
       documentTemplates={documentTemplates}
     />
   );

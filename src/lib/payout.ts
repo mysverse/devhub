@@ -1,5 +1,6 @@
 import { sendPaymentConfirmation } from "@/app/dashboard/admin/actions";
 import { createPaymentOrder } from "@/lib/billplz";
+import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import {
   getXenditBankCode,
   isBillplzSupported,
@@ -431,6 +432,23 @@ export async function initiateAutoPayout(transactionId: string) {
     const { user } = transaction;
     if (!user.bankName || !user.bankAccountNumber || !user.bankAccountName) {
       return null;
+    }
+
+    // eWallet methods require auto-payout opt-in + KYC approval
+    if (requiresKycForAutoPayout(user.bankName)) {
+      if (!user.autoPayoutEnabled) {
+        console.log(
+          `[payout] Auto-payout not enabled for user ${transaction.userId}, skipping`,
+        );
+        return null;
+      }
+      const kycOk = await isKycApproved(transaction.userId);
+      if (!kycOk) {
+        console.log(
+          `[payout] KYC required but not approved for user ${transaction.userId}, skipping auto-payout`,
+        );
+        return null;
+      }
     }
 
     // Try Billplz first (to use remaining balance)

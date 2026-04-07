@@ -1,4 +1,4 @@
-import { Group, Text, Title } from "@mantine/core";
+import { Badge, Group, Text, Title } from "@mantine/core";
 import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
@@ -84,6 +84,7 @@ export default async function AdminPage() {
     paidTransactions,
     rejectedTransactions,
     pendingPptRequests,
+    pendingKycCount,
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "PENDING" },
@@ -110,6 +111,9 @@ export default async function AdminPage() {
         },
       },
       orderBy: { createdAt: "asc" },
+    }),
+    prisma.kycVerification.count({
+      where: { status: "PENDING" },
     }),
   ]);
 
@@ -212,6 +216,14 @@ export default async function AdminPage() {
           </LinkButton>
           <LinkButton href="/dashboard/admin/documents" variant="light">
             Document Compliance
+          </LinkButton>
+          <LinkButton href="/dashboard/admin/kyc" variant="light">
+            KYC Review
+            {pendingKycCount > 0 && (
+              <Badge size="sm" circle ml={4}>
+                {pendingKycCount}
+              </Badge>
+            )}
           </LinkButton>
         </Group>
       </Group>

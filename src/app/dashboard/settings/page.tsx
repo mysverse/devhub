@@ -2,8 +2,11 @@ import { Box, Divider, Text, Title } from "@mantine/core";
 import { redirect } from "next/navigation";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
+import { requiresKycForAutoPayout } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
 import InviteGenerator from "./InviteGenerator";
+import KycStatus from "./KycStatus";
+import LinkedAccounts from "./LinkedAccounts";
 import SettingsForm from "./SettingsForm";
 
 export default async function SettingsPage() {
@@ -13,9 +16,20 @@ export default async function SettingsPage() {
     redirect("/");
   }
 
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-  });
+  const [userProfile, linkedAccounts, latestKyc] = await Promise.all([
+    prisma.userProfile.findUnique({
+      where: { id: userId },
+    }),
+    prisma.account.findMany({
+      where: { userId },
+      select: { providerId: true, accountId: true },
+    }),
+    prisma.kycVerification.findFirst({
+      where: { userId },
+      orderBy: { submittedAt: "desc" },
+      select: { status: true, rejectionReason: true },
+    }),
+  ]);
 
   if (!userProfile) {
     redirect("/dashboard");
@@ -33,8 +47,30 @@ export default async function SettingsPage() {
         </StaggerItem>
 
         <StaggerItem>
-          <SettingsForm profile={userProfile} />
+          <LinkedAccounts
+            linkedAccounts={linkedAccounts}
+            linearEmail={userProfile.linearEmail}
+            paymentMethod={userProfile.paymentMethod}
+          />
         </StaggerItem>
+
+        <StaggerItem>
+          <SettingsForm
+            profile={userProfile}
+            robloxLinked={!!userProfile.robloxId}
+          />
+        </StaggerItem>
+
+        {requiresKycForAutoPayout(userProfile.bankName) && (
+          <StaggerItem>
+            <KycStatus
+              kycStatus={latestKyc?.status ?? null}
+              kycRejectionReason={latestKyc?.rejectionReason ?? null}
+              legalName={userProfile.legalName}
+              autoPayoutEnabled={userProfile.autoPayoutEnabled}
+            />
+          </StaggerItem>
+        )}
 
         {userProfile.role === "ADMIN" && (
           <>

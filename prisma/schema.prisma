@@ -86,12 +86,16 @@ model UserProfile {
   bankAccountName  String?
   robuxUsername    String?
 
+  // Auto-payout opt-in for ewallet methods (requires KYC)
+  autoPayoutEnabled Boolean  @default(false)
+
   // Relationships
   transactions     Transaction[]
   invites          Invite[]
   signedDocuments  SignedDocument[]
   pptRequestsMade     PptRequest[] @relation("PptRequestRequester")
   pptRequestsReviewed PptRequest[] @relation("PptRequestReviewer")
+  kycVerifications KycVerification[]
 }
 
 model Invite {
@@ -238,4 +242,47 @@ model PptRequest {
 
   @@index([requesterId])
   @@index([status])
+}
+
+// ── KYC Verification tables ─────────────────────────────────────────────────
+
+enum KycStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  EXPIRED
+}
+
+model KycVerification {
+  id                  String     @id @default(cuid())
+  userId              String
+  user                UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status              KycStatus  @default(PENDING)
+  legalName           String
+  documentType        String?    // mykad | passport | driving_licence
+  idDocumentBlobUrl   String?
+  selfieBlobUrl       String?
+  rejectionReason     String?
+  reviewerId          String?
+  submittedAt         DateTime   @default(now())
+  reviewedAt          DateTime?
+  documentsDeletedAt  DateTime?
+  expiresAt           DateTime
+
+  auditLogs           KycAuditLog[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model KycAuditLog {
+  id               String          @id @default(cuid())
+  verificationId   String
+  verification     KycVerification @relation(fields: [verificationId], references: [id])
+  actorId          String
+  action           String          // SUBMITTED | APPROVED | REJECTED | EXPIRED | DOCUMENTS_DELETED
+  details          String?
+  createdAt        DateTime        @default(now())
+
+  @@index([verificationId])
 }

@@ -10,14 +10,11 @@ import {
   paymentSuperRefine,
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
-import { getRobloxUserByUsername } from "@/lib/roblox";
 
 type OnboardingInput = {
   legalName: string;
   linearId: string | null;
   linearEmail: string | null;
-  discordId: string | null;
-  robuxUsername: string | null;
   paymentMethod: "PAYPAL" | "ROBUX" | "DUITNOW" | "BANK_TRANSFER";
   paypalEmail: string | null;
   duitNowId: string | null;
@@ -37,8 +34,6 @@ const OnboardingSchema = z
     legalName: z.string().min(1, "Legal name is required"),
     linearId: z.string().optional().nullable(),
     linearEmail: z.email().or(z.literal("")).optional().nullable(),
-    discordId: z.string().optional().nullable(),
-    robuxUsername: z.string().optional().nullable(),
     paymentMethod: z.enum(["PAYPAL", "DUITNOW", "ROBUX", "BANK_TRANSFER"]),
     paypalEmail: z
       .email("Invalid PayPal email")
@@ -94,26 +89,31 @@ export async function completeOnboarding(
   }
 
   try {
-    // Resolve Roblox username to user ID when payment method is ROBUX
-    let robloxId: string | null = null;
-    if (data.paymentMethod === "ROBUX" && data.robuxUsername) {
-      try {
-        const robloxUser = await getRobloxUserByUsername(data.robuxUsername);
-        if (robloxUser) {
-          robloxId = String(robloxUser.id);
-        }
-      } catch {
-        // Roblox lookup failed; continue without resolving the ID
-      }
+    // Get OAuth-linked Discord and Roblox accounts
+    const [discordAccount, robloxAccount] = await Promise.all([
+      prisma.account.findFirst({
+        where: { userId, providerId: "discord" },
+        select: { accountId: true },
+      }),
+      prisma.account.findFirst({
+        where: { userId, providerId: "roblox" },
+        select: { accountId: true },
+      }),
+    ]);
+
+    if (data.paymentMethod === "ROBUX" && !robloxAccount) {
+      return {
+        error:
+          "Please link your Roblox account before selecting Robux payments.",
+      };
     }
 
     const profileData = {
       legalName: data.legalName,
       linearId: resolvedLinearId,
       linearEmail: resolvedLinearEmail,
-      discordId: data.discordId || null,
-      robuxUsername: data.robuxUsername || null,
-      robloxId,
+      discordId: discordAccount?.accountId ?? null,
+      robloxId: robloxAccount?.accountId ?? null,
       paymentMethod: data.paymentMethod,
       paypalEmail: data.paypalEmail || null,
       duitNowId: data.duitNowId
@@ -177,11 +177,6 @@ export async function completeOnboarding(
   } catch (error) {
     const err = error as Error;
     if (err.message.includes("Unique constraint")) {
-      if (err.message.includes("discordId")) {
-        return {
-          error: "This Discord ID is already linked to another account.",
-        };
-      }
       if (
         err.message.includes("linearId") ||
         err.message.includes("linearEmail")

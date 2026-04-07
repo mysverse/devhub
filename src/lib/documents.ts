@@ -16,6 +16,8 @@ export type DocumentTemplate = {
 const DOCUMENT_FILES: Record<string, string> = {
   COI: "coi.md",
   NDA: "nda.md",
+  AML_KYC: "aml-kyc-policy.md",
+  PAYMENT_FLOW: "payment-flow.md",
 };
 
 export const REQUIRED_DOCUMENTS = ["COI", "NDA"] as const;

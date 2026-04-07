@@ -15,6 +15,7 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { toast } from "sonner";
+import LinkAnchor from "@/components/LinkAnchor";
 import { updateAutoPayoutSetting } from "./actions";
 
 type KycStatusProps = {
@@ -226,7 +227,11 @@ export default function KycStatus({
                 government ID and a selfie. Your documents are encrypted,
                 reviewed by a team member, and deleted within 48 hours of
                 verification. We only store whether you passed — not your
-                documents.
+                documents.{" "}
+                <LinkAnchor href="/policy/aml-kyc">
+                  Read our full AML/KYC Policy
+                </LinkAnchor>
+                .
               </Alert>
 
               <TextInput

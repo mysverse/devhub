@@ -28,22 +28,19 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
         },
       });
 
-      if (ref.current && !cancelled) {
-        // Clear previous content
-        const mermaidId = `mermaid-${id.replace(/:/g, "")}`;
-        ref.current.innerHTML = `<div class="mermaid" id="${mermaidId}">${chart}</div>`;
+      const mermaidId = `mermaid-${id.replace(/:/g, "")}`;
 
-        const node = ref.current.querySelector<HTMLElement>(".mermaid");
-        try {
-          if (!node) throw new Error("Mermaid node not found");
-          await mermaid.run({ nodes: [node] });
-          if (!cancelled) setRendered(true);
-        } catch (err) {
-          console.error("[mermaid] Render failed:", err);
-          if (!cancelled) {
-            ref.current.innerHTML = `<pre style="color: #909296; padding: 1rem;">${chart}</pre>`;
-            setRendered(true);
-          }
+      try {
+        const { svg } = await mermaid.render(mermaidId, chart);
+        if (!cancelled && ref.current) {
+          ref.current.innerHTML = svg;
+          setRendered(true);
+        }
+      } catch (err) {
+        console.error("[mermaid] Render failed:", err);
+        if (!cancelled && ref.current) {
+          ref.current.textContent = chart;
+          setRendered(true);
         }
       }
     }

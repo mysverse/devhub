@@ -55,6 +55,7 @@ export interface PaymentOrderParams {
   name: string;
   description: string;
   totalCents: number;
+  email?: string;
   reference1?: string;
   reference2?: string;
 }
@@ -66,8 +67,11 @@ export interface PaymentOrderResponse {
   bank_account_number: string;
   name: string;
   description: string;
+  email: string;
   total: number;
   status: string;
+  notification: boolean;
+  recipient_notification: boolean;
   reference_1: string | null;
   reference_2: string | null;
   created_at: string;
@@ -106,6 +110,7 @@ export async function createPaymentOrder(
     epoch,
     checksum,
   };
+  if (params.email) body.email = params.email;
   if (params.reference1) body.reference_1 = params.reference1;
   if (params.reference2) body.reference_2 = params.reference2;
 

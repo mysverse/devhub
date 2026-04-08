@@ -89,7 +89,7 @@ export async function handlePayoutFailure(
 export async function initiateBillplzPayout(transactionId: string) {
   const transaction = await prisma.transaction.findUnique({
     where: { id: transactionId },
-    include: { user: true, payout: true },
+    include: { user: { include: { user: { select: { email: true } } } }, payout: true },
   });
 
   if (!transaction) throw new Error("Transaction not found");
@@ -148,6 +148,7 @@ export async function initiateBillplzPayout(transactionId: string) {
       name: user.bankAccountName,
       description,
       totalCents: amountCents,
+      email: user.user.email,
       reference1: transactionId,
       reference2: transaction.linearIssueUrl || undefined,
     });

@@ -209,6 +209,33 @@ export function getXenditBankCode(bicCode: string): string | null {
   return BIC_TO_XENDIT_BANK_CODE[bicCode] ?? null;
 }
 
+/**
+ * BIC codes for eWallets that route through Xendit for disbursement
+ * and require KYC for automatic payouts.
+ * Bank transfers are handled by Billplz only and do not require KYC.
+ */
+export const XENDIT_EWALLET_CODES = new Set([
+  "BGPYMYNB", // BigPay
+  "BOSTMYNB", // Boost
+  "FSPYMYNB", // Fasspay
+  "FNXSMYNB", // Finexus
+  "MASBMYNB", // Merchantrade
+  "SVSBMYNB", // Setel
+  "ARPYMYNB", // ShopeePay
+  "TNGDMYNB", // TnG E-Wallet
+]);
+
+/**
+ * Check if a bank/eWallet code requires KYC for automatic payouts.
+ * Returns true for eWallet BIC codes that route through Xendit.
+ */
+export function requiresKycForAutoPayout(
+  bankCode: string | null | undefined,
+): boolean {
+  if (!bankCode) return false;
+  return XENDIT_EWALLET_CODES.has(bankCode);
+}
+
 /** Display-friendly payment method labels */
 const PAYMENT_METHOD_LABELS: Record<string, string> = {
   PAYPAL: "PayPal",

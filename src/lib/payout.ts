@@ -412,7 +412,8 @@ export async function initiateRobloxPayout(transactionId: string) {
 
 /**
  * Route to the best available payout provider for a transaction.
- * MYR: Billplz first (to use remaining balance), then Xendit fallback.
+ * MYR bank transfers: Billplz only.
+ * MYR eWallets: Xendit (requires KYC + auto-payout opt-in).
  * ROBUX: Roblox group payout.
  */
 export async function initiateAutoPayout(transactionId: string) {
@@ -434,7 +435,7 @@ export async function initiateAutoPayout(transactionId: string) {
       return null;
     }
 
-    // eWallet methods require auto-payout opt-in + KYC approval
+    // eWallet methods route to Xendit (requires auto-payout opt-in + KYC)
     if (requiresKycForAutoPayout(user.bankName)) {
       if (!user.autoPayoutEnabled) {
         console.log(
@@ -449,23 +450,16 @@ export async function initiateAutoPayout(transactionId: string) {
         );
         return null;
       }
-    }
-
-    // Try Billplz first (to use remaining balance)
-    if (isBillplzSupported(user.bankName)) {
-      try {
-        return await initiateBillplzPayout(transactionId);
-      } catch (err) {
-        console.error(
-          `[payout] Billplz failed for tx ${transactionId}, trying Xendit fallback:`,
-          err,
-        );
+      // Xendit handles eWallet disbursements only
+      if (isXenditSupported(user.bankName)) {
+        return initiateXenditPayout(transactionId);
       }
+      return null;
     }
 
-    // Fallback to Xendit
-    if (isXenditSupported(user.bankName)) {
-      return initiateXenditPayout(transactionId);
+    // Bank transfers route to Billplz only
+    if (isBillplzSupported(user.bankName)) {
+      return initiateBillplzPayout(transactionId);
     }
   }
 

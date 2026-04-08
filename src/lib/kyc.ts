@@ -1,5 +1,8 @@
 import prisma from "@/lib/prisma";
 
+// Re-export pure utility from payment-validation (safe for client components)
+export { requiresKycForAutoPayout, XENDIT_EWALLET_CODES } from "@/lib/payment-validation";
+
 /** How long before unreviewed KYC submissions auto-expire */
 export const KYC_DOCUMENT_EXPIRY_DAYS = 7;
 
@@ -14,33 +17,6 @@ export const KYC_RATE_LIMIT = 3;
 
 /** Accepted document types */
 export const KYC_DOCUMENT_TYPES = ["mykad", "passport", "driving_licence"];
-
-/**
- * BIC codes for eWallets that route through Xendit for disbursement
- * and therefore require KYC for automatic payouts.
- * Traditional bank transfers (Billplz/Xendit) do NOT require KYC.
- */
-export const XENDIT_EWALLET_CODES = new Set([
-  "BGPYMYNB", // BigPay
-  "BOSTMYNB", // Boost
-  "FSPYMYNB", // Fasspay
-  "FNXSMYNB", // Finexus
-  "MASBMYNB", // Merchantrade
-  "SVSBMYNB", // Setel
-  "ARPYMYNB", // ShopeePay
-  "TNGDMYNB", // TnG E-Wallet
-]);
-
-/**
- * Check if a bank/eWallet code requires KYC for automatic payouts.
- * Returns true for eWallet BIC codes that route through Xendit.
- */
-export function requiresKycForAutoPayout(
-  bankCode: string | null | undefined,
-): boolean {
-  if (!bankCode) return false;
-  return XENDIT_EWALLET_CODES.has(bankCode);
-}
 
 /**
  * Get the latest KYC verification status for a user.

@@ -24,6 +24,7 @@ import {
   getPaymentMethodLabel,
   isBillplzSupported,
   isXenditSupported,
+  requiresKycForAutoPayout,
 } from "@/lib/payment-validation";
 import {
   markTransactionAsPaid,
@@ -156,12 +157,13 @@ export default function PayoutCard({
     !!tx.bankAccountName &&
     (!tx.payout || tx.payout.status === "FAILED");
 
-  // Xendit eligibility: enabled + MYR + Xendit-supported bank + bank details present + no active payout
+  // Xendit eligibility: eWallet only + enabled + MYR + Xendit-supported + bank details + no active payout
   const xenditEligible =
     !!tx.xenditEnabled &&
     isPending &&
     tx.currency === "MYR" &&
-    (tx.paymentMethod === "DUITNOW" || tx.paymentMethod === "BANK_TRANSFER") &&
+    tx.paymentMethod === "DUITNOW" &&
+    requiresKycForAutoPayout(tx.bankName) &&
     isXenditSupported(tx.bankName) &&
     !!tx.bankAccountNumber &&
     !!tx.bankAccountName &&

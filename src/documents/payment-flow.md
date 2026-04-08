@@ -46,14 +46,11 @@ flowchart TD
     B -->|MYR| F{Payment method<br/>type?}
     F -->|Bank account| G{Bank supported<br/>by Billplz?}
     G -->|Yes| H[Billplz FPX<br/>disbursement]
-    G -->|No| I{Bank supported<br/>by Xendit?}
-    I -->|Yes| J[Xendit bank<br/>disbursement]
-    I -->|No| E
+    G -->|No| E
     F -->|eWallet| K{Auto-payout<br/>enabled & KYC<br/>approved?}
     K -->|Yes| L[Xendit eWallet<br/>disbursement]
     K -->|No| E
     H --> M[Paid]
-    J --> M
     L --> M
     D --> M
     E --> N[Admin processes<br/>manually]
@@ -65,7 +62,7 @@ flowchart TD
 | Provider | Currency | Methods | Type |
 |---|---|---|---|
 | **Billplz** | MYR | FPX bank transfers (20 supported banks) | Automatic |
-| **Xendit** | MYR | Bank transfers (22 banks) + eWallets (TnG, GrabPay, etc.) | Automatic |
+| **Xendit** | MYR | eWallets only (TnG, GrabPay, Boost, etc.) — requires KYC | Automatic |
 | **Roblox** | ROBUX | Roblox group payout | Automatic |
 | **Manual** | Any | Admin processes via bank transfer, PayPal, etc. | Manual |
 

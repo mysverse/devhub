@@ -16,7 +16,7 @@ This policy explains how MYSverse Digital Ventures ("we", "us") handles identity
 
 - General platform usage
 - Manual payout requests processed by administrators
-- Bank transfer payouts (via Billplz or Xendit bank disbursement)
+- Bank transfer payouts (via Billplz)
 - Robux payouts
 
 ## 2. What We Collect

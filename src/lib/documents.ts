@@ -18,6 +18,7 @@ const DOCUMENT_FILES: Record<string, string> = {
   NDA: "nda.md",
   AML_KYC: "aml-kyc-policy.md",
   PAYMENT_FLOW: "payment-flow.md",
+  ASSET_RIGHTS: "asset-rights.md",
 };
 
 export const REQUIRED_DOCUMENTS = ["COI", "NDA"] as const;

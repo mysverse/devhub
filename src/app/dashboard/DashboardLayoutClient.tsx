@@ -90,6 +90,11 @@ export default function DashboardLayoutClient({
                   Documents
                 </Text>
               </UnstyledButton>
+              <UnstyledButton component={Link} href="/dashboard/welcome-pack">
+                <Text size="sm" fw={500}>
+                  Welcome Pack
+                </Text>
+              </UnstyledButton>
               {isAdmin && (
                 <UnstyledButton component={Link} href="/dashboard/admin">
                   <Text size="sm" fw={500}>
@@ -161,6 +166,14 @@ export default function DashboardLayoutClient({
           onClick={toggle}
         >
           Documents
+        </UnstyledButton>
+        <UnstyledButton
+          component={Link}
+          href="/dashboard/welcome-pack"
+          py="xs"
+          onClick={toggle}
+        >
+          Welcome Pack
         </UnstyledButton>
         {isAdmin && (
           <UnstyledButton

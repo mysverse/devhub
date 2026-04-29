@@ -96,6 +96,7 @@ model UserProfile {
   pptRequestsMade     PptRequest[] @relation("PptRequestRequester")
   pptRequestsReviewed PptRequest[] @relation("PptRequestReviewer")
   kycVerifications KycVerification[]
+  welcomePackOrder WelcomePackOrder?
 }
 
 model Invite {
@@ -285,4 +286,119 @@ model KycAuditLog {
   createdAt        DateTime        @default(now())
 
   @@index([verificationId])
+}
+
+// ── Welcome Pack tables ─────────────────────────────────────────────────────
+
+enum WelcomePackOrderStatus {
+  PENDING
+  APPROVED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+  REJECTED
+}
+
+enum ShippingRegion {
+  DOMESTIC
+  INTERNATIONAL
+}
+
+model WelcomePack {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  currentWave Int      @default(1)
+  wave2Open   Boolean  @default(false)
+
+  // ID card overlay configuration
+  idCardTemplateBlobUrl String?
+  idCardWidth           Int?
+  idCardHeight          Int?
+  idCardNameX           Int?
+  idCardNameY           Int?
+  idCardFontSize        Int?
+  idCardFontColor       String?
+  idCardFontFamily      String?
+
+  items     WelcomePackItem[]
+  orders    WelcomePackOrder[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model WelcomePackItem {
+  id               String      @id @default(cuid())
+  packId           String
+  pack             WelcomePack @relation(fields: [packId], references: [id], onDelete: Cascade)
+
+  name             String
+  description      String?
+  imageBlobUrl     String?
+
+  requiresSize     Boolean     @default(false)
+  sizeChartBlobUrl String?
+  sizeOptions      String[]
+
+  displayOrder     Int         @default(0)
+  isActive         Boolean     @default(true)
+
+  selections       WelcomePackOrderItemSelection[]
+
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  @@index([packId])
+}
+
+model WelcomePackOrder {
+  id              String                 @id @default(cuid())
+  userId          String                 @unique
+  user            UserProfile            @relation(fields: [userId], references: [id])
+  packId          String
+  pack            WelcomePack            @relation(fields: [packId], references: [id])
+
+  status          WelcomePackOrderStatus @default(PENDING)
+  wave            Int
+
+  idCardName      String
+
+  region          ShippingRegion
+  recipientName   String
+  phone           String
+  addressLine1    String
+  addressLine2    String?
+  city            String
+  stateProvince   String?
+  postalCode      String
+  country         String
+
+  trackingNumber  String?
+  trackingUrl     String?
+  notes           String?
+  rejectionReason String?
+
+  selections      WelcomePackOrderItemSelection[]
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  approvedAt      DateTime?
+  shippedAt       DateTime?
+  deliveredAt     DateTime?
+
+  @@index([status])
+  @@index([packId])
+}
+
+model WelcomePackOrderItemSelection {
+  id           String           @id @default(cuid())
+  orderId      String
+  order        WelcomePackOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  itemId       String
+  item         WelcomePackItem  @relation(fields: [itemId], references: [id])
+  selectedSize String?
+
+  @@unique([orderId, itemId])
 }

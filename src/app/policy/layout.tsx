@@ -30,7 +30,14 @@ export default function PolicyLayout({
           style={{ alignItems: "center", justifyContent: "space-between" }}
         >
           <Group gap="sm">
-            <Link href="/" style={{ display: "flex", alignItems: "center", color: "inherit" }}>
+            <Link
+              href="/"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                color: "inherit",
+              }}
+            >
               <Logo size={32} />
             </Link>
           </Group>

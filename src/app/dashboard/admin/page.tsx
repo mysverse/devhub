@@ -225,6 +225,9 @@ export default async function AdminPage() {
               </Badge>
             )}
           </LinkButton>
+          <LinkButton href="/dashboard/admin/welcome-pack" variant="light">
+            Welcome Pack
+          </LinkButton>
         </Group>
       </Group>
 

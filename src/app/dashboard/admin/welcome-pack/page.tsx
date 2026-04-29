@@ -1,0 +1,164 @@
+import {
+  Group,
+  Stack,
+  Tabs,
+  TabsList,
+  TabsPanel,
+  TabsTab,
+  Text,
+  Title,
+} from "@mantine/core";
+import { redirect } from "next/navigation";
+import { FadeIn } from "@/components/animations";
+import { getSession } from "@/lib/auth-utils";
+import prisma from "@/lib/prisma";
+import ItemsManager, { type AdminItemData } from "./ItemsManager";
+import OrdersTable, { type AdminOrderRow } from "./OrdersTable";
+import PackConfig, { type PackConfigData } from "./PackConfig";
+
+export default async function AdminWelcomePackPage() {
+  const { userId } = await getSession();
+  if (!userId) redirect("/");
+
+  const profile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (!profile || profile.role !== "ADMIN") {
+    redirect("/dashboard");
+  }
+
+  const pack = await prisma.welcomePack.findFirst({
+    where: { isActive: true },
+    orderBy: { createdAt: "desc" },
+    include: {
+      items: { orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }] },
+      orders: {
+        orderBy: { createdAt: "desc" },
+        include: {
+          user: {
+            include: { user: { select: { email: true, name: true } } },
+          },
+          selections: { include: { item: { select: { name: true } } } },
+        },
+      },
+    },
+  });
+
+  const packConfig: PackConfigData = pack
+    ? {
+        id: pack.id,
+        name: pack.name,
+        description: pack.description,
+        isActive: pack.isActive,
+        wave2Open: pack.wave2Open,
+        idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl,
+        idCardWidth: pack.idCardWidth,
+        idCardHeight: pack.idCardHeight,
+        idCardNameX: pack.idCardNameX,
+        idCardNameY: pack.idCardNameY,
+        idCardFontSize: pack.idCardFontSize,
+        idCardFontColor: pack.idCardFontColor,
+        idCardFontFamily: pack.idCardFontFamily,
+      }
+    : {
+        id: null,
+        name: "Welcome Pack",
+        description: null,
+        isActive: true,
+        wave2Open: false,
+        idCardTemplateBlobUrl: null,
+        idCardWidth: null,
+        idCardHeight: null,
+        idCardNameX: null,
+        idCardNameY: null,
+        idCardFontSize: null,
+        idCardFontColor: null,
+        idCardFontFamily: null,
+      };
+
+  const items: AdminItemData[] = (pack?.items ?? []).map((i) => ({
+    id: i.id,
+    name: i.name,
+    description: i.description,
+    imageBlobUrl: i.imageBlobUrl,
+    requiresSize: i.requiresSize,
+    sizeChartBlobUrl: i.sizeChartBlobUrl,
+    sizeOptions: i.sizeOptions,
+    displayOrder: i.displayOrder,
+    isActive: i.isActive,
+  }));
+
+  const orders: AdminOrderRow[] = (pack?.orders ?? []).map((o) => ({
+    id: o.id,
+    status: o.status,
+    wave: o.wave,
+    recipientName: o.recipientName,
+    developerName:
+      o.user.legalName || o.user.user.name || o.recipientName || "Developer",
+    developerEmail: o.user.user.email ?? null,
+    region: o.region,
+    idCardName: o.idCardName,
+    phone: o.phone,
+    addressLine1: o.addressLine1,
+    addressLine2: o.addressLine2,
+    city: o.city,
+    stateProvince: o.stateProvince,
+    postalCode: o.postalCode,
+    country: o.country,
+    notes: o.notes,
+    trackingNumber: o.trackingNumber,
+    trackingUrl: o.trackingUrl,
+    rejectionReason: o.rejectionReason,
+    createdAt: o.createdAt.toISOString(),
+    approvedAt: o.approvedAt?.toISOString() ?? null,
+    shippedAt: o.shippedAt?.toISOString() ?? null,
+    deliveredAt: o.deliveredAt?.toISOString() ?? null,
+    selections: o.selections.map((s) => ({
+      itemName: s.item.name,
+      selectedSize: s.selectedSize,
+    })),
+  }));
+
+  const pendingCount = orders.filter((o) => o.status === "PENDING").length;
+
+  return (
+    <FadeIn>
+      <Group justify="space-between" mb="xl">
+        <div>
+          <Title order={1}>Welcome Pack</Title>
+          <Text c="dimmed" mt="xs">
+            Configure the pack, manage items, and review developer orders.
+          </Text>
+        </div>
+      </Group>
+
+      <Tabs defaultValue="config">
+        <TabsList>
+          <TabsTab value="config">Pack config</TabsTab>
+          <TabsTab value="items">Items ({items.length})</TabsTab>
+          <TabsTab value="orders">
+            Orders{" "}
+            {pendingCount > 0
+              ? `(${pendingCount} pending)`
+              : `(${orders.length})`}
+          </TabsTab>
+        </TabsList>
+
+        <TabsPanel value="config" pt="md">
+          <PackConfig pack={packConfig} />
+        </TabsPanel>
+
+        <TabsPanel value="items" pt="md">
+          <Stack>
+            <ItemsManager packId={packConfig.id} items={items} />
+          </Stack>
+        </TabsPanel>
+
+        <TabsPanel value="orders" pt="md">
+          <OrdersTable orders={orders} />
+        </TabsPanel>
+      </Tabs>
+    </FadeIn>
+  );
+}

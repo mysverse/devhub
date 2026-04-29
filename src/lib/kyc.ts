@@ -1,7 +1,10 @@
 import prisma from "@/lib/prisma";
 
 // Re-export pure utility from payment-validation (safe for client components)
-export { requiresKycForAutoPayout, XENDIT_EWALLET_CODES } from "@/lib/payment-validation";
+export {
+  requiresKycForAutoPayout,
+  XENDIT_EWALLET_CODES,
+} from "@/lib/payment-validation";
 
 /** How long before unreviewed KYC submissions auto-expire */
 export const KYC_DOCUMENT_EXPIRY_DAYS = 7;

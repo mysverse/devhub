@@ -26,6 +26,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   approveWelcomePackOrder,
+  fetchLiveEligibilityEvidence,
+  type LiveEligibilityResult,
   markWelcomePackOrderDelivered,
   markWelcomePackOrderShipped,
   rejectWelcomePackOrder,
@@ -261,7 +263,11 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
         </Group>
 
         {order.eligibility && (
-          <EligibilityPanel eligibility={order.eligibility} wave={order.wave} />
+          <EligibilityPanel
+            orderId={order.id}
+            eligibility={order.eligibility}
+            wave={order.wave}
+          />
         )}
 
         {order.notes && (
@@ -441,28 +447,75 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
   );
 }
 
+function formatTimestamp(value: string) {
+  return new Date(value).toLocaleString("en-MY", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function IssueList({ issues }: { issues: AdminQualifyingIssue[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <Stack gap={4}>
+      {issues.map((issue) => (
+        <Group key={issue.id} gap="xs" wrap="nowrap" align="baseline">
+          <Anchor
+            href={issue.url}
+            target="_blank"
+            rel="noreferrer"
+            size="sm"
+            fw={600}
+            style={{ flexShrink: 0 }}
+          >
+            {issue.identifier}
+          </Anchor>
+          <Text size="sm" lineClamp={1} style={{ flex: 1, minWidth: 0 }}>
+            {issue.title}
+          </Text>
+          <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+            {new Date(issue.completedAt).toLocaleDateString("en-MY", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+            })}
+          </Text>
+        </Group>
+      ))}
+    </Stack>
+  );
+}
+
 function EligibilityPanel({
+  orderId,
   eligibility,
   wave,
 }: {
+  orderId: string;
   eligibility: NonNullable<AdminEligibilitySnapshot>;
   wave: number;
 }) {
+  const [live, setLive] = useState<LiveEligibilityResult | null>(null);
+  const [loadingLive, setLoadingLive] = useState(false);
+
   const issues = eligibility.qualifyingIssues;
   const accent =
     eligibility.wave === 1
       ? "var(--mantine-color-green-7)"
       : "var(--mantine-color-blue-7)";
-  const capturedDate = new Date(eligibility.capturedAt).toLocaleString(
-    "en-MY",
-    {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    },
-  );
+
+  async function handleRecheck() {
+    setLoadingLive(true);
+    const result = await fetchLiveEligibilityEvidence(orderId);
+    setLoadingLive(false);
+    setLive(result);
+    if (!result.ok) {
+      toast.error(result.message);
+    }
+  }
 
   return (
     <Box
@@ -473,13 +526,23 @@ function EligibilityPanel({
         borderLeft: `3px solid ${accent}`,
       }}
     >
-      <Group justify="space-between" align="center" mb={4}>
+      <Group justify="space-between" align="center" mb={4} wrap="wrap" gap="xs">
         <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
-          Eligibility check
+          Eligibility at submission
         </Text>
-        <Text size="xs" c="dimmed">
-          Captured {capturedDate}
-        </Text>
+        <Group gap="xs">
+          <Text size="xs" c="dimmed">
+            Captured {formatTimestamp(eligibility.capturedAt)}
+          </Text>
+          <Button
+            size="compact-xs"
+            variant="subtle"
+            loading={loadingLive}
+            onClick={handleRecheck}
+          >
+            {live ? "Re-check" : "Verify with Linear"}
+          </Button>
+        </Group>
       </Group>
       <Group gap="xs" mb={6} wrap="wrap">
         <Badge
@@ -504,34 +567,89 @@ function EligibilityPanel({
       <Text size="sm" c="dimmed" mb={issues.length > 0 ? "xs" : 0}>
         {eligibility.note}
       </Text>
-      {issues.length > 0 && (
-        <Stack gap={4}>
-          {issues.map((issue) => (
-            <Group key={issue.id} gap="xs" wrap="nowrap" align="baseline">
-              <Anchor
-                href={issue.url}
-                target="_blank"
-                rel="noreferrer"
-                size="sm"
-                fw={600}
-                style={{ flexShrink: 0 }}
-              >
-                {issue.identifier}
-              </Anchor>
-              <Text size="sm" lineClamp={1} style={{ flex: 1, minWidth: 0 }}>
-                {issue.title}
-              </Text>
-              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
-                {new Date(issue.completedAt).toLocaleDateString("en-MY", {
-                  month: "short",
-                  day: "numeric",
-                  year: "numeric",
-                })}
-              </Text>
-            </Group>
-          ))}
-        </Stack>
-      )}
+      <IssueList issues={issues} />
+
+      {live && <LivePanel result={live} snapshotWave={eligibility.wave} />}
+    </Box>
+  );
+}
+
+function LivePanel({
+  result,
+  snapshotWave,
+}: {
+  result: LiveEligibilityResult;
+  snapshotWave: 1 | 2;
+}) {
+  if (!result.ok) {
+    return (
+      <Box
+        mt="xs"
+        p="xs"
+        style={{
+          backgroundColor: "var(--mantine-color-dark-7)",
+          borderRadius: "var(--mantine-radius-sm)",
+          borderLeft: "3px solid var(--mantine-color-yellow-7)",
+        }}
+      >
+        <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb={2}>
+          Live check
+        </Text>
+        <Text size="sm" c="dimmed">
+          {result.message}
+        </Text>
+      </Box>
+    );
+  }
+
+  const snapshot = result.snapshot;
+  const issues = snapshot.qualifyingIssues;
+  const stillQualifies = snapshot.wave === 1;
+  const drift = stillQualifies !== (snapshotWave === 1);
+
+  return (
+    <Box
+      mt="xs"
+      p="xs"
+      style={{
+        backgroundColor: "var(--mantine-color-dark-7)",
+        borderRadius: "var(--mantine-radius-sm)",
+        borderLeft: `3px solid ${
+          drift
+            ? "var(--mantine-color-orange-7)"
+            : "var(--mantine-color-teal-7)"
+        }`,
+      }}
+    >
+      <Group justify="space-between" align="center" mb={4} wrap="wrap" gap="xs">
+        <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+          Live check
+        </Text>
+        <Text size="xs" c="dimmed">
+          Just now · {formatTimestamp(snapshot.capturedAt)}
+        </Text>
+      </Group>
+      <Group gap="xs" mb={6} wrap="wrap">
+        <Badge variant="light" color={stillQualifies ? "teal" : "gray"}>
+          Currently: Wave {snapshot.wave}
+        </Badge>
+        {drift && (
+          <Badge variant="light" color="orange">
+            Differs from snapshot
+          </Badge>
+        )}
+        {stillQualifies && (
+          <Text size="xs" c="dimmed">
+            Last {snapshot.lookbackMonths} months · {issues.length} issue
+            {issues.length === 1 ? "" : "s"}
+            {snapshot.truncated ? "+" : ""}
+          </Text>
+        )}
+      </Group>
+      <Text size="sm" c="dimmed" mb={issues.length > 0 ? "xs" : 0}>
+        {snapshot.note}
+      </Text>
+      <IssueList issues={issues} />
     </Box>
   );
 }

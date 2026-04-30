@@ -1,6 +1,7 @@
 "use server";
 
 import type { WelcomePackOrderStatus } from "@prisma/client";
+import dayjs from "dayjs";
 import { revalidatePath } from "next/cache";
 import { createElement } from "react";
 import WelcomePackOrderApproved from "@/emails/WelcomePackOrderApproved";
@@ -9,7 +10,12 @@ import WelcomePackOrderShipped from "@/emails/WelcomePackOrderShipped";
 import { getSession } from "@/lib/auth-utils";
 import { deleteWelcomePackBlob } from "@/lib/blob-storage";
 import { sendEmail } from "@/lib/email";
+import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
+import type {
+  EligibilitySnapshot,
+  QualifyingLinearIssue,
+} from "@/lib/welcome-pack-eligibility";
 
 async function requireAdmin(): Promise<string> {
   const { userId } = await getSession();
@@ -396,3 +402,101 @@ export async function markWelcomePackOrderDelivered(orderId: string) {
 }
 
 export type AdminOrderStatusFilter = WelcomePackOrderStatus | "ALL";
+
+const LIVE_LOOKBACK_MONTHS = 6;
+const LIVE_EVIDENCE_LIMIT = 10;
+
+export type LiveEligibilityResult =
+  | {
+      ok: true;
+      snapshot: EligibilitySnapshot;
+    }
+  | {
+      ok: false;
+      reason: "reauth-required" | "no-linear-account" | "fetch-failed";
+      message: string;
+    };
+
+/**
+ * Fetch the order developer's *current* qualifying Linear issues, on-demand
+ * from the admin orders view. Uses the developer's stored Linear OAuth token
+ * via getLinearClient(developerUserId). Does not mutate the persisted
+ * snapshot — it's purely for verification.
+ */
+export async function fetchLiveEligibilityEvidence(
+  orderId: string,
+): Promise<LiveEligibilityResult> {
+  await requireAdmin();
+
+  const order = await prisma.welcomePackOrder.findUnique({
+    where: { id: orderId },
+    select: { userId: true },
+  });
+  if (!order) {
+    return { ok: false, reason: "fetch-failed", message: "Order not found" };
+  }
+
+  try {
+    const fetched = await withLinearFallback(order.userId, async (client) => {
+      const viewer = await client.viewer;
+      const lookback = dayjs().subtract(LIVE_LOOKBACK_MONTHS, "month");
+      const result = await client.issues({
+        first: LIVE_EVIDENCE_LIMIT,
+        filter: {
+          assignee: { id: { eq: viewer.id } },
+          completedAt: { gte: lookback.toDate() },
+        },
+      });
+      return {
+        nodes: result.nodes,
+        hasNextPage: result.pageInfo?.hasNextPage ?? false,
+      };
+    });
+
+    const qualifyingIssues: QualifyingLinearIssue[] = fetched.nodes.map(
+      (issue) => ({
+        id: issue.id,
+        identifier: issue.identifier,
+        title: issue.title,
+        url: issue.url,
+        completedAt:
+          (issue.completedAt instanceof Date
+            ? issue.completedAt.toISOString()
+            : (issue.completedAt as string | undefined)) ??
+          new Date().toISOString(),
+      }),
+    );
+
+    const wave: 1 | 2 = qualifyingIssues.length > 0 ? 1 : 2;
+    const snapshot: EligibilitySnapshot = {
+      wave,
+      capturedAt: new Date().toISOString(),
+      lookbackMonths: LIVE_LOOKBACK_MONTHS,
+      qualifyingIssues,
+      truncated: fetched.hasNextPage,
+      note:
+        wave === 1
+          ? `Live check: ${qualifyingIssues.length} completed Linear issue(s) in the last ${LIVE_LOOKBACK_MONTHS} months${
+              fetched.hasNextPage ? " (truncated)" : ""
+            }.`
+          : `Live check: 0 completed Linear issues in the last ${LIVE_LOOKBACK_MONTHS} months — would only qualify under Wave 2.`,
+    };
+
+    return { ok: true, snapshot };
+  } catch (error) {
+    if (error instanceof LinearReauthRequiredError) {
+      return {
+        ok: false,
+        reason: "reauth-required",
+        message:
+          "The developer's Linear connection isn't active — ask them to reconnect to re-verify.",
+      };
+    }
+    console.error("[welcome-pack] live eligibility check failed:", error);
+    return {
+      ok: false,
+      reason: "fetch-failed",
+      message: "Failed to query Linear. Try again in a moment.",
+    };
+  }
+}

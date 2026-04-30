@@ -24,6 +24,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import ConfirmModal from "@/components/ConfirmModal";
 import {
   deleteWelcomePackItem,
   saveWelcomePackItem,
@@ -54,6 +55,10 @@ export default function ItemsManager({
   const router = useRouter();
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<AdminItemData | null>(null);
+  const [deleteCandidate, setDeleteCandidate] = useState<AdminItemData | null>(
+    null,
+  );
+  const [deleting, setDeleting] = useState(false);
 
   function startCreate() {
     setEditing(null);
@@ -63,6 +68,24 @@ export default function ItemsManager({
   function startEdit(item: AdminItemData) {
     setEditing(item);
     open();
+  }
+
+  async function handleConfirmDelete() {
+    if (!deleteCandidate) return;
+    setDeleting(true);
+    const res = await deleteWelcomePackItem(deleteCandidate.id);
+    setDeleting(false);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    if (res?.softDeleted) {
+      toast.info(res.message ?? "Item disabled");
+    } else {
+      toast.success("Item deleted");
+    }
+    setDeleteCandidate(null);
+    router.refresh();
   }
 
   if (!packId) {
@@ -159,21 +182,7 @@ export default function ItemsManager({
                   <ActionIcon
                     variant="subtle"
                     color="red"
-                    onClick={async () => {
-                      if (!confirm(`Delete or disable "${item.name}"?`)) {
-                        return;
-                      }
-                      const res = await deleteWelcomePackItem(item.id);
-                      if (res?.error) {
-                        toast.error(res.error);
-                      } else if (res?.softDeleted) {
-                        toast.info(res.message ?? "Item disabled");
-                        router.refresh();
-                      } else {
-                        toast.success("Item deleted");
-                        router.refresh();
-                      }
-                    }}
+                    onClick={() => setDeleteCandidate(item)}
                     aria-label="Delete"
                   >
                     <Trash2 size={16} />
@@ -195,6 +204,18 @@ export default function ItemsManager({
           close();
           router.refresh();
         }}
+      />
+
+      <ConfirmModal
+        opened={Boolean(deleteCandidate)}
+        onClose={() => setDeleteCandidate(null)}
+        onConfirm={handleConfirmDelete}
+        title={`Delete "${deleteCandidate?.name ?? ""}"?`}
+        description="If this item has never been ordered it'll be removed permanently. If it's already in someone's order it'll be disabled instead so existing orders stay intact."
+        hint="Disabled items still appear on past orders but won't show in new ones."
+        confirmLabel="Delete item"
+        confirmIcon={<Trash2 size={14} />}
+        loading={deleting}
       />
     </Stack>
   );

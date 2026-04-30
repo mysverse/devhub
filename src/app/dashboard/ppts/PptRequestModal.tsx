@@ -11,15 +11,28 @@ import {
   SegmentedControl,
   Select,
   Stack,
+  Stepper,
+  StepperStep,
   Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
 import { DateInput } from "@mantine/dates";
 import { useDebouncedCallback } from "@mantine/hooks";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  Search,
+  Send,
+  SlidersHorizontal,
+} from "lucide-react";
+import { motion } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
+import { SPRING, StepTransition } from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import {
@@ -58,7 +71,7 @@ export default function PptRequestModal({
 }) {
   const router = useRouter();
   const [mode, setMode] = useState<"new" | "existing">("existing");
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 3>(1);
 
   // Teams & projects
   const [teams, setTeams] = useState<LinearTeam[]>([]);
@@ -172,7 +185,7 @@ export default function PptRequestModal({
 
   function canProceedToStep3() {
     if (mode === "new") {
-      return selectedTeamId && newTitle.trim();
+      return Boolean(selectedTeamId && newTitle.trim());
     }
     return selectedIssue !== null;
   }
@@ -230,233 +243,295 @@ export default function PptRequestModal({
       title="Request PPT"
       centered
       size="lg"
+      radius="md"
+      overlayProps={{ blur: 4 }}
     >
-      {step === 1 && (
-        <Stack gap="md">
-          <Text fz="sm" c="dimmed">
-            Choose whether to create a new Linear issue or request PPT status
-            for an existing one.
-          </Text>
-          <SegmentedControl
-            value={mode}
-            onChange={(v) => setMode(v as "new" | "existing")}
-            data={[
-              { value: "existing", label: "Existing Issue" },
-              { value: "new", label: "New Issue" },
-            ]}
-            fullWidth
+      <Stack gap="md">
+        <Stepper
+          active={step === 1 ? 0 : 1}
+          size="xs"
+          iconSize={28}
+          onStepClick={(idx) => {
+            if (idx === 0) setStep(1);
+            else if (idx === 1 && canProceedToStep3()) setStep(3);
+          }}
+        >
+          <StepperStep
+            label="Pick task"
+            icon={<Search size={14} />}
+            completedIcon={<CheckCircle2 size={14} />}
           />
+          <StepperStep
+            label="PPT details"
+            icon={<SlidersHorizontal size={14} />}
+            completedIcon={<CheckCircle2 size={14} />}
+          />
+        </Stepper>
 
-          {mode === "existing" && (
-            <Stack gap="sm">
-              <TextInput
-                label="Search Linear issues"
-                placeholder="Type to search..."
-                value={searchQuery}
-                onChange={(e) => handleSearchChange(e.currentTarget.value)}
+        <StepTransition step={step}>
+          {step === 1 && (
+            <Stack gap="md">
+              <Text fz="sm" c="dimmed">
+                Choose whether to create a new Linear issue or request PPT
+                status for an existing one.
+              </Text>
+              <SegmentedControl
+                value={mode}
+                onChange={(v) => setMode(v as "new" | "existing")}
+                data={[
+                  { value: "existing", label: "Existing Issue" },
+                  { value: "new", label: "New Issue" },
+                ]}
+                fullWidth
               />
-              {searchLoading && (
-                <Group justify="center" py="md">
-                  <Loader size="sm" />
-                </Group>
-              )}
-              {searchResults.length > 0 && (
-                <Stack gap="xs" mah={300} style={{ overflowY: "auto" }}>
-                  {searchResults.map((issue) => {
-                    const disabled =
-                      issue.hasPptLabel || issue.hasExistingRequest;
-                    const isSelected = selectedIssue?.id === issue.id;
-                    return (
-                      <Card
-                        key={issue.id}
-                        withBorder
-                        radius="sm"
-                        padding="sm"
-                        style={{
-                          cursor: disabled ? "not-allowed" : "pointer",
-                          opacity: disabled ? 0.5 : 1,
-                          borderColor: isSelected ? "#228be6" : undefined,
-                          backgroundColor: isSelected
-                            ? "rgba(34, 139, 230, 0.1)"
-                            : undefined,
-                        }}
-                        onClick={() => {
-                          if (!disabled) setSelectedIssue(issue);
-                        }}
-                      >
-                        <Group justify="space-between" wrap="nowrap">
-                          <Box style={{ minWidth: 0, flex: 1 }}>
-                            <Group gap="xs">
-                              <Badge size="xs" variant="light" color="gray">
-                                {issue.identifier}
-                              </Badge>
-                              <Badge size="xs" variant="light">
-                                {issue.stateName}
-                              </Badge>
-                              {issue.hasPptLabel && (
-                                <Badge size="xs" color="green">
-                                  Already PPT
-                                </Badge>
-                              )}
-                              {issue.hasExistingRequest && (
-                                <Badge size="xs" color="yellow">
-                                  Request Pending
-                                </Badge>
-                              )}
-                            </Group>
-                            <Text fz="sm" fw={500} mt={4} truncate="end">
-                              {issue.title}
-                            </Text>
-                          </Box>
-                        </Group>
-                      </Card>
-                    );
-                  })}
+
+              {mode === "existing" && (
+                <Stack gap="sm">
+                  <TextInput
+                    label="Search Linear issues"
+                    placeholder="Type to search..."
+                    leftSection={<Search size={14} />}
+                    value={searchQuery}
+                    onChange={(e) => handleSearchChange(e.currentTarget.value)}
+                  />
+                  {searchLoading && (
+                    <Group justify="center" py="md">
+                      <Loader size="sm" />
+                    </Group>
+                  )}
+                  {searchResults.length > 0 && (
+                    <Stack gap="xs" mah={300} style={{ overflowY: "auto" }}>
+                      {searchResults.map((issue) => {
+                        const disabled =
+                          issue.hasPptLabel || issue.hasExistingRequest;
+                        const isSelected = selectedIssue?.id === issue.id;
+                        return (
+                          <motion.div
+                            key={issue.id}
+                            whileHover={
+                              disabled ? undefined : { y: -1, scale: 1.005 }
+                            }
+                            transition={SPRING.snappy}
+                          >
+                            <Card
+                              withBorder
+                              radius="sm"
+                              padding="sm"
+                              style={{
+                                cursor: disabled ? "not-allowed" : "pointer",
+                                opacity: disabled ? 0.5 : 1,
+                                borderColor: isSelected
+                                  ? "var(--mantine-color-blue-6)"
+                                  : undefined,
+                                backgroundColor: isSelected
+                                  ? "rgba(34, 139, 230, 0.1)"
+                                  : undefined,
+                                transition:
+                                  "border-color 0.18s ease, background-color 0.18s ease",
+                              }}
+                              onClick={() => {
+                                if (!disabled) setSelectedIssue(issue);
+                              }}
+                            >
+                              <Group justify="space-between" wrap="nowrap">
+                                <Box style={{ minWidth: 0, flex: 1 }}>
+                                  <Group gap="xs">
+                                    <Badge
+                                      size="xs"
+                                      variant="light"
+                                      color="gray"
+                                    >
+                                      {issue.identifier}
+                                    </Badge>
+                                    <Badge size="xs" variant="light">
+                                      {issue.stateName}
+                                    </Badge>
+                                    {issue.hasPptLabel && (
+                                      <Badge size="xs" color="green">
+                                        Already PPT
+                                      </Badge>
+                                    )}
+                                    {issue.hasExistingRequest && (
+                                      <Badge size="xs" color="yellow">
+                                        Request Pending
+                                      </Badge>
+                                    )}
+                                  </Group>
+                                  <Text fz="sm" fw={500} mt={4} truncate="end">
+                                    {issue.title}
+                                  </Text>
+                                </Box>
+                              </Group>
+                            </Card>
+                          </motion.div>
+                        );
+                      })}
+                    </Stack>
+                  )}
+                  {searchQuery &&
+                    !searchLoading &&
+                    searchResults.length === 0 && (
+                      <Text fz="sm" c="dimmed" ta="center" py="md">
+                        No issues found
+                      </Text>
+                    )}
                 </Stack>
               )}
-              {searchQuery && !searchLoading && searchResults.length === 0 && (
-                <Text fz="sm" c="dimmed" ta="center" py="md">
-                  No issues found
-                </Text>
+
+              {mode === "new" && (
+                <Stack gap="sm">
+                  <Select
+                    label="Team"
+                    placeholder={
+                      teamsLoading ? "Loading teams..." : "Select team"
+                    }
+                    data={teams.map((t) => ({
+                      value: t.id,
+                      label: `${t.key} — ${t.name}`,
+                    }))}
+                    value={selectedTeamId}
+                    onChange={setSelectedTeamId}
+                    disabled={teamsLoading}
+                    required
+                  />
+                  {selectedTeamId && (
+                    <Select
+                      label="Project (optional)"
+                      placeholder={
+                        projectsLoading ? "Loading..." : "Select project"
+                      }
+                      data={projects.map((p) => ({
+                        value: p.id,
+                        label: p.name,
+                      }))}
+                      value={selectedProjectId}
+                      onChange={setSelectedProjectId}
+                      disabled={projectsLoading}
+                      clearable
+                    />
+                  )}
+                  <TextInput
+                    label="Issue title"
+                    placeholder="Describe the task"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.currentTarget.value)}
+                    required
+                  />
+                  <Textarea
+                    label="Description (optional)"
+                    placeholder="Provide more details about the task"
+                    value={newDescription}
+                    onChange={(e) => setNewDescription(e.currentTarget.value)}
+                    autosize
+                    minRows={2}
+                    maxRows={5}
+                  />
+                </Stack>
               )}
+
+              <Group justify="flex-end">
+                <Button variant="default" onClick={handleClose}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => setStep(3)}
+                  disabled={!canProceedToStep3()}
+                  rightSection={<ArrowRight size={14} />}
+                >
+                  Next
+                </Button>
+              </Group>
             </Stack>
           )}
 
-          {mode === "new" && (
-            <Stack gap="sm">
-              <Select
-                label="Team"
-                placeholder={teamsLoading ? "Loading teams..." : "Select team"}
-                data={teams.map((t) => ({
-                  value: t.id,
-                  label: `${t.key} — ${t.name}`,
-                }))}
-                value={selectedTeamId}
-                onChange={setSelectedTeamId}
-                disabled={teamsLoading}
-                required
-              />
-              {selectedTeamId && (
-                <Select
-                  label="Project (optional)"
-                  placeholder={
-                    projectsLoading ? "Loading..." : "Select project"
-                  }
-                  data={projects.map((p) => ({
-                    value: p.id,
-                    label: p.name,
-                  }))}
-                  value={selectedProjectId}
-                  onChange={setSelectedProjectId}
-                  disabled={projectsLoading}
-                  clearable
+          {step === 3 && (
+            <Stack gap="md">
+              <Card
+                withBorder
+                radius="sm"
+                padding="sm"
+                bg="var(--mantine-color-dark-6)"
+              >
+                {mode === "existing" && selectedIssue && (
+                  <Group gap="xs">
+                    <Badge size="xs" variant="light" color="gray">
+                      {selectedIssue.identifier}
+                    </Badge>
+                    <Text fz="sm" fw={500} truncate="end">
+                      {selectedIssue.title}
+                    </Text>
+                  </Group>
+                )}
+                {mode === "new" && (
+                  <Group gap="xs">
+                    <Badge size="xs" color="blue">
+                      New Issue
+                    </Badge>
+                    <Text fz="sm" fw={500} truncate="end">
+                      {newTitle}
+                    </Text>
+                  </Group>
+                )}
+              </Card>
+
+              <Box>
+                <Text fz="sm" fw={500} mb={4}>
+                  Complexity
+                </Text>
+                <SegmentedControl
+                  value={estimate}
+                  onChange={setEstimate}
+                  data={ESTIMATE_OPTIONS}
+                  fullWidth
                 />
-              )}
-              <TextInput
-                label="Issue title"
-                placeholder="Describe the task"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.currentTarget.value)}
+              </Box>
+
+              <DateInput
+                label="Projected due date"
+                placeholder="Select date"
+                leftSection={<CalendarClock size={14} />}
+                value={dueDate}
+                onChange={setDueDate}
+                minDate={tomorrow}
                 required
               />
+
               <Textarea
-                label="Description (optional)"
-                placeholder="Provide more details about the task"
-                value={newDescription}
-                onChange={(e) => setNewDescription(e.currentTarget.value)}
+                label="Note (optional)"
+                placeholder="Why should this be a PPT? Any additional context..."
+                value={note}
+                onChange={(e) => setNote(e.currentTarget.value)}
                 autosize
                 minRows={2}
-                maxRows={5}
+                maxRows={4}
               />
+
+              <Group justify="space-between">
+                <Button
+                  variant="default"
+                  onClick={() => setStep(1)}
+                  leftSection={<ArrowLeft size={14} />}
+                >
+                  Back
+                </Button>
+                <Group gap="sm">
+                  <Button variant="default" onClick={handleClose}>
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleSubmit}
+                    loading={submitting}
+                    disabled={!dueDate}
+                    leftSection={<Send size={14} />}
+                  >
+                    Submit Request
+                  </Button>
+                </Group>
+              </Group>
             </Stack>
           )}
-
-          <Group justify="flex-end">
-            <Button variant="default" onClick={handleClose}>
-              Cancel
-            </Button>
-            <Button onClick={() => setStep(3)} disabled={!canProceedToStep3()}>
-              Next
-            </Button>
-          </Group>
-        </Stack>
-      )}
-
-      {step === 3 && (
-        <Stack gap="md">
-          <Card withBorder radius="sm" padding="sm" bg="dark.6">
-            {mode === "existing" && selectedIssue && (
-              <Group gap="xs">
-                <Badge size="xs" variant="light" color="gray">
-                  {selectedIssue.identifier}
-                </Badge>
-                <Text fz="sm" fw={500} truncate="end">
-                  {selectedIssue.title}
-                </Text>
-              </Group>
-            )}
-            {mode === "new" && (
-              <Group gap="xs">
-                <Badge size="xs" color="blue">
-                  New Issue
-                </Badge>
-                <Text fz="sm" fw={500} truncate="end">
-                  {newTitle}
-                </Text>
-              </Group>
-            )}
-          </Card>
-
-          <Box>
-            <Text fz="sm" fw={500} mb={4}>
-              Complexity
-            </Text>
-            <SegmentedControl
-              value={estimate}
-              onChange={setEstimate}
-              data={ESTIMATE_OPTIONS}
-              fullWidth
-            />
-          </Box>
-
-          <DateInput
-            label="Projected due date"
-            placeholder="Select date"
-            value={dueDate}
-            onChange={setDueDate}
-            minDate={tomorrow}
-            required
-          />
-
-          <Textarea
-            label="Note (optional)"
-            placeholder="Why should this be a PPT? Any additional context..."
-            value={note}
-            onChange={(e) => setNote(e.currentTarget.value)}
-            autosize
-            minRows={2}
-            maxRows={4}
-          />
-
-          <Group justify="space-between">
-            <Button variant="default" onClick={() => setStep(1)}>
-              Back
-            </Button>
-            <Group gap="sm">
-              <Button variant="default" onClick={handleClose}>
-                Cancel
-              </Button>
-              <Button
-                onClick={handleSubmit}
-                loading={submitting}
-                disabled={!dueDate}
-              >
-                Submit Request
-              </Button>
-            </Group>
-          </Group>
-        </Stack>
-      )}
+        </StepTransition>
+      </Stack>
     </Modal>
   );
 }

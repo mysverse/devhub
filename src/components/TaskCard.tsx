@@ -1,3 +1,5 @@
+"use client";
+
 import {
   Anchor,
   Avatar,
@@ -10,7 +12,9 @@ import {
   Title,
   Tooltip,
 } from "@mantine/core";
+import { motion } from "motion/react";
 import Markdown from "react-markdown";
+import { SPRING } from "@/components/animations";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
 import ClaimButton from "./ClaimButton";
@@ -124,6 +128,24 @@ function LinearIcon({ url }: { url: string }) {
   );
 }
 
+function HoverLift({
+  children,
+  fixedWidth,
+}: {
+  children: React.ReactNode;
+  fixedWidth?: number;
+}) {
+  return (
+    <motion.div
+      whileHover={{ y: -3 }}
+      transition={SPRING.snappy}
+      style={{ height: "100%", width: fixedWidth }}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
 export default function TaskCard({
   issueId,
   identifier,
@@ -144,62 +166,66 @@ export default function TaskCard({
 
   if (variant === "compact") {
     return (
-      <Card
-        withBorder
-        radius="md"
-        padding="lg"
-        style={{
-          width: 300,
-          height: 200,
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <Group justify="space-between" mb="xs">
-          <Badge size="sm" variant="light">
-            {identifier}
-          </Badge>
-          <Text fw={700} c="green">
-            {formatEstimate(estimate, currency)}
+      <HoverLift fixedWidth={300}>
+        <Card
+          withBorder
+          radius="md"
+          padding="lg"
+          style={{
+            width: 300,
+            height: 200,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          <Group justify="space-between" mb="xs">
+            <Badge size="sm" variant="light">
+              {identifier}
+            </Badge>
+            <Text fw={700} c="green">
+              {formatEstimate(estimate, currency)}
+            </Text>
+          </Group>
+          <Text fw={600} lineClamp={1} mb="sm">
+            {title}
           </Text>
-        </Group>
-        <Text fw={600} lineClamp={1} mb="sm">
-          {title}
-        </Text>
-        <div style={{ flex: 1, marginBottom: "var(--mantine-spacing-sm)" }}>
-          <DescriptionContent text={description} lines={2} size="xs" />
-        </div>
-        <Group justify="space-between" mt="auto" align="center">
-          <LinearIcon url={url} />
-          <ClaimButton issueId={issueId} />
-        </Group>
-      </Card>
+          <div style={{ flex: 1, marginBottom: "var(--mantine-spacing-sm)" }}>
+            <DescriptionContent text={description} lines={2} size="xs" />
+          </div>
+          <Group justify="space-between" mt="auto" align="center">
+            <LinearIcon url={url} />
+            <ClaimButton issueId={issueId} />
+          </Group>
+        </Card>
+      </HoverLift>
     );
   }
 
   if (variant === "active") {
     return (
-      <Card withBorder radius="md" padding="lg" h="100%">
-        <Group justify="space-between" align="flex-start" mb="xs">
-          <Badge variant="light" color="blue">
-            {identifier}
-          </Badge>
-          {pptEstimate > 0 && (
-            <Text fw={700} c="green" fz="sm">
-              {formatAmount(pptEstimate, currency)} (Pending)
-            </Text>
-          )}
-        </Group>
-        <Text fw={600} lineClamp={1} mb="md">
-          {title}
-        </Text>
-        <Group justify="space-between" mt="auto">
-          <Text fz="sm" c="dimmed">
-            {estimate ? `${estimate} pts` : "Unestimated"}
+      <HoverLift>
+        <Card withBorder radius="md" padding="lg" h="100%">
+          <Group justify="space-between" align="flex-start" mb="xs">
+            <Badge variant="light" color="blue">
+              {identifier}
+            </Badge>
+            {pptEstimate > 0 && (
+              <Text fw={700} c="green" fz="sm">
+                {formatAmount(pptEstimate, currency)} (Pending)
+              </Text>
+            )}
+          </Group>
+          <Text fw={600} lineClamp={1} mb="md">
+            {title}
           </Text>
-          <LinearIcon url={url} />
-        </Group>
-      </Card>
+          <Group justify="space-between" mt="auto">
+            <Text fz="sm" c="dimmed">
+              {estimate ? `${estimate} pts` : "Unestimated"}
+            </Text>
+            <LinearIcon url={url} />
+          </Group>
+        </Card>
+      </HoverLift>
     );
   }
 
@@ -207,84 +233,91 @@ export default function TaskCard({
   const imageUrl = extractFirstImage(description);
 
   return (
-    <Card
-      withBorder
-      radius="md"
-      padding="lg"
-      h="100%"
-      style={{ display: "flex", flexDirection: "column" }}
-    >
-      {imageUrl && (
-        <CardSection mb="md">
-          <Image src={imageUrl} height={160} alt={title} />
-        </CardSection>
-      )}
+    <HoverLift>
+      <Card
+        withBorder
+        radius="md"
+        padding="lg"
+        h="100%"
+        style={{ display: "flex", flexDirection: "column" }}
+      >
+        {imageUrl && (
+          <CardSection mb="md" style={{ overflow: "hidden" }}>
+            <motion.div
+              whileHover={{ scale: 1.04 }}
+              transition={{ duration: 0.4, ease: "easeOut" }}
+            >
+              <Image src={imageUrl} height={160} alt={title} />
+            </motion.div>
+          </CardSection>
+        )}
 
-      <Group justify="space-between" align="flex-start" mb="xs">
-        <Group gap="xs" style={{ flexWrap: "wrap" }} align="center">
-          <Badge variant="light" color="blue">
-            {identifier}
-          </Badge>
-          {projectName && !hideProject && (
-            <Badge variant="dot" color="gray" size="sm">
-              {projectName}
+        <Group justify="space-between" align="flex-start" mb="xs">
+          <Group gap="xs" style={{ flexWrap: "wrap" }} align="center">
+            <Badge variant="light" color="blue">
+              {identifier}
             </Badge>
-          )}
-          {assigneeName && (
-            <Tooltip label={assigneeName}>
-              <Avatar
-                src={assigneeAvatarUrl}
-                size={22}
-                radius="xl"
-                color={isAssignedToViewer ? "green" : "gray"}
-              >
-                {assigneeName.charAt(0).toUpperCase()}
-              </Avatar>
+            {projectName && !hideProject && (
+              <Badge variant="dot" color="gray" size="sm">
+                {projectName}
+              </Badge>
+            )}
+            {assigneeName && (
+              <Tooltip label={assigneeName}>
+                <Avatar
+                  src={assigneeAvatarUrl}
+                  size={22}
+                  radius="xl"
+                  color={isAssignedToViewer ? "green" : "gray"}
+                >
+                  {assigneeName.charAt(0).toUpperCase()}
+                </Avatar>
+              </Tooltip>
+            )}
+          </Group>
+          <Text fw={700} c="green" fz="sm">
+            {formatEstimate(estimate, currency)}
+          </Text>
+        </Group>
+
+        <Title order={4} size="h5" lineClamp={2} mb="xs">
+          {title}
+        </Title>
+        <div style={{ marginBottom: "var(--mantine-spacing-md)" }}>
+          <DescriptionContent text={description} lines={3} />
+        </div>
+
+        <Group
+          gap="sm"
+          align="center"
+          mt="auto"
+          pt="md"
+          style={{
+            borderTop: "1px solid var(--mantine-color-default-border)",
+          }}
+        >
+          <ComplexityDots points={estimate} />
+          {subIssueCount != null && subIssueCount > 0 && (
+            <Tooltip
+              label={`${subIssueCount} sub-issue${subIssueCount !== 1 ? "s" : ""}`}
+            >
+              <Badge variant="light" color="gray" size="xs">
+                {subIssueCount} sub
+              </Badge>
             </Tooltip>
           )}
+          <Group gap="sm" align="center" ml="auto">
+            <LinearIcon url={url} />
+            {isAssignedToViewer ? (
+              <Badge variant="light" color="green" size="sm">
+                Yours
+              </Badge>
+            ) : (
+              <ClaimButton issueId={issueId} assigneeName={assigneeName} />
+            )}
+          </Group>
         </Group>
-        <Text fw={700} c="green" fz="sm">
-          {formatEstimate(estimate, currency)}
-        </Text>
-      </Group>
-
-      <Title order={4} size="h5" lineClamp={2} mb="xs">
-        {title}
-      </Title>
-      <div style={{ marginBottom: "var(--mantine-spacing-md)" }}>
-        <DescriptionContent text={description} lines={3} />
-      </div>
-
-      <Group
-        gap="sm"
-        align="center"
-        mt="auto"
-        pt="md"
-        style={{
-          borderTop: "1px solid var(--mantine-color-default-border)",
-        }}
-      >
-        <ComplexityDots points={estimate} />
-        {subIssueCount != null && subIssueCount > 0 && (
-          <Tooltip
-            label={`${subIssueCount} sub-issue${subIssueCount !== 1 ? "s" : ""}`}
-          >
-            <Badge variant="light" color="gray" size="xs">
-              {subIssueCount} sub
-            </Badge>
-          </Tooltip>
-        )}
-        <Group gap="sm" align="center" ml="auto">
-          <LinearIcon url={url} />
-          {isAssignedToViewer ? (
-            <Badge variant="light" color="green" size="sm">
-              Yours
-            </Badge>
-          ) : (
-            <ClaimButton issueId={issueId} assigneeName={assigneeName} />
-          )}
-        </Group>
-      </Group>
-    </Card>
+      </Card>
+    </HoverLift>
   );
 }

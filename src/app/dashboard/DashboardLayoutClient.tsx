@@ -14,15 +14,118 @@ import {
   MenuItem,
   MenuLabel,
   MenuTarget,
+  Stack,
   Text,
   UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { LogOut } from "lucide-react";
+import { motion } from "motion/react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Logo } from "@/components/Logo";
 import { signOut, useSession } from "@/lib/auth-client";
+
+type NavLink = { href: string; label: string };
+
+const BASE_LINKS: NavLink[] = [
+  { href: "/dashboard", label: "Overview" },
+  { href: "/dashboard/ppts", label: "PPT Board" },
+  { href: "/dashboard/settings", label: "HR Settings" },
+  { href: "/dashboard/documents", label: "Documents" },
+  { href: "/dashboard/welcome-pack", label: "Welcome Pack" },
+];
+
+const ADMIN_LINK: NavLink = { href: "/dashboard/admin", label: "Admin" };
+
+function isActive(pathname: string, href: string) {
+  if (href === "/dashboard") return pathname === "/dashboard";
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+function DesktopNavLink({ link, active }: { link: NavLink; active: boolean }) {
+  return (
+    <UnstyledButton
+      component={Link}
+      href={link.href}
+      style={{
+        position: "relative",
+        padding: "6px 12px",
+        borderRadius: "var(--mantine-radius-md)",
+        transition: "color 0.18s ease",
+      }}
+    >
+      {active && (
+        <motion.span
+          layoutId="dashboard-nav-indicator"
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "var(--mantine-radius-md)",
+            backgroundColor: "var(--mantine-color-blue-light)",
+            zIndex: 0,
+          }}
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        />
+      )}
+      <Text
+        size="sm"
+        fw={500}
+        c={active ? "blue.4" : undefined}
+        style={{ position: "relative", zIndex: 1 }}
+      >
+        {link.label}
+      </Text>
+    </UnstyledButton>
+  );
+}
+
+function MobileNavLink({
+  link,
+  active,
+  onNavigate,
+}: {
+  link: NavLink;
+  active: boolean;
+  onNavigate: () => void;
+}) {
+  return (
+    <UnstyledButton
+      component={Link}
+      href={link.href}
+      onClick={onNavigate}
+      py="xs"
+      px="sm"
+      style={{
+        position: "relative",
+        borderRadius: "var(--mantine-radius-md)",
+        transition: "color 0.18s ease",
+      }}
+    >
+      {active && (
+        <motion.span
+          layoutId="dashboard-nav-indicator-mobile"
+          style={{
+            position: "absolute",
+            inset: 0,
+            borderRadius: "var(--mantine-radius-md)",
+            backgroundColor: "var(--mantine-color-blue-light)",
+            zIndex: 0,
+          }}
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        />
+      )}
+      <Text
+        size="sm"
+        fw={500}
+        c={active ? "blue.4" : undefined}
+        style={{ position: "relative", zIndex: 1 }}
+      >
+        {link.label}
+      </Text>
+    </UnstyledButton>
+  );
+}
 
 export default function DashboardLayoutClient({
   children,
@@ -31,9 +134,12 @@ export default function DashboardLayoutClient({
   children: React.ReactNode;
   isAdmin: boolean;
 }) {
-  const [opened, { toggle }] = useDisclosure();
+  const [opened, { toggle, close }] = useDisclosure();
   const { data: session } = useSession();
   const router = useRouter();
+  const pathname = usePathname();
+
+  const links: NavLink[] = isAdmin ? [...BASE_LINKS, ADMIN_LINK] : BASE_LINKS;
 
   return (
     <AppShell
@@ -69,42 +175,17 @@ export default function DashboardLayoutClient({
               </Link>
             </Group>
 
-            <Group gap={20} visibleFrom="sm">
-              <UnstyledButton component={Link} href="/dashboard">
-                <Text size="sm" fw={500}>
-                  Overview
-                </Text>
-              </UnstyledButton>
-              <UnstyledButton component={Link} href="/dashboard/ppts">
-                <Text size="sm" fw={500}>
-                  PPT Board
-                </Text>
-              </UnstyledButton>
-              <UnstyledButton component={Link} href="/dashboard/settings">
-                <Text size="sm" fw={500}>
-                  HR Settings
-                </Text>
-              </UnstyledButton>
-              <UnstyledButton component={Link} href="/dashboard/documents">
-                <Text size="sm" fw={500}>
-                  Documents
-                </Text>
-              </UnstyledButton>
-              <UnstyledButton component={Link} href="/dashboard/welcome-pack">
-                <Text size="sm" fw={500}>
-                  Welcome Pack
-                </Text>
-              </UnstyledButton>
-              {isAdmin && (
-                <UnstyledButton component={Link} href="/dashboard/admin">
-                  <Text size="sm" fw={500}>
-                    Admin
-                  </Text>
-                </UnstyledButton>
-              )}
+            <Group gap={4} visibleFrom="sm">
+              {links.map((link) => (
+                <DesktopNavLink
+                  key={link.href}
+                  link={link}
+                  active={isActive(pathname, link.href)}
+                />
+              ))}
             </Group>
 
-            <Menu shadow="md" width={200}>
+            <Menu shadow="md" width={200} transitionProps={{ duration: 160 }}>
               <MenuTarget>
                 <UnstyledButton>
                   <Avatar
@@ -135,56 +216,16 @@ export default function DashboardLayoutClient({
       </AppShellHeader>
 
       <AppShellNavbar p="md">
-        <UnstyledButton
-          component={Link}
-          href="/dashboard"
-          py="xs"
-          onClick={toggle}
-        >
-          Overview
-        </UnstyledButton>
-        <UnstyledButton
-          component={Link}
-          href="/dashboard/ppts"
-          py="xs"
-          onClick={toggle}
-        >
-          PPT Board
-        </UnstyledButton>
-        <UnstyledButton
-          component={Link}
-          href="/dashboard/settings"
-          py="xs"
-          onClick={toggle}
-        >
-          HR Settings
-        </UnstyledButton>
-        <UnstyledButton
-          component={Link}
-          href="/dashboard/documents"
-          py="xs"
-          onClick={toggle}
-        >
-          Documents
-        </UnstyledButton>
-        <UnstyledButton
-          component={Link}
-          href="/dashboard/welcome-pack"
-          py="xs"
-          onClick={toggle}
-        >
-          Welcome Pack
-        </UnstyledButton>
-        {isAdmin && (
-          <UnstyledButton
-            component={Link}
-            href="/dashboard/admin"
-            py="xs"
-            onClick={toggle}
-          >
-            Admin
-          </UnstyledButton>
-        )}
+        <Stack gap={4}>
+          {links.map((link) => (
+            <MobileNavLink
+              key={link.href}
+              link={link}
+              active={isActive(pathname, link.href)}
+              onNavigate={close}
+            />
+          ))}
+        </Stack>
       </AppShellNavbar>
 
       <AppShellMain>

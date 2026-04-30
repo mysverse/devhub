@@ -1,11 +1,14 @@
 "use client";
 
-import { Button, Group, Modal, Text } from "@mantine/core";
+import { Button, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { Hand, UserCog } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { toast } from "sonner";
 import { claimIssue } from "@/app/dashboard/actions";
 import { signIn } from "@/lib/auth-client";
+import ConfirmModal from "./ConfirmModal";
 
 type ClaimButtonProps = {
   issueId: string;
@@ -17,13 +20,11 @@ export default function ClaimButton({
   assigneeName,
 }: ClaimButtonProps) {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [opened, { open, close }] = useDisclosure(false);
   const router = useRouter();
 
   async function handleClaim() {
     setLoading(true);
-    setError("");
     const result = await claimIssue(issueId);
 
     if ("reauth" in result && result.reauth) {
@@ -35,65 +36,59 @@ export default function ClaimButton({
     }
 
     if (result.error) {
-      setError(result.error);
+      toast.error(result.error);
       setLoading(false);
-    } else {
-      close();
-      router.refresh();
+      return;
     }
+    toast.success(assigneeName ? "Task reassigned to you" : "Task claimed");
+    close();
+    setLoading(false);
+    router.refresh();
   }
 
   if (assigneeName) {
     return (
       <>
-        <Button size="xs" variant="light" color="yellow" onClick={open}>
+        <Button
+          size="xs"
+          variant="light"
+          color="yellow"
+          leftSection={<UserCog size={12} />}
+          onClick={open}
+        >
           Reassign to me
         </Button>
-        <Modal
+        <ConfirmModal
           opened={opened}
           onClose={close}
-          title="Reassign Task"
-          centered
-          size="sm"
-        >
-          <Text fz="sm" mb="md">
-            This task is currently assigned to <strong>{assigneeName}</strong>.
-            Are you sure you want to reassign it to yourself?
-          </Text>
-          {error && (
-            <Text fz="sm" c="red" mb="sm">
-              {error}
+          onConfirm={handleClaim}
+          title="Reassign task?"
+          description={
+            <Text size="sm" component="span">
+              This task is currently assigned to <strong>{assigneeName}</strong>
+              . Reassigning takes it over for you — they&apos;ll lose any
+              in-progress work attribution.
             </Text>
-          )}
-          <Group justify="flex-end" gap="sm">
-            <Button variant="default" onClick={close} disabled={loading}>
-              Cancel
-            </Button>
-            <Button color="yellow" onClick={handleClaim} loading={loading}>
-              Reassign to me
-            </Button>
-          </Group>
-        </Modal>
+          }
+          tone="warning"
+          confirmLabel="Reassign to me"
+          confirmIcon={<UserCog size={14} />}
+          loading={loading}
+        />
       </>
     );
   }
 
   return (
-    <>
-      {error && (
-        <Text fz="xs" c="red">
-          {error}
-        </Text>
-      )}
-      <Button
-        size="xs"
-        variant="light"
-        color="blue"
-        onClick={handleClaim}
-        loading={loading}
-      >
-        Claim Task
-      </Button>
-    </>
+    <Button
+      size="xs"
+      variant="light"
+      color="blue"
+      leftSection={<Hand size={12} />}
+      onClick={handleClaim}
+      loading={loading}
+    >
+      Claim Task
+    </Button>
   );
 }

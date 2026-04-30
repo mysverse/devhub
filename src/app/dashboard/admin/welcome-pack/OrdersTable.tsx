@@ -262,13 +262,11 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
           </Stack>
         </Group>
 
-        {order.eligibility && (
-          <EligibilityPanel
-            orderId={order.id}
-            eligibility={order.eligibility}
-            wave={order.wave}
-          />
-        )}
+        <EligibilityPanel
+          orderId={order.id}
+          eligibility={order.eligibility}
+          wave={order.wave}
+        />
 
         {order.notes && (
           <Box
@@ -495,17 +493,17 @@ function EligibilityPanel({
   wave,
 }: {
   orderId: string;
-  eligibility: NonNullable<AdminEligibilitySnapshot>;
+  eligibility: AdminEligibilitySnapshot;
   wave: number;
 }) {
   const [live, setLive] = useState<LiveEligibilityResult | null>(null);
   const [loadingLive, setLoadingLive] = useState(false);
 
-  const issues = eligibility.qualifyingIssues;
-  const accent =
-    eligibility.wave === 1
+  const accent = eligibility
+    ? eligibility.wave === 1
       ? "var(--mantine-color-green-7)"
-      : "var(--mantine-color-blue-7)";
+      : "var(--mantine-color-blue-7)"
+    : "var(--mantine-color-gray-6)";
 
   async function handleRecheck() {
     setLoadingLive(true);
@@ -528,12 +526,14 @@ function EligibilityPanel({
     >
       <Group justify="space-between" align="center" mb={4} wrap="wrap" gap="xs">
         <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
-          Eligibility at submission
+          {eligibility ? "Eligibility at submission" : "Eligibility"}
         </Text>
         <Group gap="xs">
-          <Text size="xs" c="dimmed">
-            Captured {formatTimestamp(eligibility.capturedAt)}
-          </Text>
+          {eligibility && (
+            <Text size="xs" c="dimmed">
+              Captured {formatTimestamp(eligibility.capturedAt)}
+            </Text>
+          )}
           <Button
             size="compact-xs"
             variant="subtle"
@@ -544,32 +544,60 @@ function EligibilityPanel({
           </Button>
         </Group>
       </Group>
-      <Group gap="xs" mb={6} wrap="wrap">
-        <Badge
-          variant="light"
-          color={eligibility.wave === 1 ? "green" : "blue"}
-        >
-          Wave {eligibility.wave}
-        </Badge>
-        {wave !== eligibility.wave && (
-          <Badge variant="light" color="orange">
-            Order wave: {wave}
-          </Badge>
-        )}
-        {eligibility.wave === 1 && (
-          <Text size="xs" c="dimmed">
-            Last {eligibility.lookbackMonths} months · {issues.length} issue
-            {issues.length === 1 ? "" : "s"}
-            {eligibility.truncated ? "+" : ""}
-          </Text>
-        )}
-      </Group>
-      <Text size="sm" c="dimmed" mb={issues.length > 0 ? "xs" : 0}>
-        {eligibility.note}
-      </Text>
-      <IssueList issues={issues} />
 
-      {live && <LivePanel result={live} snapshotWave={eligibility.wave} />}
+      {eligibility ? (
+        <>
+          <Group gap="xs" mb={6} wrap="wrap">
+            <Badge
+              variant="light"
+              color={eligibility.wave === 1 ? "green" : "blue"}
+            >
+              Wave {eligibility.wave}
+            </Badge>
+            {wave !== eligibility.wave && (
+              <Badge variant="light" color="orange">
+                Order wave: {wave}
+              </Badge>
+            )}
+            {eligibility.wave === 1 && (
+              <Text size="xs" c="dimmed">
+                Last {eligibility.lookbackMonths} months ·{" "}
+                {eligibility.qualifyingIssues.length} issue
+                {eligibility.qualifyingIssues.length === 1 ? "" : "s"}
+                {eligibility.truncated ? "+" : ""}
+              </Text>
+            )}
+          </Group>
+          <Text
+            size="sm"
+            c="dimmed"
+            mb={eligibility.qualifyingIssues.length > 0 ? "xs" : 0}
+          >
+            {eligibility.note}
+          </Text>
+          <IssueList issues={eligibility.qualifyingIssues} />
+        </>
+      ) : (
+        <>
+          <Group gap="xs" mb={6} wrap="wrap">
+            <Badge variant="light" color="gray">
+              Wave {wave}
+            </Badge>
+            <Text size="xs" c="dimmed">
+              No snapshot captured
+            </Text>
+          </Group>
+          <Text size="sm" c="dimmed">
+            This order pre-dates eligibility snapshotting. Click{" "}
+            <strong>Verify with Linear</strong> to fetch the developer&apos;s
+            current qualifying issues.
+          </Text>
+        </>
+      )}
+
+      {live && (
+        <LivePanel result={live} snapshotWave={eligibility?.wave ?? null} />
+      )}
     </Box>
   );
 }
@@ -579,7 +607,7 @@ function LivePanel({
   snapshotWave,
 }: {
   result: LiveEligibilityResult;
-  snapshotWave: 1 | 2;
+  snapshotWave: 1 | 2 | null;
 }) {
   if (!result.ok) {
     return (
@@ -605,7 +633,8 @@ function LivePanel({
   const snapshot = result.snapshot;
   const issues = snapshot.qualifyingIssues;
   const stillQualifies = snapshot.wave === 1;
-  const drift = stillQualifies !== (snapshotWave === 1);
+  const drift =
+    snapshotWave !== null && stillQualifies !== (snapshotWave === 1);
 
   return (
     <Box

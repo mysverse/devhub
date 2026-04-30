@@ -254,6 +254,7 @@ export default function OrderForm({
                         width={96}
                         height={96}
                         style={{ objectFit: "cover" }}
+                        unoptimized
                       />
                     ) : (
                       <Text size="xs" c="dimmed">

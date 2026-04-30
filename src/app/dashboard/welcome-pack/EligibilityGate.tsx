@@ -96,6 +96,7 @@ export default async function EligibilityGate({
                             alt={item.name}
                             fill
                             style={{ objectFit: "cover", borderRadius: 6 }}
+                            unoptimized
                           />
                         </div>
                       )}

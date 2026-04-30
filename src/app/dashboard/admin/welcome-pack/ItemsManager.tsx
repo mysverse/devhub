@@ -112,6 +112,7 @@ export default function ItemsManager({
                       width={80}
                       height={80}
                       style={{ objectFit: "cover" }}
+                      unoptimized
                     />
                   ) : (
                     <Text size="xs" c="dimmed">
@@ -393,6 +394,7 @@ function ItemEditorModal({
                   width={64}
                   height={64}
                   style={{ borderRadius: 6, objectFit: "cover" }}
+                  unoptimized
                 />
               )}
             </Group>
@@ -429,6 +431,7 @@ function ItemEditorModal({
                     width={64}
                     height={64}
                     style={{ borderRadius: 6, objectFit: "cover" }}
+                    unoptimized
                   />
                 )}
               </Group>

@@ -35,38 +35,44 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
-  // Re-check eligibility on the server.
-  let wave: 1 | 2;
-  try {
-    ({ wave } = await assertEligibleForWelcomePack(userId));
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
+  // Load pack and existing-order check in parallel — saves a round trip and
+  // gives us `wave2Open` to feed into the eligibility check (avoiding a
+  // duplicate `welcomePack.findFirst`).
+  const [existing, pack] = await Promise.all([
+    prisma.welcomePackOrder.findUnique({
+      where: { userId },
+      select: { id: true },
+    }),
+    prisma.welcomePack.findFirst({
+      where: { isActive: true },
+      include: {
+        items: {
+          where: { isActive: true },
+          select: {
+            id: true,
+            name: true,
+            requiresSize: true,
+            sizeOptions: true,
+          },
+        },
+      },
+    }),
+  ]);
 
-  const existing = await prisma.welcomePackOrder.findUnique({
-    where: { userId },
-    select: { id: true },
-  });
   if (existing) {
     return { error: "You already have a welcome pack order on file." };
   }
-
-  const pack = await prisma.welcomePack.findFirst({
-    where: { isActive: true },
-    include: {
-      items: {
-        where: { isActive: true },
-        select: {
-          id: true,
-          name: true,
-          requiresSize: true,
-          sizeOptions: true,
-        },
-      },
-    },
-  });
   if (!pack) {
     return { error: "Welcome pack is not configured yet." };
+  }
+
+  // Re-check eligibility on the server, reusing the wave2Open flag we just
+  // loaded.
+  let wave: 1 | 2;
+  try {
+    ({ wave } = await assertEligibleForWelcomePack(userId, pack.wave2Open));
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 
   const itemMap = new Map(pack.items.map((i) => [i.id, i]));

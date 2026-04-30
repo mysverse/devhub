@@ -21,12 +21,14 @@ export default async function EligibilityGate({
   userId,
   pack,
   defaults,
+  wave2Open,
 }: {
   userId: string;
   pack: OrderFormPack;
   defaults: OrderFormDefaults;
+  wave2Open: boolean;
 }) {
-  const eligibility = await checkWelcomePackEligibility(userId);
+  const eligibility = await checkWelcomePackEligibility(userId, wave2Open);
 
   if (eligibility.eligible && eligibility.wave) {
     return (

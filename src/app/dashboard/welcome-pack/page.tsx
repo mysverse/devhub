@@ -295,7 +295,12 @@ export default async function WelcomePackPage() {
       </Group>
 
       <Suspense fallback={<EligibilitySkeleton />}>
-        <EligibilityGate userId={userId} pack={formPack} defaults={defaults} />
+        <EligibilityGate
+          userId={userId}
+          pack={formPack}
+          defaults={defaults}
+          wave2Open={pack.wave2Open}
+        />
       </Suspense>
     </FadeIn>
   );

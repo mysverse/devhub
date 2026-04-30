@@ -29,11 +29,21 @@ const WAVE_1_LOOKBACK_MONTHS = 6;
  */
 export async function checkWelcomePackEligibility(
   userId: string,
+  /**
+   * Pre-loaded `wave2Open` from the caller's `WelcomePack` query. Pass it
+   * through to avoid re-querying Postgres just to read one boolean. Falls back
+   * to a small `findFirst({ select: { wave2Open: true } })` only when omitted.
+   */
+  wave2Open?: boolean,
 ): Promise<WelcomePackEligibility> {
-  const pack = await prisma.welcomePack.findFirst({
-    where: { isActive: true },
-    select: { wave2Open: true },
-  });
+  let resolvedWave2Open = wave2Open;
+  if (resolvedWave2Open === undefined) {
+    const pack = await prisma.welcomePack.findFirst({
+      where: { isActive: true },
+      select: { wave2Open: true },
+    });
+    resolvedWave2Open = pack?.wave2Open ?? false;
+  }
 
   // Try wave 1 first via Linear OAuth.
   let wave1Hit = false;
@@ -64,7 +74,7 @@ export async function checkWelcomePackEligibility(
     return { eligible: true, wave: 1 };
   }
 
-  if (pack?.wave2Open) {
+  if (resolvedWave2Open) {
     return { eligible: true, wave: 2 };
   }
 
@@ -93,8 +103,9 @@ export async function checkWelcomePackEligibility(
  */
 export async function assertEligibleForWelcomePack(
   userId: string,
+  wave2Open?: boolean,
 ): Promise<{ wave: 1 | 2 }> {
-  const result = await checkWelcomePackEligibility(userId);
+  const result = await checkWelcomePackEligibility(userId, wave2Open);
   if (!result.eligible || result.wave === null) {
     throw new Error(result.reason ?? "Not eligible for the welcome pack");
   }

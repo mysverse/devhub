@@ -2,14 +2,26 @@
 
 import { Box, Group, Stack, Text } from "@mantine/core";
 import type { WelcomePackOrderStatus } from "@prisma/client";
-import { Check, CircleDashed, X } from "lucide-react";
+import {
+  Check,
+  CircleDashed,
+  Inbox,
+  PackageCheck,
+  Truck,
+  X,
+} from "lucide-react";
 import { motion } from "motion/react";
+import type { ComponentType } from "react";
 
-const ACTIVE_STEPS: { key: WelcomePackOrderStatus; label: string }[] = [
-  { key: "PENDING", label: "Submitted" },
-  { key: "APPROVED", label: "Approved" },
-  { key: "SHIPPED", label: "Shipped" },
-  { key: "DELIVERED", label: "Delivered" },
+const ACTIVE_STEPS: {
+  key: WelcomePackOrderStatus;
+  label: string;
+  icon: ComponentType<{ size?: number; strokeWidth?: number }>;
+}[] = [
+  { key: "PENDING", label: "Submitted", icon: Inbox },
+  { key: "APPROVED", label: "Approved", icon: PackageCheck },
+  { key: "SHIPPED", label: "Shipped", icon: Truck },
+  { key: "DELIVERED", label: "Delivered", icon: Check },
 ];
 
 const STATUS_INDEX: Record<WelcomePackOrderStatus, number> = {
@@ -30,25 +42,31 @@ export default function OrderStatusTimeline({
 
   if (isTerminal) {
     return (
-      <Group
-        gap="sm"
-        p="md"
-        style={{
-          backgroundColor: "var(--mantine-color-dark-6)",
-          borderRadius: "var(--mantine-radius-md)",
-          borderLeft: `3px solid var(--mantine-color-${status === "REJECTED" ? "red" : "gray"}-7)`,
-        }}
+      <motion.div
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
       >
-        <X size={20} color="var(--mantine-color-gray-5)" />
-        <Stack gap={0}>
-          <Text fw={600}>
-            {status === "REJECTED" ? "Order rejected" : "Order cancelled"}
-          </Text>
-          <Text size="sm" c="dimmed">
-            This order won&apos;t be fulfilled.
-          </Text>
-        </Stack>
-      </Group>
+        <Group
+          gap="sm"
+          p="md"
+          style={{
+            backgroundColor: "var(--mantine-color-dark-6)",
+            borderRadius: "var(--mantine-radius-md)",
+            borderLeft: `3px solid var(--mantine-color-${status === "REJECTED" ? "red" : "gray"}-7)`,
+          }}
+        >
+          <X size={20} color="var(--mantine-color-gray-5)" />
+          <Stack gap={0}>
+            <Text fw={600}>
+              {status === "REJECTED" ? "Order rejected" : "Order cancelled"}
+            </Text>
+            <Text size="sm" c="dimmed">
+              This order won&apos;t be fulfilled.
+            </Text>
+          </Stack>
+        </Group>
+      </motion.div>
     );
   }
 
@@ -61,6 +79,7 @@ export default function OrderStatusTimeline({
           const isComplete = idx <= currentIndex;
           const isCurrent = idx === currentIndex;
           const isLast = idx === ACTIVE_STEPS.length - 1;
+          const Icon = step.icon;
           return (
             <Box key={step.key} style={{ flex: isLast ? 0 : 1, minWidth: 0 }}>
               <Group gap="xs" wrap="nowrap" align="center">
@@ -73,8 +92,8 @@ export default function OrderStatusTimeline({
                   }
                   transition={{ type: "spring", stiffness: 240, damping: 22 }}
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 32,
+                    height: 32,
                     borderRadius: "50%",
                     display: "flex",
                     alignItems: "center",
@@ -84,10 +103,35 @@ export default function OrderStatusTimeline({
                       : "var(--mantine-color-dark-5)",
                     color: "white",
                     flexShrink: 0,
+                    position: "relative",
+                    boxShadow: isCurrent
+                      ? "0 0 0 4px rgba(34, 139, 230, 0.18)"
+                      : "none",
                   }}
                 >
+                  {isCurrent && (
+                    <motion.div
+                      aria-hidden
+                      animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}
+                      transition={{
+                        duration: 1.6,
+                        repeat: Infinity,
+                        ease: "easeOut",
+                      }}
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        borderRadius: "50%",
+                        backgroundColor: "var(--mantine-color-blue-6)",
+                      }}
+                    />
+                  )}
                   {isComplete ? (
-                    <Check size={16} strokeWidth={3} />
+                    isCurrent ? (
+                      <Icon size={16} strokeWidth={2.4} />
+                    ) : (
+                      <Check size={16} strokeWidth={3} />
+                    )
                   ) : (
                     <CircleDashed size={16} />
                   )}
@@ -108,7 +152,11 @@ export default function OrderStatusTimeline({
                       animate={{
                         width: idx < currentIndex ? "100%" : "0%",
                       }}
-                      transition={{ duration: 0.5, ease: "easeOut" }}
+                      transition={{
+                        duration: 0.55,
+                        ease: "easeOut",
+                        delay: idx * 0.06,
+                      }}
                       style={{
                         height: "100%",
                         backgroundColor: "var(--mantine-color-blue-6)",
@@ -121,7 +169,7 @@ export default function OrderStatusTimeline({
                 size="xs"
                 fw={isCurrent ? 600 : 400}
                 c={isComplete ? undefined : "dimmed"}
-                mt={6}
+                mt={8}
                 style={{ whiteSpace: "nowrap" }}
               >
                 {step.label}

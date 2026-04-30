@@ -1,6 +1,8 @@
 "use client";
 
-import { Modal, Text } from "@mantine/core";
+import { Box, Modal, Stack, Text, ThemeIcon } from "@mantine/core";
+import { Ruler } from "lucide-react";
+import { motion } from "motion/react";
 
 export default function SizeChartModal({
   opened,
@@ -17,19 +19,51 @@ export default function SizeChartModal({
     <Modal
       opened={opened}
       onClose={onClose}
-      title={`${itemName} — Size chart`}
+      title={
+        <Stack gap={2}>
+          <Text fw={600}>{itemName} — Size chart</Text>
+          {imageUrl && (
+            <Text size="xs" c="dimmed">
+              Measurements in centimetres unless noted.
+            </Text>
+          )}
+        </Stack>
+      }
       size="lg"
       centered
+      radius="md"
+      overlayProps={{ blur: 4 }}
     >
       {imageUrl ? (
-        // biome-ignore lint/performance/noImgElement: uploaded charts have unknown aspect ratio; <img> preserves natural proportions
-        <img
-          src={imageUrl}
-          alt={`${itemName} size chart`}
-          style={{ width: "100%", height: "auto", display: "block" }}
-        />
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3, ease: "easeOut" }}
+        >
+          <Box
+            style={{
+              borderRadius: "var(--mantine-radius-md)",
+              overflow: "hidden",
+              backgroundColor: "var(--mantine-color-dark-7)",
+            }}
+          >
+            {/* biome-ignore lint/performance/noImgElement: uploaded charts have unknown aspect ratio; <img> preserves natural proportions */}
+            <img
+              src={imageUrl}
+              alt={`${itemName} size chart`}
+              style={{ width: "100%", height: "auto", display: "block" }}
+            />
+          </Box>
+        </motion.div>
       ) : (
-        <Text c="dimmed">No size chart uploaded for this item yet.</Text>
+        <Stack align="center" gap="sm" py="xl">
+          <ThemeIcon size={56} radius="xl" variant="light" color="gray">
+            <Ruler size={26} />
+          </ThemeIcon>
+          <Text c="dimmed" ta="center">
+            No size chart uploaded for this item yet.
+          </Text>
+        </Stack>
       )}
     </Modal>
   );

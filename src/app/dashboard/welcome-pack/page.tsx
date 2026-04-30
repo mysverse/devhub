@@ -11,7 +11,7 @@ import {
 import type { WelcomePackOrderStatus } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { FadeIn } from "@/components/animations";
+import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { countryNameFromCode } from "@/lib/countries";
 import prisma from "@/lib/prisma";
@@ -20,6 +20,7 @@ import CancelOrderButton from "./CancelOrderButton";
 import EligibilityGate from "./EligibilityGate";
 import type { OrderFormDefaults, OrderFormPack } from "./OrderForm";
 import OrderStatusTimeline from "./OrderStatusTimeline";
+import TrackingCard from "./TrackingCard";
 
 const STATUS_COPY: Record<
   WelcomePackOrderStatus,
@@ -115,104 +116,90 @@ export default async function WelcomePackPage() {
           </Badge>
         </Group>
 
-        <Card withBorder radius="md" p="lg" mb="md">
-          <Stack gap="lg">
-            <Stack gap="xs">
-              <Title order={4}>{status.title}</Title>
-              <Text>{status.body}</Text>
-            </Stack>
-
-            <OrderStatusTimeline status={existingOrder.status} />
-
-            {existingOrder.rejectionReason && (
-              <Alert color="red" variant="light">
-                {existingOrder.rejectionReason}
-              </Alert>
-            )}
-
-            {existingOrder.trackingNumber && (
-              <Card
-                withBorder
-                radius="md"
-                p="md"
-                bg="var(--mantine-color-dark-7)"
-              >
+        <StaggerContainer>
+          <StaggerItem>
+            <Card withBorder radius="md" p="lg" mb="md">
+              <Stack gap="lg">
                 <Stack gap="xs">
-                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                    Tracking
-                  </Text>
-                  {existingOrder.trackingUrl ? (
-                    <a
-                      href={existingOrder.trackingUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      style={{ color: "var(--mantine-color-blue-4)" }}
-                    >
-                      {existingOrder.trackingNumber}
-                    </a>
-                  ) : (
-                    <Text>{existingOrder.trackingNumber}</Text>
-                  )}
+                  <Title order={4}>{status.title}</Title>
+                  <Text>{status.body}</Text>
                 </Stack>
-              </Card>
-            )}
 
-            {existingOrder.status === "PENDING" && <CancelOrderButton />}
-          </Stack>
-        </Card>
+                <OrderStatusTimeline status={existingOrder.status} />
 
-        <Card withBorder radius="md" p="lg" mb="md">
-          <Stack gap="md">
-            <Title order={5}>Order summary</Title>
+                {existingOrder.rejectionReason && (
+                  <Alert color="red" variant="light">
+                    {existingOrder.rejectionReason}
+                  </Alert>
+                )}
 
-            <Stack gap={4}>
-              <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                ID card name
-              </Text>
-              <Text>{existingOrder.idCardName}</Text>
-            </Stack>
+                {existingOrder.trackingNumber && (
+                  <TrackingCard
+                    trackingNumber={existingOrder.trackingNumber}
+                    trackingUrl={existingOrder.trackingUrl}
+                  />
+                )}
 
-            <Stack gap={4}>
-              <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                Shipping to
-              </Text>
-              <Text size="sm" fw={500}>
-                {existingOrder.recipientName}
-              </Text>
-              <Text size="sm" c="dimmed">
-                {existingOrder.phone}
-              </Text>
-              <Text size="sm" style={{ whiteSpace: "pre-line" }}>
-                {[
-                  existingOrder.addressLine1,
-                  existingOrder.addressLine2,
-                  [existingOrder.city, existingOrder.stateProvince]
-                    .filter(Boolean)
-                    .join(", "),
-                  [existingOrder.postalCode, countryName]
-                    .filter(Boolean)
-                    .join(" "),
-                ]
-                  .filter(Boolean)
-                  .join("\n")}
-              </Text>
-            </Stack>
+                {existingOrder.status === "PENDING" && <CancelOrderButton />}
+              </Stack>
+            </Card>
+          </StaggerItem>
 
-            <Stack gap={4}>
-              <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                Items
-              </Text>
-              <Group gap="xs" wrap="wrap">
-                {existingOrder.selections.map((s) => (
-                  <Badge key={s.id} variant="light" color="gray" size="md">
-                    {s.item.name}
-                    {s.selectedSize ? ` · ${s.selectedSize}` : ""}
-                  </Badge>
-                ))}
-              </Group>
-            </Stack>
-          </Stack>
-        </Card>
+          <StaggerItem>
+            <Card withBorder radius="md" p="lg" mb="md">
+              <Stack gap="md">
+                <Title order={5}>Order summary</Title>
+
+                <Stack gap={4}>
+                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+                    ID card name
+                  </Text>
+                  <Text>{existingOrder.idCardName}</Text>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+                    Shipping to
+                  </Text>
+                  <Text size="sm" fw={500}>
+                    {existingOrder.recipientName}
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    {existingOrder.phone}
+                  </Text>
+                  <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                    {[
+                      existingOrder.addressLine1,
+                      existingOrder.addressLine2,
+                      [existingOrder.city, existingOrder.stateProvince]
+                        .filter(Boolean)
+                        .join(", "),
+                      [existingOrder.postalCode, countryName]
+                        .filter(Boolean)
+                        .join(" "),
+                    ]
+                      .filter(Boolean)
+                      .join("\n")}
+                  </Text>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+                    Items
+                  </Text>
+                  <Group gap="xs" wrap="wrap">
+                    {existingOrder.selections.map((s) => (
+                      <Badge key={s.id} variant="light" color="gray" size="md">
+                        {s.item.name}
+                        {s.selectedSize ? ` · ${s.selectedSize}` : ""}
+                      </Badge>
+                    ))}
+                  </Group>
+                </Stack>
+              </Stack>
+            </Card>
+          </StaggerItem>
+        </StaggerContainer>
       </FadeIn>
     );
   }

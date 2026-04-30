@@ -1,21 +1,20 @@
 import {
   Alert,
   Card,
-  List,
-  ListItem,
-  SimpleGrid,
+  Group,
   Stack,
   Text,
+  ThemeIcon,
   Title,
 } from "@mantine/core";
-import Image from "next/image";
-import { StaggerContainer, StaggerItem } from "@/components/animations";
+import { Hourglass, Sparkles } from "lucide-react";
 import LinkButton from "@/components/LinkButton";
 import { checkWelcomePackEligibility } from "@/lib/welcome-pack-eligibility";
 import OrderForm, {
   type OrderFormDefaults,
   type OrderFormPack,
 } from "./OrderForm";
+import PackItemsPreview from "./PackItemsPreview";
 
 export default async function EligibilityGate({
   userId,
@@ -43,21 +42,32 @@ export default async function EligibilityGate({
   return (
     <Stack gap="xl">
       <Card withBorder radius="md" p="lg">
-        <Stack gap="sm">
+        <Stack gap="md">
           <Title order={4}>Eligibility</Title>
           <Text c="dimmed">
             We send welcome packs in waves. Here&apos;s how it works:
           </Text>
-          <List spacing="xs" size="sm">
-            <ListItem>
-              <strong>Wave 1 (now):</strong> any developer with a Linear issue
-              completed in the last 6 months.
-            </ListItem>
-            <ListItem>
-              <strong>Wave 2 (later):</strong> opens to everyone else when
-              admins announce it.
-            </ListItem>
-          </List>
+
+          <Stack gap="sm">
+            <WaveRow
+              wave={1}
+              icon={<Sparkles size={18} />}
+              color="teal"
+              title="Wave 1 — Open now"
+              body="Any developer with a Linear issue completed in the last 6 months."
+            />
+            <WaveRow
+              wave={2}
+              icon={<Hourglass size={18} />}
+              color={wave2Open ? "blue" : "gray"}
+              title={wave2Open ? "Wave 2 — Open now" : "Wave 2 — Coming later"}
+              body={
+                wave2Open
+                  ? "Open to everyone else."
+                  : "Opens to everyone else when admins announce it."
+              }
+            />
+          </Stack>
 
           {eligibility.needsLinearReauth ? (
             <Alert color="yellow" mt="xs" title="Reconnect Linear">
@@ -85,37 +95,61 @@ export default async function EligibilityGate({
       {pack.items.length > 0 && (
         <Stack gap="md">
           <Title order={4}>What&apos;s in the pack</Title>
-          <StaggerContainer>
-            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
-              {pack.items.map((item) => (
-                <StaggerItem key={item.id}>
-                  <Card withBorder radius="md" p="md" h="100%">
-                    <Stack gap="xs">
-                      {item.imageBlobUrl && (
-                        <div style={{ position: "relative", height: 160 }}>
-                          <Image
-                            src={item.imageBlobUrl}
-                            alt={item.name}
-                            fill
-                            style={{ objectFit: "cover", borderRadius: 6 }}
-                            unoptimized
-                          />
-                        </div>
-                      )}
-                      <Text fw={600}>{item.name}</Text>
-                      {item.description && (
-                        <Text size="sm" c="dimmed">
-                          {item.description}
-                        </Text>
-                      )}
-                    </Stack>
-                  </Card>
-                </StaggerItem>
-              ))}
-            </SimpleGrid>
-          </StaggerContainer>
+          <Text c="dimmed" size="sm" mt={-6}>
+            A preview of what eligible developers get to claim.
+          </Text>
+          <PackItemsPreview
+            items={pack.items.map((item) => ({
+              id: item.id,
+              name: item.name,
+              description: item.description,
+              imageBlobUrl: item.imageBlobUrl,
+            }))}
+          />
         </Stack>
       )}
     </Stack>
+  );
+}
+
+function WaveRow({
+  icon,
+  color,
+  title,
+  body,
+}: {
+  wave: 1 | 2;
+  icon: React.ReactNode;
+  color: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <Group
+      align="flex-start"
+      wrap="nowrap"
+      gap="md"
+      p="sm"
+      style={{
+        backgroundColor: "var(--mantine-color-dark-7)",
+        borderRadius: "var(--mantine-radius-md)",
+      }}
+    >
+      <ThemeIcon
+        color={color}
+        variant="light"
+        size={36}
+        radius="md"
+        style={{ flexShrink: 0 }}
+      >
+        {icon}
+      </ThemeIcon>
+      <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
+        <Text fw={600}>{title}</Text>
+        <Text size="sm" c="dimmed">
+          {body}
+        </Text>
+      </Stack>
+    </Group>
   );
 }

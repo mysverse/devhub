@@ -9,11 +9,16 @@ import {
 } from "@/lib/blob-storage";
 import { detectImageMimeType } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
+import {
+  WELCOME_PACK_ASSET_KINDS,
+  type WelcomePackAssetKind,
+  welcomePackAssetUrl,
+} from "@/lib/welcome-pack-assets";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 
-const KINDS = ["item-image", "size-chart", "id-card-template"] as const;
-type Kind = (typeof KINDS)[number];
+const KIND_SET = new Set<string>(WELCOME_PACK_ASSET_KINDS);
+type Kind = WelcomePackAssetKind;
 
 export async function POST(req: Request) {
   const { userId } = await getSession();
@@ -40,7 +45,7 @@ export async function POST(req: Request) {
   const idRaw = formData.get("id");
   const file = formData.get("file");
 
-  if (typeof kindRaw !== "string" || !KINDS.includes(kindRaw as Kind)) {
+  if (typeof kindRaw !== "string" || !KIND_SET.has(kindRaw)) {
     return NextResponse.json({ error: "Invalid upload kind" }, { status: 400 });
   }
   const kind = kindRaw as Kind;
@@ -166,5 +171,11 @@ export async function POST(req: Request) {
     await deleteWelcomePackBlob(previousUrl);
   }
 
-  return NextResponse.json({ url, width, height });
+  // Return the proxy URL (with cache buster) so clients can render the new
+  // image immediately without revealing the underlying private blob URL.
+  return NextResponse.json({
+    url: welcomePackAssetUrl(kind, idRaw, Date.now()),
+    width,
+    height,
+  });
 }

@@ -60,8 +60,9 @@ function extForContentType(contentType: string): string {
 }
 
 /**
- * Upload a welcome pack item image (product photo). Stored under a public
- * access path so the user-facing pages can render via direct blob URL.
+ * Upload a welcome pack item image (product photo). Stored privately and
+ * served to authenticated dashboard users via the asset proxy at
+ * /api/welcome-pack/asset/item-image/{itemId}.
  * Random suffix lets re-uploads coexist while we delete the previous URL.
  */
 export async function uploadWelcomePackItemImage(
@@ -74,7 +75,7 @@ export async function uploadWelcomePackItemImage(
     `welcome-pack/items/${itemId}/image.${ext}`,
     buffer,
     {
-      access: "public",
+      access: "private",
       addRandomSuffix: true,
       contentType,
     },
@@ -83,7 +84,7 @@ export async function uploadWelcomePackItemImage(
 }
 
 /**
- * Upload a welcome pack item size chart image.
+ * Upload a welcome pack item size chart image (private; served via proxy).
  */
 export async function uploadWelcomePackSizeChart(
   itemId: string,
@@ -95,7 +96,7 @@ export async function uploadWelcomePackSizeChart(
     `welcome-pack/items/${itemId}/size-chart.${ext}`,
     buffer,
     {
-      access: "public",
+      access: "private",
       addRandomSuffix: true,
       contentType,
     },
@@ -104,7 +105,7 @@ export async function uploadWelcomePackSizeChart(
 }
 
 /**
- * Upload the welcome pack ID card template (background used for the name overlay).
+ * Upload the welcome pack ID card template (private; served via proxy).
  */
 export async function uploadWelcomePackIdCardTemplate(
   packId: string,
@@ -116,7 +117,7 @@ export async function uploadWelcomePackIdCardTemplate(
     `welcome-pack/${packId}/id-card-template.${ext}`,
     buffer,
     {
-      access: "public",
+      access: "private",
       addRandomSuffix: true,
       contentType,
     },

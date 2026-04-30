@@ -12,6 +12,7 @@ import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
+import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
 import OrdersTable, { type AdminOrderRow } from "./OrdersTable";
 import PackConfig, { type PackConfigData } from "./PackConfig";
@@ -52,7 +53,9 @@ export default async function AdminWelcomePackPage() {
         description: pack.description,
         isActive: pack.isActive,
         wave2Open: pack.wave2Open,
-        idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl,
+        idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl
+          ? welcomePackAssetUrl("id-card-template", pack.id, pack.updatedAt)
+          : null,
         idCardWidth: pack.idCardWidth,
         idCardHeight: pack.idCardHeight,
         idCardNameX: pack.idCardNameX,
@@ -81,9 +84,13 @@ export default async function AdminWelcomePackPage() {
     id: i.id,
     name: i.name,
     description: i.description,
-    imageBlobUrl: i.imageBlobUrl,
+    imageBlobUrl: i.imageBlobUrl
+      ? welcomePackAssetUrl("item-image", i.id, i.updatedAt)
+      : null,
     requiresSize: i.requiresSize,
-    sizeChartBlobUrl: i.sizeChartBlobUrl,
+    sizeChartBlobUrl: i.sizeChartBlobUrl
+      ? welcomePackAssetUrl("size-chart", i.id, i.updatedAt)
+      : null,
     sizeOptions: i.sizeOptions,
     displayOrder: i.displayOrder,
     isActive: i.isActive,

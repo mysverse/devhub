@@ -15,6 +15,7 @@ import { FadeIn } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { countryNameFromCode } from "@/lib/countries";
 import prisma from "@/lib/prisma";
+import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import CancelOrderButton from "./CancelOrderButton";
 import EligibilityGate from "./EligibilityGate";
 import type { OrderFormDefaults, OrderFormPack } from "./OrderForm";
@@ -243,7 +244,9 @@ export default async function WelcomePackPage() {
     id: pack.id,
     name: pack.name,
     description: pack.description,
-    idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl,
+    idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl
+      ? welcomePackAssetUrl("id-card-template", pack.id, pack.updatedAt)
+      : null,
     idCardWidth: pack.idCardWidth,
     idCardHeight: pack.idCardHeight,
     idCardNameX: pack.idCardNameX,
@@ -255,9 +258,13 @@ export default async function WelcomePackPage() {
       id: item.id,
       name: item.name,
       description: item.description,
-      imageBlobUrl: item.imageBlobUrl,
+      imageBlobUrl: item.imageBlobUrl
+        ? welcomePackAssetUrl("item-image", item.id, item.updatedAt)
+        : null,
       requiresSize: item.requiresSize,
-      sizeChartBlobUrl: item.sizeChartBlobUrl,
+      sizeChartBlobUrl: item.sizeChartBlobUrl
+        ? welcomePackAssetUrl("size-chart", item.id, item.updatedAt)
+        : null,
       sizeOptions: item.sizeOptions,
     })),
   };

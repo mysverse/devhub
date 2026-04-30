@@ -20,7 +20,10 @@ import {
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
-import IdCardPreview from "@/app/dashboard/welcome-pack/IdCardPreview";
+import IdCardPreview, {
+  type IdCardAlign,
+  type IdCardWrapMode,
+} from "@/app/dashboard/welcome-pack/IdCardPreview";
 import { saveWelcomePackConfig, type WelcomePackConfigInput } from "./actions";
 
 export type PackConfigData = {
@@ -37,6 +40,10 @@ export type PackConfigData = {
   idCardFontSize: number | null;
   idCardFontColor: string | null;
   idCardFontFamily: string | null;
+  idCardNameMaxWidth: number | null;
+  idCardNameMaxHeight: number | null;
+  idCardNameAlign: IdCardAlign | null;
+  idCardNameWrapMode: IdCardWrapMode | null;
 };
 
 const FONT_FAMILIES = [
@@ -82,9 +89,23 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
   );
   const [templateUrl, setTemplateUrl] = useState(pack.idCardTemplateBlobUrl);
 
+  const [idCardNameMaxWidth, setIdCardNameMaxWidth] = useState<number | "">(
+    pack.idCardNameMaxWidth ?? "",
+  );
+  const [idCardNameMaxHeight, setIdCardNameMaxHeight] = useState<number | "">(
+    pack.idCardNameMaxHeight ?? "",
+  );
+  const [idCardNameAlign, setIdCardNameAlign] = useState<IdCardAlign>(
+    pack.idCardNameAlign ?? "left",
+  );
+  const [idCardNameWrapMode, setIdCardNameWrapMode] = useState<IdCardWrapMode>(
+    pack.idCardNameWrapMode ?? "nowrap",
+  );
+
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [previewName, setPreviewName] = useState("Sample Name");
+  const [showBoxOutline, setShowBoxOutline] = useState(true);
 
   async function handleSave() {
     setSaving(true);
@@ -101,6 +122,12 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
       idCardFontSize: idCardFontSize === "" ? null : Number(idCardFontSize),
       idCardFontColor,
       idCardFontFamily,
+      idCardNameMaxWidth:
+        idCardNameMaxWidth === "" ? null : Number(idCardNameMaxWidth),
+      idCardNameMaxHeight:
+        idCardNameMaxHeight === "" ? null : Number(idCardNameMaxHeight),
+      idCardNameAlign,
+      idCardNameWrapMode,
     };
     const res = await saveWelcomePackConfig(input);
     setSaving(false);
@@ -301,11 +328,69 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
                 onChange={(v) => setIdCardFontFamily(v ?? "monospace")}
               />
 
+              <Group grow>
+                <NumberInput
+                  label="Name box width (px)"
+                  description="Optional. Width of the name area for wrapping/shrinking."
+                  value={idCardNameMaxWidth}
+                  onChange={(v) =>
+                    setIdCardNameMaxWidth(typeof v === "number" ? v : "")
+                  }
+                  min={1}
+                  placeholder="Unbounded"
+                />
+                <NumberInput
+                  label="Name box height (px)"
+                  description="Optional. Caps how tall wrapped text can grow."
+                  value={idCardNameMaxHeight}
+                  onChange={(v) =>
+                    setIdCardNameMaxHeight(typeof v === "number" ? v : "")
+                  }
+                  min={1}
+                  placeholder="Unbounded"
+                />
+              </Group>
+              <Group grow>
+                <Select
+                  label="Alignment"
+                  data={[
+                    { value: "left", label: "Left" },
+                    { value: "center", label: "Center" },
+                    { value: "right", label: "Right" },
+                  ]}
+                  value={idCardNameAlign}
+                  onChange={(v) =>
+                    setIdCardNameAlign((v as IdCardAlign) ?? "left")
+                  }
+                  allowDeselect={false}
+                />
+                <Select
+                  label="Long names"
+                  description="How to handle names that exceed the box."
+                  data={[
+                    { value: "nowrap", label: "Single line (overflow)" },
+                    { value: "truncate", label: "Single line · ellipsis" },
+                    { value: "wrap", label: "Wrap to multiple lines" },
+                    { value: "shrink", label: "Shrink to fit" },
+                  ]}
+                  value={idCardNameWrapMode}
+                  onChange={(v) =>
+                    setIdCardNameWrapMode((v as IdCardWrapMode) ?? "nowrap")
+                  }
+                  allowDeselect={false}
+                />
+              </Group>
+
               <TextInput
                 label="Preview name"
                 description="Type a sample name to see the overlay"
                 value={previewName}
                 onChange={(e) => setPreviewName(e.currentTarget.value)}
+              />
+              <Switch
+                label="Show name-box outline in preview"
+                checked={showBoxOutline}
+                onChange={(e) => setShowBoxOutline(e.currentTarget.checked)}
               />
             </Stack>
 
@@ -321,6 +406,17 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
                 fontSize={idCardFontSize === "" ? null : Number(idCardFontSize)}
                 fontColor={idCardFontColor}
                 fontFamily={idCardFontFamily}
+                nameMaxWidth={
+                  idCardNameMaxWidth === "" ? null : Number(idCardNameMaxWidth)
+                }
+                nameMaxHeight={
+                  idCardNameMaxHeight === ""
+                    ? null
+                    : Number(idCardNameMaxHeight)
+                }
+                nameAlign={idCardNameAlign}
+                nameWrapMode={idCardNameWrapMode}
+                showBoxOutline={showBoxOutline}
                 name={previewName}
               />
               <Text size="xs" c="dimmed">

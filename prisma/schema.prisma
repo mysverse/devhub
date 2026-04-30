@@ -321,6 +321,15 @@ model WelcomePack {
   idCardFontSize        Int?
   idCardFontColor       String?
   idCardFontFamily      String?
+  // Text-box constraints + behaviour for long names.
+  // Width/height in template px (null = unbounded).
+  // Align: "left" | "center" | "right" (default "left").
+  // WrapMode: "nowrap" (single line, may overflow) | "truncate" (single line + ellipsis)
+  //         | "wrap" (multi-line within box) | "shrink" (single line, font auto-shrinks).
+  idCardNameMaxWidth    Int?
+  idCardNameMaxHeight   Int?
+  idCardNameAlign       String?
+  idCardNameWrapMode    String?
 
   items     WelcomePackItem[]
   orders    WelcomePackOrder[]

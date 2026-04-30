@@ -254,6 +254,12 @@ export default async function WelcomePackPage() {
     idCardFontSize: pack.idCardFontSize,
     idCardFontColor: pack.idCardFontColor,
     idCardFontFamily: pack.idCardFontFamily,
+    idCardNameMaxWidth: pack.idCardNameMaxWidth,
+    idCardNameMaxHeight: pack.idCardNameMaxHeight,
+    idCardNameAlign:
+      (pack.idCardNameAlign as OrderFormPack["idCardNameAlign"]) ?? null,
+    idCardNameWrapMode:
+      (pack.idCardNameWrapMode as OrderFormPack["idCardNameWrapMode"]) ?? null,
     items: pack.items.map((item) => ({
       id: item.id,
       name: item.name,

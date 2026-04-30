@@ -63,6 +63,13 @@ export default async function AdminWelcomePackPage() {
         idCardFontSize: pack.idCardFontSize,
         idCardFontColor: pack.idCardFontColor,
         idCardFontFamily: pack.idCardFontFamily,
+        idCardNameMaxWidth: pack.idCardNameMaxWidth,
+        idCardNameMaxHeight: pack.idCardNameMaxHeight,
+        idCardNameAlign:
+          (pack.idCardNameAlign as PackConfigData["idCardNameAlign"]) ?? null,
+        idCardNameWrapMode:
+          (pack.idCardNameWrapMode as PackConfigData["idCardNameWrapMode"]) ??
+          null,
       }
     : {
         id: null,
@@ -78,6 +85,10 @@ export default async function AdminWelcomePackPage() {
         idCardFontSize: null,
         idCardFontColor: null,
         idCardFontFamily: null,
+        idCardNameMaxWidth: null,
+        idCardNameMaxHeight: null,
+        idCardNameAlign: null,
+        idCardNameWrapMode: null,
       };
 
   const items: AdminItemData[] = (pack?.items ?? []).map((i) => ({

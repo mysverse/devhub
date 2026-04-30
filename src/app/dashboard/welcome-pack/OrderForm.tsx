@@ -39,6 +39,10 @@ export type OrderFormPack = {
   idCardFontSize: number | null;
   idCardFontColor: string | null;
   idCardFontFamily: string | null;
+  idCardNameMaxWidth: number | null;
+  idCardNameMaxHeight: number | null;
+  idCardNameAlign: "left" | "center" | "right" | null;
+  idCardNameWrapMode: "nowrap" | "truncate" | "wrap" | "shrink" | null;
   items: {
     id: string;
     name: string;
@@ -336,6 +340,10 @@ export default function OrderForm({
                   fontSize={pack.idCardFontSize}
                   fontColor={pack.idCardFontColor}
                   fontFamily={pack.idCardFontFamily}
+                  nameMaxWidth={pack.idCardNameMaxWidth}
+                  nameMaxHeight={pack.idCardNameMaxHeight}
+                  nameAlign={pack.idCardNameAlign}
+                  nameWrapMode={pack.idCardNameWrapMode}
                   name={idCardName}
                 />
               </div>

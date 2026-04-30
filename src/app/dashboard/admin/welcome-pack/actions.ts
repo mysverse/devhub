@@ -32,6 +32,17 @@ function refreshAdminPaths() {
   revalidatePath("/dashboard/welcome-pack");
 }
 
+export type IdCardWrapMode = "nowrap" | "truncate" | "wrap" | "shrink";
+export type IdCardAlign = "left" | "center" | "right";
+
+const WRAP_MODES: ReadonlySet<string> = new Set([
+  "nowrap",
+  "truncate",
+  "wrap",
+  "shrink",
+]);
+const ALIGNS: ReadonlySet<string> = new Set(["left", "center", "right"]);
+
 export type WelcomePackConfigInput = {
   packId?: string;
   name: string;
@@ -45,6 +56,10 @@ export type WelcomePackConfigInput = {
   idCardFontSize?: number | null;
   idCardFontColor?: string | null;
   idCardFontFamily?: string | null;
+  idCardNameMaxWidth?: number | null;
+  idCardNameMaxHeight?: number | null;
+  idCardNameAlign?: IdCardAlign | null;
+  idCardNameWrapMode?: IdCardWrapMode | null;
 };
 
 /**
@@ -59,6 +74,15 @@ export async function saveWelcomePackConfig(input: WelcomePackConfigInput) {
     return { error: "Name must be at least 2 characters" };
   }
 
+  const wrapMode =
+    input.idCardNameWrapMode && WRAP_MODES.has(input.idCardNameWrapMode)
+      ? input.idCardNameWrapMode
+      : null;
+  const align =
+    input.idCardNameAlign && ALIGNS.has(input.idCardNameAlign)
+      ? input.idCardNameAlign
+      : null;
+
   const data = {
     name: trimmedName,
     description: input.description?.trim() || null,
@@ -71,6 +95,10 @@ export async function saveWelcomePackConfig(input: WelcomePackConfigInput) {
     idCardFontSize: input.idCardFontSize ?? null,
     idCardFontColor: input.idCardFontColor?.trim() || null,
     idCardFontFamily: input.idCardFontFamily?.trim() || null,
+    idCardNameMaxWidth: input.idCardNameMaxWidth ?? null,
+    idCardNameMaxHeight: input.idCardNameMaxHeight ?? null,
+    idCardNameAlign: align,
+    idCardNameWrapMode: wrapMode,
   };
 
   const pack = input.packId

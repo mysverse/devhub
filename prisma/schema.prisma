@@ -389,6 +389,11 @@ model WelcomePackOrder {
   notes           String?
   rejectionReason String?
 
+  // Audit trail of the eligibility check that admitted this order — for
+  // wave 1 this is the qualifying Linear issues; for wave 2 it just records
+  // that the wave-2 flag was open at submission time.
+  eligibilitySnapshot Json?
+
   selections      WelcomePackOrderItemSelection[]
 
   createdAt       DateTime  @default(now())

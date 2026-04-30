@@ -67,10 +67,16 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   }
 
   // Re-check eligibility on the server, reusing the wave2Open flag we just
-  // loaded.
+  // loaded. The snapshot captures the qualifying Linear issues so admins can
+  // audit each approval without re-querying Linear.
   let wave: 1 | 2;
+  let eligibilitySnapshot: Awaited<
+    ReturnType<typeof assertEligibleForWelcomePack>
+  >["snapshot"];
   try {
-    ({ wave } = await assertEligibleForWelcomePack(userId, pack.wave2Open));
+    const result = await assertEligibleForWelcomePack(userId, pack.wave2Open);
+    wave = result.wave;
+    eligibilitySnapshot = result.snapshot;
   } catch (e) {
     return { error: (e as Error).message };
   }
@@ -145,6 +151,8 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
     postalCode,
     country: country.toUpperCase(),
     notes: input.notes?.trim() || null,
+    eligibilitySnapshot:
+      eligibilitySnapshot as unknown as Prisma.InputJsonValue,
     selections: {
       create: filteredSelections.map((s) => ({
         itemId: s.itemId,

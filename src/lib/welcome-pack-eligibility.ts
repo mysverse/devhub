@@ -6,14 +6,49 @@ import {
 } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
+export type QualifyingLinearIssue = {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  completedAt: string; // ISO string
+};
+
 export type WelcomePackEligibility = {
   eligible: boolean;
   wave: 1 | 2 | null;
   reason?: string;
   needsLinearReauth?: boolean;
+  /**
+   * For wave-1 hits, the recent qualifying issues we saw. Empty array when
+   * the user qualifies via wave 2 or doesn't qualify at all.
+   */
+  wave1Evidence?: {
+    qualifyingIssues: QualifyingLinearIssue[];
+    lookbackMonths: number;
+    /**
+     * True when the count returned was capped — there may be more issues we
+     * didn't fetch.
+     */
+    truncated: boolean;
+  };
+};
+
+/** Captured at submission time and persisted on the order for audit. */
+export type EligibilitySnapshot = {
+  wave: 1 | 2;
+  capturedAt: string;
+  lookbackMonths: number;
+  /** Wave 1: the issues we used as evidence. Empty for wave 2. */
+  qualifyingIssues: QualifyingLinearIssue[];
+  /** True when the qualifying issue list was capped. */
+  truncated: boolean;
+  /** Human-readable note on why the user qualifies. */
+  note: string;
 };
 
 const WAVE_1_LOOKBACK_MONTHS = 6;
+const WAVE_1_EVIDENCE_LIMIT = 10;
 
 /**
  * Determine whether the user can place a welcome pack order.
@@ -46,22 +81,38 @@ export async function checkWelcomePackEligibility(
   }
 
   // Try wave 1 first via Linear OAuth.
-  let wave1Hit = false;
+  let qualifyingIssues: QualifyingLinearIssue[] = [];
+  let truncated = false;
   let needsLinearReauth = false;
 
   try {
     const sixMonthsAgo = dayjs().subtract(WAVE_1_LOOKBACK_MONTHS, "month");
-    wave1Hit = await withLinearFallback(userId, async (client) => {
+    const fetched = await withLinearFallback(userId, async (client) => {
       const viewer = await client.viewer;
       const result = await client.issues({
-        first: 1,
+        first: WAVE_1_EVIDENCE_LIMIT,
         filter: {
           assignee: { id: { eq: viewer.id } },
           completedAt: { gte: sixMonthsAgo.toDate() },
         },
       });
-      return result.nodes.length > 0;
+      return {
+        nodes: result.nodes,
+        hasNextPage: result.pageInfo?.hasNextPage ?? false,
+      };
     });
+    qualifyingIssues = fetched.nodes.map((issue) => ({
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      url: issue.url,
+      completedAt:
+        (issue.completedAt instanceof Date
+          ? issue.completedAt.toISOString()
+          : (issue.completedAt as string | undefined)) ??
+        new Date().toISOString(),
+    }));
+    truncated = fetched.hasNextPage;
   } catch (error) {
     if (error instanceof LinearReauthRequiredError) {
       needsLinearReauth = true;
@@ -70,8 +121,16 @@ export async function checkWelcomePackEligibility(
     }
   }
 
-  if (wave1Hit) {
-    return { eligible: true, wave: 1 };
+  if (qualifyingIssues.length > 0) {
+    return {
+      eligible: true,
+      wave: 1,
+      wave1Evidence: {
+        qualifyingIssues,
+        lookbackMonths: WAVE_1_LOOKBACK_MONTHS,
+        truncated,
+      },
+    };
   }
 
   if (resolvedWave2Open) {
@@ -104,12 +163,38 @@ export async function checkWelcomePackEligibility(
 export async function assertEligibleForWelcomePack(
   userId: string,
   wave2Open?: boolean,
-): Promise<{ wave: 1 | 2 }> {
+): Promise<{ wave: 1 | 2; snapshot: EligibilitySnapshot }> {
   const result = await checkWelcomePackEligibility(userId, wave2Open);
   if (!result.eligible || result.wave === null) {
     throw new Error(result.reason ?? "Not eligible for the welcome pack");
   }
-  return { wave: result.wave };
+
+  const wave = result.wave;
+  const snapshot: EligibilitySnapshot =
+    wave === 1
+      ? {
+          wave: 1,
+          capturedAt: new Date().toISOString(),
+          lookbackMonths:
+            result.wave1Evidence?.lookbackMonths ?? WAVE_1_LOOKBACK_MONTHS,
+          qualifyingIssues: result.wave1Evidence?.qualifyingIssues ?? [],
+          truncated: result.wave1Evidence?.truncated ?? false,
+          note: `User had ${
+            result.wave1Evidence?.qualifyingIssues.length ?? 0
+          } completed Linear issue(s) in the last ${
+            result.wave1Evidence?.lookbackMonths ?? WAVE_1_LOOKBACK_MONTHS
+          } months${result.wave1Evidence?.truncated ? " (truncated)" : ""}.`,
+        }
+      : {
+          wave: 2,
+          capturedAt: new Date().toISOString(),
+          lookbackMonths: WAVE_1_LOOKBACK_MONTHS,
+          qualifyingIssues: [],
+          truncated: false,
+          note: "Wave 2 was open at submission time.",
+        };
+
+  return { wave, snapshot };
 }
 
 // Re-export so callers don't have to also import from the linear lib for

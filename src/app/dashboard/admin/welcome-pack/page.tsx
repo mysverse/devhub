@@ -14,7 +14,10 @@ import { getSession } from "@/lib/auth-utils";
 import prisma from "@/lib/prisma";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
-import OrdersTable, { type AdminOrderRow } from "./OrdersTable";
+import OrdersTable, {
+  type AdminEligibilitySnapshot,
+  type AdminOrderRow,
+} from "./OrdersTable";
 import PackConfig, { type PackConfigData } from "./PackConfig";
 
 export default async function AdminWelcomePackPage() {
@@ -136,6 +139,8 @@ export default async function AdminWelcomePackPage() {
       itemName: s.item.name,
       selectedSize: s.selectedSize,
     })),
+    eligibility:
+      (o.eligibilitySnapshot as unknown as AdminEligibilitySnapshot) ?? null,
   }));
 
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;

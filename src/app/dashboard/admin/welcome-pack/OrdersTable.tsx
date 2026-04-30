@@ -31,6 +31,23 @@ import {
   rejectWelcomePackOrder,
 } from "./actions";
 
+export type AdminQualifyingIssue = {
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  completedAt: string;
+};
+
+export type AdminEligibilitySnapshot = {
+  wave: 1 | 2;
+  capturedAt: string;
+  lookbackMonths: number;
+  qualifyingIssues: AdminQualifyingIssue[];
+  truncated: boolean;
+  note: string;
+} | null;
+
 export type AdminOrderRow = {
   id: string;
   status: WelcomePackOrderStatus;
@@ -56,6 +73,7 @@ export type AdminOrderRow = {
   shippedAt: string | null;
   deliveredAt: string | null;
   selections: { itemName: string; selectedSize: string | null }[];
+  eligibility: AdminEligibilitySnapshot;
 };
 
 const STATUS_COLORS: Record<WelcomePackOrderStatus, string> = {
@@ -242,6 +260,10 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
           </Stack>
         </Group>
 
+        {order.eligibility && (
+          <EligibilityPanel eligibility={order.eligibility} wave={order.wave} />
+        )}
+
         {order.notes && (
           <Box
             p="xs"
@@ -416,5 +438,100 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
         </Group>
       </Stack>
     </Card>
+  );
+}
+
+function EligibilityPanel({
+  eligibility,
+  wave,
+}: {
+  eligibility: NonNullable<AdminEligibilitySnapshot>;
+  wave: number;
+}) {
+  const issues = eligibility.qualifyingIssues;
+  const accent =
+    eligibility.wave === 1
+      ? "var(--mantine-color-green-7)"
+      : "var(--mantine-color-blue-7)";
+  const capturedDate = new Date(eligibility.capturedAt).toLocaleString(
+    "en-MY",
+    {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    },
+  );
+
+  return (
+    <Box
+      p="xs"
+      style={{
+        backgroundColor: "var(--mantine-color-dark-6)",
+        borderRadius: "var(--mantine-radius-sm)",
+        borderLeft: `3px solid ${accent}`,
+      }}
+    >
+      <Group justify="space-between" align="center" mb={4}>
+        <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+          Eligibility check
+        </Text>
+        <Text size="xs" c="dimmed">
+          Captured {capturedDate}
+        </Text>
+      </Group>
+      <Group gap="xs" mb={6} wrap="wrap">
+        <Badge
+          variant="light"
+          color={eligibility.wave === 1 ? "green" : "blue"}
+        >
+          Wave {eligibility.wave}
+        </Badge>
+        {wave !== eligibility.wave && (
+          <Badge variant="light" color="orange">
+            Order wave: {wave}
+          </Badge>
+        )}
+        {eligibility.wave === 1 && (
+          <Text size="xs" c="dimmed">
+            Last {eligibility.lookbackMonths} months · {issues.length} issue
+            {issues.length === 1 ? "" : "s"}
+            {eligibility.truncated ? "+" : ""}
+          </Text>
+        )}
+      </Group>
+      <Text size="sm" c="dimmed" mb={issues.length > 0 ? "xs" : 0}>
+        {eligibility.note}
+      </Text>
+      {issues.length > 0 && (
+        <Stack gap={4}>
+          {issues.map((issue) => (
+            <Group key={issue.id} gap="xs" wrap="nowrap" align="baseline">
+              <Anchor
+                href={issue.url}
+                target="_blank"
+                rel="noreferrer"
+                size="sm"
+                fw={600}
+                style={{ flexShrink: 0 }}
+              >
+                {issue.identifier}
+              </Anchor>
+              <Text size="sm" lineClamp={1} style={{ flex: 1, minWidth: 0 }}>
+                {issue.title}
+              </Text>
+              <Text size="xs" c="dimmed" style={{ flexShrink: 0 }}>
+                {new Date(issue.completedAt).toLocaleDateString("en-MY", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })}
+              </Text>
+            </Group>
+          ))}
+        </Stack>
+      )}
+    </Box>
   );
 }

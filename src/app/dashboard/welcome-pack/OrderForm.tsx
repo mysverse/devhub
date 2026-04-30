@@ -4,8 +4,12 @@ import {
   Alert,
   Anchor,
   Badge,
+  Box,
   Button,
   Card,
+  Chip,
+  ChipGroup,
+  Flex,
   Group,
   Radio,
   RadioGroup,
@@ -232,82 +236,23 @@ export default function OrderForm({
               <Alert color="yellow">No items in the pack yet.</Alert>
             )}
             {pack.items.map((item) => (
-              <Card key={item.id} withBorder radius="md" p="md">
-                <Group align="flex-start" wrap="nowrap">
-                  <div
-                    style={{
-                      width: 96,
-                      height: 96,
-                      borderRadius: 8,
-                      overflow: "hidden",
-                      flexShrink: 0,
-                      backgroundColor: "var(--mantine-color-dark-5)",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {item.imageBlobUrl ? (
-                      <Image
-                        src={item.imageBlobUrl}
-                        alt={item.name}
-                        width={96}
-                        height={96}
-                        style={{ objectFit: "cover" }}
-                        unoptimized
-                      />
-                    ) : (
-                      <Text size="xs" c="dimmed">
-                        No image
-                      </Text>
-                    )}
-                  </div>
-                  <Stack gap={6} style={{ flex: 1 }}>
-                    <Text fw={600}>{item.name}</Text>
-                    {item.description && (
-                      <Text size="sm" c="dimmed">
-                        {item.description}
-                      </Text>
-                    )}
-                    {item.requiresSize ? (
-                      <Stack gap="xs">
-                        <RadioGroup
-                          value={selectedSizes[item.id] ?? ""}
-                          onChange={(v) =>
-                            setSelectedSizes((prev) => ({
-                              ...prev,
-                              [item.id]: v,
-                            }))
-                          }
-                        >
-                          <Group gap="xs">
-                            {item.sizeOptions.map((size) => (
-                              <Radio key={size} value={size} label={size} />
-                            ))}
-                          </Group>
-                        </RadioGroup>
-                        <Anchor
-                          component="button"
-                          type="button"
-                          size="sm"
-                          onClick={() =>
-                            setSizeChartItem({
-                              name: item.name,
-                              url: item.sizeChartBlobUrl,
-                            })
-                          }
-                        >
-                          View size chart
-                        </Anchor>
-                      </Stack>
-                    ) : (
-                      <Badge variant="light" color="gray" w="fit-content">
-                        Included
-                      </Badge>
-                    )}
-                  </Stack>
-                </Group>
-              </Card>
+              <PackItemRow
+                key={item.id}
+                item={item}
+                selectedSize={selectedSizes[item.id] ?? ""}
+                onSelectSize={(value) =>
+                  setSelectedSizes((prev) => ({
+                    ...prev,
+                    [item.id]: value,
+                  }))
+                }
+                onViewSizeChart={() =>
+                  setSizeChartItem({
+                    name: item.name,
+                    url: item.sizeChartBlobUrl,
+                  })
+                }
+              />
             ))}
           </Stack>
         </StepperStep>
@@ -528,5 +473,107 @@ export default function OrderForm({
         imageUrl={sizeChartItem?.url ?? null}
       />
     </Stack>
+  );
+}
+
+function PackItemRow({
+  item,
+  selectedSize,
+  onSelectSize,
+  onViewSizeChart,
+}: {
+  item: OrderFormPack["items"][number];
+  selectedSize: string;
+  onSelectSize: (value: string) => void;
+  onViewSizeChart: () => void;
+}) {
+  return (
+    <Card withBorder radius="md" p="md">
+      <Flex
+        direction={{ base: "column", sm: "row" }}
+        gap="md"
+        align={{ base: "stretch", sm: "flex-start" }}
+      >
+        <Box
+          style={{
+            width: 96,
+            height: 96,
+            borderRadius: 8,
+            overflow: "hidden",
+            flexShrink: 0,
+            backgroundColor: "var(--mantine-color-dark-5)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            alignSelf: "center",
+          }}
+        >
+          {item.imageBlobUrl ? (
+            <Image
+              src={item.imageBlobUrl}
+              alt={item.name}
+              width={96}
+              height={96}
+              style={{ objectFit: "cover" }}
+              unoptimized
+            />
+          ) : (
+            <Text size="xs" c="dimmed">
+              No image
+            </Text>
+          )}
+        </Box>
+
+        <Stack gap="sm" style={{ flex: 1, minWidth: 0 }}>
+          <Stack gap={2}>
+            <Text fw={600}>{item.name}</Text>
+            {item.description && (
+              <Text size="sm" c="dimmed">
+                {item.description}
+              </Text>
+            )}
+          </Stack>
+
+          {item.requiresSize ? (
+            <Stack gap={6}>
+              <Group
+                justify="space-between"
+                align="center"
+                wrap="wrap"
+                gap="xs"
+              >
+                <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+                  Size
+                </Text>
+                <Anchor
+                  component="button"
+                  type="button"
+                  size="sm"
+                  onClick={onViewSizeChart}
+                >
+                  View size chart
+                </Anchor>
+              </Group>
+              <ChipGroup
+                value={selectedSize}
+                onChange={(v) => onSelectSize(v as string)}
+              >
+                <Group gap={6}>
+                  {item.sizeOptions.map((size) => (
+                    <Chip key={size} value={size} size="sm" variant="outline">
+                      {size}
+                    </Chip>
+                  ))}
+                </Group>
+              </ChipGroup>
+            </Stack>
+          ) : (
+            <Badge variant="light" color="gray" w="fit-content">
+              Included
+            </Badge>
+          )}
+        </Stack>
+      </Flex>
+    </Card>
   );
 }

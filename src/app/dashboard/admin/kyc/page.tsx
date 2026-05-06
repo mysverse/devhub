@@ -8,28 +8,14 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import KycReviewCard from "./KycReviewCard";
 
 export default async function AdminKycPage() {
-  const { userId } = await getSession();
-
-  if (!userId) {
-    redirect("/");
-  }
-
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!userProfile || userProfile.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
+  await requireAdminPage();
 
   const [pendingVerifications, recentVerifications] = await Promise.all([
     prisma.kycVerification.findMany({

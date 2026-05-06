@@ -2,6 +2,7 @@
 
 import crypto from "node:crypto";
 import { getSession } from "@/lib/auth-utils";
+import { hasAdminAccess } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
 
@@ -14,10 +15,10 @@ export async function generateInviteLink(emailAddress: string) {
 
   const userProfile = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: { role: true },
+    select: { role: true, developerRank: true },
   });
 
-  if (userProfile?.role !== "ADMIN") {
+  if (!hasAdminAccess(userProfile)) {
     return { error: "Forbidden: Only admins can invite users." };
   }
 

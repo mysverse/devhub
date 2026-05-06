@@ -1,8 +1,10 @@
 "use server";
 
 import { z } from "zod";
+import { syncUserAccess } from "@/lib/access-sync";
 import { getSession } from "@/lib/auth-utils";
 import { siteConfig } from "@/lib/config";
+import { getProbationReviewDates } from "@/lib/developer-access";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import { getLinearClient } from "@/lib/linear";
 import {
@@ -126,9 +128,19 @@ export async function completeOnboarding(
 
     await prisma.userProfile.upsert({
       where: { id: userId },
-      create: { id: userId, ...profileData },
+      create: {
+        id: userId,
+        ...profileData,
+        ...getProbationReviewDates(),
+      },
       update: profileData,
     });
+
+    try {
+      await syncUserAccess(userId, null);
+    } catch (syncError) {
+      console.error("[access-sync] onboarding sync failed:", syncError);
+    }
 
     // Create signed document records for agreed documents
     if (data.agreedDocuments.length > 0) {

@@ -1,21 +1,10 @@
-import { redirect } from "next/navigation";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 import UsersTable from "./UsersTable";
 
 export default async function AdminUsersPage() {
-  const { userId } = await getSession();
-  if (!userId) redirect("/sign-in");
-
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!userProfile || userProfile.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
+  await requireAdminPage();
 
   const users = await prisma.userProfile.findMany({
     include: {
@@ -48,6 +37,8 @@ export default async function AdminUsersPage() {
     id: u.id,
     legalName: u.legalName,
     role: u.role,
+    developerRank: u.developerRank,
+    specialties: u.specialties,
     paymentMethod: u.paymentMethod,
     linearId: u.linearId,
     discordId: u.discordId,

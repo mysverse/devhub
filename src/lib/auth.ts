@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { genericOAuth } from "better-auth/plugins";
+import { syncUserAccess } from "./access-sync";
 import prisma from "./prisma";
 
 export const auth = betterAuth({
@@ -17,11 +18,13 @@ export const auth = betterAuth({
               where: { id: userId },
               data: { discordId: accountId },
             });
+            await syncLinkedAccess(userId);
           } else if (providerId === "roblox") {
             await prisma.userProfile.updateMany({
               where: { id: userId },
               data: { robloxId: accountId, robuxUsername: null },
             });
+            await syncLinkedAccess(userId);
           } else if (providerId === "linear") {
             await prisma.userProfile.updateMany({
               where: { id: userId },
@@ -143,3 +146,11 @@ export const auth = betterAuth({
 });
 
 export type Session = typeof auth.$Infer.Session;
+
+async function syncLinkedAccess(userId: string) {
+  try {
+    await syncUserAccess(userId, null);
+  } catch (error) {
+    console.error("[access-sync] linked account sync failed:", error);
+  }
+}

@@ -8,9 +8,8 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
@@ -21,16 +20,7 @@ import OrdersTable, {
 import PackConfig, { type PackConfigData } from "./PackConfig";
 
 export default async function AdminWelcomePackPage() {
-  const { userId } = await getSession();
-  if (!userId) redirect("/");
-
-  const profile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-  if (!profile || profile.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
+  await requireAdminPage();
 
   const pack = await prisma.welcomePack.findFirst({
     where: { isActive: true },

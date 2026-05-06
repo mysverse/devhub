@@ -1,6 +1,7 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
+import { hasAdminAccess } from "@/lib/authz";
 import { createDocumentPdf } from "@/lib/markdown-to-pdf";
 import prisma from "@/lib/prisma";
 
@@ -18,7 +19,7 @@ export async function GET(_request: Request, { params }: { params: Params }) {
       where: { id },
       include: {
         coiEntries: { orderBy: { createdAt: "asc" } },
-        user: { select: { role: true } },
+        user: { select: { role: true, developerRank: true } },
       },
     });
 
@@ -32,10 +33,10 @@ export async function GET(_request: Request, { params }: { params: Params }) {
     // Allow access if user owns the document or is an admin
     const requestingUser = await prisma.userProfile.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, developerRank: true },
     });
 
-    if (signedDocument.userId !== userId && requestingUser?.role !== "ADMIN") {
+    if (signedDocument.userId !== userId && !hasAdminAccess(requestingUser)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

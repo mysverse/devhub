@@ -76,6 +76,11 @@ model UserProfile {
 
   // Roles and Permissions
   role             Role     @default(DEVELOPER)
+  developerRank    DeveloperRank @default(PROBATIONARY_DEVELOPER)
+  specialties      DeveloperSpecialty[] @default([])
+  probationStartedAt DateTime @default(now())
+  initialReviewAt  DateTime?
+  finalReviewAt    DateTime?
 
   // Payment Preferences
   paymentMethod    PaymentMethod @default(PAYPAL)
@@ -97,6 +102,10 @@ model UserProfile {
   pptRequestsReviewed PptRequest[] @relation("PptRequestReviewer")
   kycVerifications KycVerification[]
   welcomePackOrder WelcomePackOrder?
+  projectMemberships ProjectMembership[] @relation("ProjectMember")
+  projectAssignmentsMade ProjectMembership[] @relation("ProjectAssignmentActor")
+  accessSyncLogs AccessSyncLog[] @relation("AccessSyncUser")
+  accessSyncActions AccessSyncLog[] @relation("AccessSyncActor")
 }
 
 model Invite {
@@ -112,6 +121,144 @@ model Invite {
 enum Role {
   ADMIN
   DEVELOPER
+}
+
+enum DeveloperRank {
+  PROBATIONARY_DEVELOPER
+  JUNIOR_DEVELOPER
+  DEVELOPER
+  SENIOR_DEVELOPER
+  DEVELOPER_COUNCIL
+  HEAD_DEVELOPER
+}
+
+enum DeveloperSpecialty {
+  SCRIPTING
+  BUILDING
+  MESHING
+  VEHICLES
+}
+
+enum ProjectAccessLevel {
+  CONTRIBUTOR
+  DEVELOPER
+  PUBLISHER
+}
+
+enum AccessSyncPlatform {
+  ROBLOX_OPEN_CLOUD
+  ROBLOX_LEGACY
+  DISCORD
+  LINEAR
+}
+
+enum AccessSyncStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model AccessIntegrationConfig {
+  id                                     String   @id @default("default")
+  robloxDevelopmentGroupId               String?
+  robloxPublisherGroupId                 String?
+  robloxDevelopmentLegacyFallbackRoleId  Int?
+  robloxPublisherLegacyFallbackRoleId    Int?
+  robloxOpenCloudEnabled                 Boolean  @default(true)
+  robloxLegacyEnabled                    Boolean  @default(false)
+  discordGuildId                         String?
+  discordEnabled                         Boolean  @default(true)
+  linearEnabled                          Boolean  @default(true)
+  createdAt                              DateTime @default(now())
+  updatedAt                              DateTime @updatedAt
+}
+
+model RankRoleMapping {
+  id                String        @id @default(cuid())
+  rank              DeveloperRank @unique
+  robloxRoleId      String?
+  robloxLegacyRoleId Int?
+  discordRoleId     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model SpecialtyRoleMapping {
+  id            String             @id @default(cuid())
+  specialty     DeveloperSpecialty @unique
+  discordRoleId String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model DevProject {
+  id                         String              @id @default(cuid())
+  name                       String              @unique
+  slug                       String              @unique
+  description                String?
+  isActive                   Boolean             @default(true)
+  robloxContributorRoleId    String?
+  robloxDeveloperRoleId      String?
+  robloxPublisherRoleId      String?
+  robloxContributorLegacyRoleId Int?
+  robloxDeveloperLegacyRoleId   Int?
+  robloxPublisherLegacyRoleId   Int?
+  discordContributorRoleId   String?
+  discordDeveloperRoleId     String?
+  discordPublisherRoleId     String?
+  linearTeamId               String?
+  linearProjectId            String?
+  memberships                ProjectMembership[]
+  createdAt                  DateTime            @default(now())
+  updatedAt                  DateTime            @updatedAt
+}
+
+model ProjectMembership {
+  id                       String             @id @default(cuid())
+  userId                   String
+  user                     UserProfile        @relation("ProjectMember", fields: [userId], references: [id], onDelete: Cascade)
+  projectId                String
+  project                  DevProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  accessLevel              ProjectAccessLevel
+  allowJuniorRobloxAccess  Boolean            @default(false)
+  assignedById             String?
+  assignedBy               UserProfile?       @relation("ProjectAssignmentActor", fields: [assignedById], references: [id])
+  notes                    String?
+  createdAt                DateTime           @default(now())
+  updatedAt                DateTime           @updatedAt
+
+  @@unique([userId, projectId])
+  @@index([projectId])
+}
+
+model AccessSyncLog {
+  id        String             @id @default(cuid())
+  userId    String
+  user      UserProfile        @relation("AccessSyncUser", fields: [userId], references: [id], onDelete: Cascade)
+  actorId   String?
+  actor     UserProfile?       @relation("AccessSyncActor", fields: [actorId], references: [id])
+  platform  AccessSyncPlatform
+  status    AccessSyncStatus
+  dryRun    Boolean            @default(false)
+  action    String
+  details   Json?
+  error     String?
+  createdAt DateTime           @default(now())
+
+  @@index([userId])
+  @@index([platform, status])
+}
+
+model AccessManagedRole {
+  id        String             @id @default(cuid())
+  platform  AccessSyncPlatform
+  scope     String
+  roleId    String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+
+  @@unique([platform, scope, roleId])
+  @@index([platform, scope])
 }
 
 enum PaymentMethod {

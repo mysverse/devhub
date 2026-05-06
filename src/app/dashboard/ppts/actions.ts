@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createElement } from "react";
 import PptRequestSubmitted from "@/emails/PptRequestSubmitted";
 import { getSession } from "@/lib/auth-utils";
+import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
@@ -177,7 +178,7 @@ export async function submitPptRequest(data: {
   // Send email to all admins
   try {
     const admins = await prisma.userProfile.findMany({
-      where: { role: "ADMIN" },
+      where: ADMIN_ACCESS_WHERE,
       include: { user: { select: { email: true, name: true } } },
     });
 

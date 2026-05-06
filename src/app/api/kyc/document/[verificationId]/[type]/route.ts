@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
+import { hasAdminAccess } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 
 const VALID_TYPES = new Set(["id-document", "selfie"]);
@@ -16,10 +17,10 @@ export async function GET(
   // Require admin role
   const userProfile = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: { role: true },
+    select: { role: true, developerRank: true },
   });
 
-  if (!userProfile || userProfile.role !== "ADMIN") {
+  if (!hasAdminAccess(userProfile)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

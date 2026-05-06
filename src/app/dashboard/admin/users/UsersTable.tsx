@@ -33,6 +33,12 @@ import {
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import {
+  DEVELOPER_RANK_LABELS,
+  DEVELOPER_SPECIALTY_LABELS,
+  type DeveloperRankValue,
+  type DeveloperSpecialtyValue,
+} from "@/lib/developer-access";
 import { getPaymentMethodLabel } from "@/lib/payment-validation";
 import {
   sendDocumentInvalidatedNotice,
@@ -57,6 +63,8 @@ type UserRow = {
   id: string;
   legalName: string | null;
   role: string;
+  developerRank: DeveloperRankValue;
+  specialties: DeveloperSpecialtyValue[];
   paymentMethod: string;
   linearId: string | null;
   discordId: string | null;
@@ -190,7 +198,7 @@ export default function UsersTable({
               <TableTr>
                 <TableTh style={{ width: 40 }} />
                 <TableTh style={{ width: "20%" }}>User</TableTh>
-                <TableTh style={{ width: 80 }}>Role</TableTh>
+                <TableTh style={{ width: 150 }}>Rank</TableTh>
                 <TableTh style={{ width: "15%" }}>Linked Accounts</TableTh>
                 {requiredDocuments.map((type) => (
                   <TableTh key={type} style={{ width: "12%" }}>
@@ -259,8 +267,22 @@ export default function UsersTable({
                           variant="light"
                           size="sm"
                         >
-                          {user.role}
+                          {DEVELOPER_RANK_LABELS[user.developerRank]}
                         </Badge>
+                        {user.specialties.length > 0 && (
+                          <Group gap={4} mt={4}>
+                            {user.specialties.map((specialty) => (
+                              <Badge
+                                key={specialty}
+                                color="gray"
+                                variant="outline"
+                                size="xs"
+                              >
+                                {DEVELOPER_SPECIALTY_LABELS[specialty]}
+                              </Badge>
+                            ))}
+                          </Group>
+                        )}
                       </TableTd>
                       <TableTd>
                         <Group gap={4}>

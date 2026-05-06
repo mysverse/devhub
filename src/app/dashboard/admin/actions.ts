@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import PaymentProcessed from "@/emails/PaymentProcessed";
 import PaymentRejected from "@/emails/PaymentRejected";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdmin } from "@/lib/authz";
 import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
@@ -19,23 +19,6 @@ import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getBaseUrl } from "@/lib/url";
 import { getUserEmailAndName } from "./email-actions";
-
-// In a real application, you should verify if the user has an ADMIN role in Clerk/Database.
-async function requireAdmin() {
-  const { userId } = await getSession();
-  if (!userId) throw new Error("Unauthorized");
-
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!userProfile || userProfile.role !== "ADMIN") {
-    throw new Error("Forbidden: Admin access required");
-  }
-
-  return userId;
-}
 
 /**
  * Generate PDF slip, upload to blob, and send payment confirmation email.

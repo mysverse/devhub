@@ -2,6 +2,7 @@ import { Box, Divider, Text, Title } from "@mantine/core";
 import { redirect } from "next/navigation";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
+import { hasAdminAccess } from "@/lib/authz";
 import { requiresKycForAutoPayout } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
 import InviteGenerator from "./InviteGenerator";
@@ -72,7 +73,7 @@ export default async function SettingsPage() {
           </StaggerItem>
         )}
 
-        {userProfile.role === "ADMIN" && (
+        {hasAdminAccess(userProfile) && (
           <>
             <Divider my="md" />
             <StaggerItem>

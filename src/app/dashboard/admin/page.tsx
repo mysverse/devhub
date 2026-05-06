@@ -3,7 +3,7 @@ import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdminPage } from "@/lib/authz";
 import { getUserWeeklyUsage } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
@@ -64,20 +64,7 @@ function buildPayoutTransaction(
 }
 
 export default async function AdminPage() {
-  const { userId } = await getSession();
-
-  if (!userId) {
-    redirect("/");
-  }
-
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!userProfile || userProfile.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
+  const userId = await requireAdminPage();
 
   const [
     pendingTransactions,
@@ -213,6 +200,9 @@ export default async function AdminPage() {
         <Group>
           <LinkButton href="/dashboard/admin/users" variant="light">
             Team Members
+          </LinkButton>
+          <LinkButton href="/dashboard/admin/access" variant="light">
+            Access
           </LinkButton>
           <LinkButton href="/dashboard/admin/documents" variant="light">
             Document Compliance

@@ -64,6 +64,10 @@ EMAIL_FROM               # Sender address (default: "MYSverse DevHub <devhub@mys
 NEXT_PUBLIC_APP_URL      # Public app URL for email CTA links (default: http://localhost:3000)
 KV_REST_API_URL          # Redis REST API URL (Vercel KV / Upstash)
 KV_REST_API_TOKEN        # Redis REST API token
+ROBLOX_OPEN_CLOUD_API_KEY # Roblox Open Cloud API key for development/publisher group role sync
+ROBLOX_OPEN_CLOUD_TOKEN  # Optional OAuth bearer token alternative for Open Cloud
+ROBLOX_LEGACY_COOKIE     # Optional .ROBLOSECURITY cookie for legacy group role sync
+DISCORD_BOT_TOKEN        # Discord bot token for guild role sync
 ```
 
 ### Linting & Formatting

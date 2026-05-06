@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { getSession } from "@/lib/auth-utils";
+import { hasAdminAccess } from "@/lib/authz";
 import {
   deleteWelcomePackBlob,
   uploadWelcomePackIdCardTemplate,
@@ -28,9 +29,9 @@ export async function POST(req: Request) {
 
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: { role: true },
+    select: { role: true, developerRank: true },
   });
-  if (!profile || profile.role !== "ADMIN") {
+  if (!hasAdminAccess(profile)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

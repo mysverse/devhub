@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createElement } from "react";
 import WelcomePackOrderSubmitted from "@/emails/WelcomePackOrderSubmitted";
 import { getSession } from "@/lib/auth-utils";
+import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { sendEmail } from "@/lib/email";
 import prisma from "@/lib/prisma";
 import { assertEligibleForWelcomePack } from "@/lib/welcome-pack-eligibility";
@@ -188,7 +189,7 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   // Notify admins.
   try {
     const admins = await prisma.userProfile.findMany({
-      where: { role: "ADMIN" },
+      where: ADMIN_ACCESS_WHERE,
       include: { user: { select: { email: true } } },
     });
     const recipients = admins

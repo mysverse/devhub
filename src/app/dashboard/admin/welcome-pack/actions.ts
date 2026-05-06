@@ -7,7 +7,7 @@ import { createElement } from "react";
 import WelcomePackOrderApproved from "@/emails/WelcomePackOrderApproved";
 import WelcomePackOrderRejected from "@/emails/WelcomePackOrderRejected";
 import WelcomePackOrderShipped from "@/emails/WelcomePackOrderShipped";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdmin } from "@/lib/authz";
 import { deleteWelcomePackBlob } from "@/lib/blob-storage";
 import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
@@ -16,22 +16,6 @@ import type {
   EligibilitySnapshot,
   QualifyingLinearIssue,
 } from "@/lib/welcome-pack-eligibility";
-
-async function requireAdmin(): Promise<string> {
-  const { userId } = await getSession();
-  if (!userId) throw new Error("Unauthorized");
-
-  const profile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!profile || profile.role !== "ADMIN") {
-    throw new Error("Forbidden: Admin access required");
-  }
-
-  return userId;
-}
 
 function refreshAdminPaths() {
   revalidatePath("/dashboard/admin/welcome-pack");

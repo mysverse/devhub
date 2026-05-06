@@ -1,6 +1,7 @@
 import { getDownloadUrl } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
+import { hasAdminAccess } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 
@@ -29,10 +30,10 @@ export async function GET(_request: Request, { params }: { params: Params }) {
 
     const requestingUser = await prisma.userProfile.findUnique({
       where: { id: userId },
-      select: { role: true },
+      select: { role: true, developerRank: true },
     });
 
-    if (transaction.userId !== userId && requestingUser?.role !== "ADMIN") {
+    if (transaction.userId !== userId && !hasAdminAccess(requestingUser)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 

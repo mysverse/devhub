@@ -13,24 +13,13 @@ import {
   Text,
   Title,
 } from "@mantine/core";
-import { redirect } from "next/navigation";
 import LinkButton from "@/components/LinkButton";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 
 export default async function AdminDocumentsPage() {
-  const { userId } = await getSession();
-  if (!userId) redirect("/sign-in");
-
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!userProfile || userProfile.role !== "ADMIN") {
-    redirect("/dashboard");
-  }
+  await requireAdminPage();
 
   const users = await prisma.userProfile.findMany({
     select: {

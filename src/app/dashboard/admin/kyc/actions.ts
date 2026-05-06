@@ -3,26 +3,10 @@
 import { revalidatePath } from "next/cache";
 import KycApproved from "@/emails/KycApproved";
 import KycRejected from "@/emails/KycRejected";
-import { getSession } from "@/lib/auth-utils";
+import { requireAdmin } from "@/lib/authz";
 import { sendEmail } from "@/lib/email";
 import { createKycAuditEntry } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
-
-async function requireAdmin() {
-  const { userId } = await getSession();
-  if (!userId) throw new Error("Unauthorized");
-
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-
-  if (!userProfile || userProfile.role !== "ADMIN") {
-    throw new Error("Forbidden: Admin access required");
-  }
-
-  return userId;
-}
 
 export async function approveKyc(verificationId: string) {
   const adminId = await requireAdmin();

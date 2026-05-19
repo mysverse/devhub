@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
+import { syncBonusCandidateFromLinearIssue } from "@/lib/bonus";
 import { siteConfig } from "@/lib/config";
 import { isWithinCreditLimit } from "@/lib/credit-limit";
 import {
@@ -28,8 +29,11 @@ export async function POST(req: Request) {
 
   const payload = JSON.parse(body);
 
-  // We only care about Issue updates
-  if (payload.action === "update" && payload.type === "Issue") {
+  // We only care about Issue creates/updates
+  if (
+    (payload.action === "create" || payload.action === "update") &&
+    payload.type === "Issue"
+  ) {
     const issueData = payload.data;
 
     // Check if it has a PPT label
@@ -56,6 +60,18 @@ export async function POST(req: Request) {
       if (user) {
         const currency = getCurrencyForPaymentMethod(user.paymentMethod);
         const pptAmount = estimateToAmount(issueData.estimate, currency);
+
+        const approvedBonus = await prisma.bonusCandidate.findFirst({
+          where: {
+            linearIssueId: issueData.id,
+            status: "APPROVED",
+          },
+          select: { id: true },
+        });
+
+        if (approvedBonus) {
+          return NextResponse.json({ success: true });
+        }
 
         // Check credit limit BEFORE creating the transaction to avoid double-counting
         const withinLimit = await isWithinCreditLimit(
@@ -93,6 +109,7 @@ export async function POST(req: Request) {
             linearIssueUrl: issueData.url || null,
             amount: pptAmount,
             currency,
+            source: "PPT",
             status: "PENDING",
             autoApproved: withinLimit,
           },
@@ -117,6 +134,30 @@ export async function POST(req: Request) {
         );
       }
     }
+
+    await syncBonusCandidateFromLinearIssue({
+      id: issueData.id,
+      identifier: issueData.identifier || null,
+      title: issueData.title || null,
+      url: issueData.url || null,
+      estimate: issueData.estimate ?? null,
+      completedAt: issueData.completedAt ?? null,
+      state: issueData.state
+        ? {
+            type: issueData.state.type ?? null,
+            name: issueData.state.name ?? null,
+          }
+        : null,
+      assignee: issueData.assignee
+        ? {
+            id: issueData.assignee.id ?? null,
+            email: issueData.assignee.email ?? null,
+            name: issueData.assignee.name ?? null,
+            displayName: issueData.assignee.displayName ?? null,
+          }
+        : null,
+      labels: Array.isArray(issueData.labels) ? issueData.labels : [],
+    });
   }
 
   return NextResponse.json({ success: true });

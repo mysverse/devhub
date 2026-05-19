@@ -6,6 +6,7 @@ import PaymentRejected from "@/emails/PaymentRejected";
 import { requireAdmin } from "@/lib/authz";
 import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
+import { formatBonusPeriod } from "@/lib/bonus";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
 import {
@@ -42,9 +43,12 @@ export async function sendPaymentConfirmation(transactionId: string) {
   const { email, name } = await getUserEmailAndName(transaction.userId);
 
   const taskTitle =
-    transaction.linearIssueTitle ||
-    transaction.linearIssueIdentifier ||
-    "Manual Bonus";
+    transaction.source === "BONUS"
+      ? transaction.linearIssueTitle ||
+        `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
+      : transaction.linearIssueTitle ||
+        transaction.linearIssueIdentifier ||
+        "Manual Payout";
 
   await sendEmail({
     to: email,
@@ -169,9 +173,12 @@ export async function rejectTransaction(
       const { email, name } = await getUserEmailAndName(transaction.userId);
 
       const taskTitle =
-        transaction.linearIssueTitle ||
-        transaction.linearIssueIdentifier ||
-        "Manual Bonus";
+        transaction.source === "BONUS"
+          ? transaction.linearIssueTitle ||
+            `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
+          : transaction.linearIssueTitle ||
+            transaction.linearIssueIdentifier ||
+            "Manual Payout";
 
       await sendEmail({
         to: email,

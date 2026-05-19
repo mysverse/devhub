@@ -4,12 +4,14 @@ import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
+import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getUserWeeklyUsage } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
+import type { BonusReviewCandidate } from "./AdminBonusesTab";
 import AdminPayoutTabs from "./AdminPayoutTabs";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
@@ -19,6 +21,13 @@ import type { PayoutTransaction } from "./types";
 type TransactionWithUser = Transaction & {
   user: UserProfile;
   payout: Payout | null;
+  bonusCandidates: {
+    id: string;
+    linearIssueIdentifier: string | null;
+    linearIssueTitle: string | null;
+    linearIssueUrl: string | null;
+    approvedAmount: number | null;
+  }[];
 };
 
 function buildPayoutTransaction(
@@ -33,6 +42,8 @@ function buildPayoutTransaction(
     amount: tx.amount,
     currency: tx.currency,
     status: tx.status,
+    source: tx.source,
+    bonusPeriod: tx.bonusPeriod,
     taskTitle,
     developerName: user.legalName || user.linearEmail || "Unknown Developer",
     paymentMethod: user.paymentMethod,
@@ -50,6 +61,13 @@ function buildPayoutTransaction(
     rejectedAt: tx.rejectedAt?.toISOString() ?? null,
     rejectionReason: tx.rejectionReason,
     autoApproved: tx.autoApproved,
+    bonusLineItems: tx.bonusCandidates.map((candidate) => ({
+      id: candidate.id,
+      identifier: candidate.linearIssueIdentifier,
+      title: candidate.linearIssueTitle,
+      url: candidate.linearIssueUrl,
+      amount: candidate.approvedAmount,
+    })),
     payout: tx.payout
       ? {
           id: tx.payout.id,
@@ -63,6 +81,19 @@ function buildPayoutTransaction(
   };
 }
 
+function getStoredTaskTitle(tx: TransactionWithUser) {
+  if (tx.source === "BONUS") {
+    return (
+      tx.linearIssueTitle ||
+      `${formatBonusPeriod(tx.bonusPeriod)} Bonus - ${tx.bonusCandidates.length} task${tx.bonusCandidates.length === 1 ? "" : "s"}`
+    );
+  }
+
+  return tx.linearIssueTitle
+    ? `${tx.linearIssueIdentifier} - ${tx.linearIssueTitle}`
+    : tx.linearIssueIdentifier || "Manual Payout";
+}
+
 export default async function AdminPage() {
   const userId = await requireAdminPage();
 
@@ -71,22 +102,24 @@ export default async function AdminPage() {
     paidTransactions,
     rejectedTransactions,
     pendingPptRequests,
+    bonusConfig,
+    readyBonusCandidates,
     pendingKycCount,
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "PENDING" },
-      include: { user: true, payout: true },
+      include: { user: true, payout: true, bonusCandidates: true },
       orderBy: { createdAt: "asc" },
     }),
     prisma.transaction.findMany({
       where: { status: "PAID" },
-      include: { user: true, payout: true },
+      include: { user: true, payout: true, bonusCandidates: true },
       orderBy: { paidAt: "desc" },
       take: 50,
     }),
     prisma.transaction.findMany({
       where: { status: "REJECTED" },
-      include: { user: true, payout: true },
+      include: { user: true, payout: true, bonusCandidates: true },
       orderBy: { rejectedAt: "desc" },
       take: 50,
     }),
@@ -98,6 +131,16 @@ export default async function AdminPage() {
         },
       },
       orderBy: { createdAt: "asc" },
+    }),
+    getBonusConfig(),
+    prisma.bonusCandidate.findMany({
+      where: { status: "READY_FOR_REVIEW" },
+      include: {
+        user: {
+          include: { user: { select: { email: true, name: true } } },
+        },
+      },
+      orderBy: [{ period: "asc" }, { completedAt: "asc" }],
     }),
     prisma.kycVerification.count({
       where: { status: "PENDING" },
@@ -129,7 +172,9 @@ export default async function AdminPage() {
     { used: number; limit: number; remaining: number }
   >();
   const uniqueUserCurrencies = new Set(
-    pendingTransactions.map((tx) => `${tx.userId}:${tx.currency}`),
+    pendingTransactions
+      .filter((tx) => tx.source === "PPT")
+      .map((tx) => `${tx.userId}:${tx.currency}`),
   );
   await Promise.all(
     [...uniqueUserCurrencies].map(async (key) => {
@@ -146,10 +191,10 @@ export default async function AdminPage() {
   // Enrich pending transactions with Linear issue details
   const pending: PayoutTransaction[] = await Promise.all(
     pendingTransactions.map(async (tx: TransactionWithUser) => {
-      let taskTitle =
-        tx.linearIssueTitle || tx.linearIssueId || "Manual Payout";
+      let taskTitle = getStoredTaskTitle(tx);
 
       if (
+        tx.source === "PPT" &&
         tx.linearIssueId &&
         !tx.linearIssueId.includes(" ") &&
         !tx.linearIssueTitle
@@ -170,23 +215,36 @@ export default async function AdminPage() {
   // For paid/rejected, use stored titles (no Linear API calls)
   const paid: PayoutTransaction[] = paidTransactions.map(
     (tx: TransactionWithUser) =>
-      buildPayoutTransaction(
-        tx,
-        tx.linearIssueTitle
-          ? `${tx.linearIssueIdentifier} - ${tx.linearIssueTitle}`
-          : tx.linearIssueIdentifier || "Manual Payout",
-      ),
+      buildPayoutTransaction(tx, getStoredTaskTitle(tx)),
   );
 
   const rejected: PayoutTransaction[] = rejectedTransactions.map(
     (tx: TransactionWithUser) =>
-      buildPayoutTransaction(
-        tx,
-        tx.linearIssueTitle
-          ? `${tx.linearIssueIdentifier} - ${tx.linearIssueTitle}`
-          : tx.linearIssueIdentifier || "Manual Payout",
-      ),
+      buildPayoutTransaction(tx, getStoredTaskTitle(tx)),
   );
+
+  const bonusCandidates: BonusReviewCandidate[] = readyBonusCandidates
+    .filter((candidate) => candidate.user)
+    .map((candidate) => ({
+      id: candidate.id,
+      userId: candidate.userId as string,
+      developerName:
+        candidate.user?.legalName ||
+        candidate.user?.user.name ||
+        candidate.assigneeName ||
+        "Unknown Developer",
+      developerEmail:
+        candidate.user?.user.email || candidate.assigneeEmail || null,
+      currency: candidate.currency,
+      period: candidate.period || new Date().toISOString().slice(0, 7),
+      linearIssueIdentifier: candidate.linearIssueIdentifier,
+      linearIssueTitle: candidate.linearIssueTitle,
+      linearIssueUrl: candidate.linearIssueUrl,
+      labels: candidate.labels,
+      estimate: candidate.estimate,
+      maxAmount: candidate.maxAmount,
+      completedAt: candidate.completedAt?.toISOString() ?? null,
+    }));
 
   return (
     <FadeIn>
@@ -231,6 +289,13 @@ export default async function AdminPage() {
         pending={pending}
         paid={paid}
         rejected={rejected}
+        bonusConfig={{
+          enabled: bonusConfig.enabled,
+          myrRatePerPoint: bonusConfig.myrRatePerPoint,
+          robuxRatePerPoint: bonusConfig.robuxRatePerPoint,
+          excludedLabels: bonusConfig.excludedLabels,
+        }}
+        bonusCandidates={bonusCandidates}
         pptRequests={pendingPptRequests.map(
           (req): PptRequestData => ({
             id: req.id,

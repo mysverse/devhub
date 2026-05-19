@@ -146,6 +146,7 @@ export default function PayoutCard({
   const isPending = tx.status === "PENDING";
   const isPaid = tx.status === "PAID";
   const isRejected = tx.status === "REJECTED";
+  const isBonus = tx.source === "BONUS";
   const { color, label } = statusConfig[tx.status] ?? {
     color: "gray",
     label: tx.status,
@@ -287,6 +288,11 @@ export default function PayoutCard({
                     {label}
                   </Badge>
                 )}
+                {isBonus && (
+                  <Badge size="xs" color="green" variant="light">
+                    Bonus
+                  </Badge>
+                )}
                 {tx.autoApproved && isPending && (
                   <Badge size="xs" color="teal" variant="light">
                     Auto-approved
@@ -301,6 +307,36 @@ export default function PayoutCard({
             <Text fw={600} mb="xs">
               {tx.taskTitle}
             </Text>
+
+            {isBonus && tx.bonusLineItems && tx.bonusLineItems.length > 0 && (
+              <Box
+                bg="var(--mantine-color-dark-6)"
+                p="sm"
+                style={{ borderRadius: "var(--mantine-radius-md)" }}
+              >
+                <Text size="sm" fw={600} mb="xs">
+                  Bonus Line Items
+                </Text>
+                <Stack gap={6}>
+                  {tx.bonusLineItems.map((item) => (
+                    <Group key={item.id} justify="space-between" wrap="nowrap">
+                      <Text size="xs" c="dimmed" lineClamp={1}>
+                        {item.identifier ? `${item.identifier} - ` : ""}
+                        {item.title || "Untitled task"}
+                      </Text>
+                      {item.amount != null && (
+                        <Text size="xs" fw={600}>
+                          {formatAmount(
+                            item.amount,
+                            tx.currency as CurrencyCode,
+                          )}
+                        </Text>
+                      )}
+                    </Group>
+                  ))}
+                </Stack>
+              </Box>
+            )}
 
             {isPaid && tx.paidAt && (
               <Text size="xs" c="dimmed">
@@ -368,6 +404,7 @@ export default function PayoutCard({
             )}
 
             {isPending &&
+              !isBonus &&
               tx.creditLimitUsage &&
               tx.creditLimitUsage.limit > 0 && (
                 <Text size="xs" c="dimmed">
@@ -383,21 +420,25 @@ export default function PayoutCard({
                 style={{ borderRadius: "var(--mantine-radius-md)" }}
               >
                 <Text size="sm" fw={600} mb="xs">
-                  Bank Transfer Fields
+                  {isBonus ? "Bonus Transfer Fields" : "Bank Transfer Fields"}
                 </Text>
                 <Stack gap={6}>
                   <CopyField
                     label="Recipient's Reference"
-                    value={`PPT task / ${tx.linearIssueIdentifier || "N/A"}`}
+                    value={
+                      isBonus
+                        ? `Bonus / ${tx.bonusPeriod || tx.id}`
+                        : `PPT task / ${tx.linearIssueIdentifier || "N/A"}`
+                    }
                   />
                   <CopyField
                     label="Other Payment Details"
-                    value={tx.linearIssueUrl || ""}
+                    value={isBonus ? tx.taskTitle : tx.linearIssueUrl || ""}
                   />
                   <CopyField label="Email Address" value={tx.email || ""} />
                   <CopyField
                     label="Message to Beneficiary"
-                    value={`Payment of ${formatAmount(tx.amount, tx.currency as CurrencyCode)} for ${tx.linearIssueIdentifier || "PPT task"}: ${tx.taskTitle}. Thank you for your contribution to MYSverse!`}
+                    value={`Payment of ${formatAmount(tx.amount, tx.currency as CurrencyCode)} for ${isBonus ? "monthly bonus" : tx.linearIssueIdentifier || "PPT task"}: ${tx.taskTitle}. Thank you for your contribution to MYSverse!`}
                   />
                 </Stack>
               </Box>

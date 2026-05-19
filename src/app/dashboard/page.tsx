@@ -34,6 +34,7 @@ import {
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
+import { formatBonusPeriod } from "@/lib/bonus";
 import {
   getUserWeeklyUsage,
   getWeekBounds,
@@ -55,7 +56,7 @@ import prisma from "@/lib/prisma";
 function WalletSkeletons() {
   return (
     <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg" mb="xl">
-      {[...Array(3)].map((_, i) => (
+      {[...Array(6)].map((_, i) => (
         // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
         <Card key={i} withBorder radius="md" padding="xl">
           <Skeleton height={12} width="40%" mb="sm" />
@@ -120,12 +121,12 @@ async function UserWallet({
   userId: string;
   currency: CurrencyCode;
 }) {
-  let activeTasksPendingAmount = 0;
+  let activePptPendingAmount = 0;
 
   if (userProfile.linearId) {
     try {
       const linearId = userProfile.linearId;
-      activeTasksPendingAmount = await withLinearFallback(
+      activePptPendingAmount = await withLinearFallback(
         userId,
         async (client) => {
           const response = await client.issues({
@@ -138,24 +139,35 @@ async function UserWallet({
           const allIssues = response.nodes;
           const issuesWithState = await Promise.all(
             allIssues.map(async (issue) => {
-              const state = await issue.state;
-              return { issue, state };
+              const [state, labels] = await Promise.all([
+                issue.state,
+                issue.labels(),
+              ]);
+              return {
+                issue,
+                state,
+                hasPptLabel: labels.nodes.some(
+                  (label) => label.name.toUpperCase() === "PPT",
+                ),
+              };
             }),
           );
 
-          const assignedIssues = issuesWithState
+          return issuesWithState
             .filter(
-              ({ state }) =>
-                state?.type !== "completed" && state?.type !== "canceled",
+              ({ state, hasPptLabel }) =>
+                hasPptLabel &&
+                state?.type !== "completed" &&
+                state?.type !== "canceled",
             )
-            .map(({ issue }) => issue);
-
-          return assignedIssues.reduce((sum, issue) => {
-            return (
-              sum +
-              (issue.estimate ? estimateToAmount(issue.estimate, currency) : 0)
-            );
-          }, 0);
+            .reduce((sum, { issue }) => {
+              return (
+                sum +
+                (issue.estimate
+                  ? estimateToAmount(issue.estimate, currency)
+                  : 0)
+              );
+            }, 0);
         },
       );
     } catch (e) {
@@ -167,13 +179,38 @@ async function UserWallet({
   }
 
   const databasePendingBalance = userProfile.transactions
-    .filter((tx) => tx.status === "PENDING")
+    .filter(
+      (tx) =>
+        tx.status === "PENDING" &&
+        tx.source === "PPT" &&
+        tx.currency === currency,
+    )
     .reduce((sum: number, tx) => sum + tx.amount, 0);
 
-  const totalPendingBalance = databasePendingBalance + activeTasksPendingAmount;
+  const totalPendingBalance = databasePendingBalance + activePptPendingAmount;
+
+  const [potentialBonusBalance, approvedBonusBalance] = await Promise.all([
+    prisma.bonusCandidate.aggregate({
+      where: {
+        userId,
+        currency,
+        status: { in: ["ELIGIBLE", "READY_FOR_REVIEW"] },
+      },
+      _sum: { maxAmount: true },
+    }),
+    prisma.transaction.aggregate({
+      where: {
+        userId,
+        currency,
+        source: "BONUS",
+        status: "PENDING",
+      },
+      _sum: { amount: true },
+    }),
+  ]);
 
   const totalEarned = userProfile.transactions
-    .filter((tx) => tx.status === "PAID")
+    .filter((tx) => tx.status === "PAID" && tx.currency === currency)
     .reduce((sum: number, tx) => sum + tx.amount, 0);
 
   const creditUsage = await getUserWeeklyUsage(userId, currency);
@@ -186,7 +223,7 @@ async function UserWallet({
   return (
     <FadeIn>
       <StaggerContainer>
-        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mb="xl">
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 5 }} spacing="lg" mb="xl">
           <StaggerItem className="h-full">
             <Card
               withBorder
@@ -208,6 +245,43 @@ async function UserWallet({
                   }}
                 />
                 {currency === "ROBUX" ? " Robux" : ""}
+              </Text>
+            </Card>
+          </StaggerItem>
+
+          <StaggerItem className="h-full">
+            <Card
+              withBorder
+              radius="md"
+              padding="xl"
+              bg="var(--mantine-color-body)"
+              h="100%"
+            >
+              <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
+                Potential Bonuses
+              </Text>
+              <Text fz="xl" fw={700}>
+                {formatAmount(
+                  potentialBonusBalance._sum.maxAmount ?? 0,
+                  currency,
+                )}
+              </Text>
+            </Card>
+          </StaggerItem>
+
+          <StaggerItem className="h-full">
+            <Card
+              withBorder
+              radius="md"
+              padding="xl"
+              bg="var(--mantine-color-body)"
+              h="100%"
+            >
+              <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
+                Approved Bonuses
+              </Text>
+              <Text fz="xl" fw={700}>
+                {formatAmount(approvedBonusBalance._sum.amount ?? 0, currency)}
               </Text>
             </Card>
           </StaggerItem>
@@ -318,7 +392,7 @@ async function ActiveTasks({
   userId: string;
   currency: CurrencyCode;
 }) {
-  let assignedIssues: Issue[] = [];
+  let assignedIssues: { issue: Issue; labelNames: string[] }[] = [];
   let linearError = null;
 
   try {
@@ -333,8 +407,15 @@ async function ActiveTasks({
       const allIssues = response.nodes;
       const issuesWithState = await Promise.all(
         allIssues.map(async (issue) => {
-          const state = await issue.state;
-          return { issue, state };
+          const [state, labels] = await Promise.all([
+            issue.state,
+            issue.labels(),
+          ]);
+          return {
+            issue,
+            state,
+            labelNames: labels.nodes.map((label) => label.name),
+          };
         }),
       );
 
@@ -343,7 +424,7 @@ async function ActiveTasks({
           ({ state }) =>
             state?.type !== "completed" && state?.type !== "canceled",
         )
-        .map(({ issue }) => issue);
+        .map(({ issue, labelNames }) => ({ issue, labelNames }));
     });
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {
@@ -369,23 +450,57 @@ async function ActiveTasks({
     );
   }
 
+  const bonusCandidates = await prisma.bonusCandidate.findMany({
+    where: {
+      userId,
+      linearIssueId: {
+        in: assignedIssues.map(({ issue }) => issue.id),
+      },
+      status: { in: ["ELIGIBLE", "READY_FOR_REVIEW"] },
+    },
+    select: {
+      linearIssueId: true,
+      maxAmount: true,
+      currency: true,
+    },
+  });
+  const bonusByIssueId = new Map(
+    bonusCandidates.map((candidate) => [candidate.linearIssueId, candidate]),
+  );
+
   return (
     <FadeIn>
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          {assignedIssues.map((issue) => (
-            <StaggerItem key={issue.id}>
-              <TaskCard
-                issueId={issue.id}
-                identifier={issue.identifier}
-                title={issue.title}
-                url={issue.url}
-                estimate={issue.estimate}
-                variant="active"
-                currency={currency}
-              />
-            </StaggerItem>
-          ))}
+          {assignedIssues.map(({ issue, labelNames }) => {
+            const hasPptLabel = labelNames.some(
+              (label) => label.toUpperCase() === "PPT",
+            );
+            const bonus = bonusByIssueId.get(issue.id);
+            const bonusCurrency = bonus?.currency === "ROBUX" ? "ROBUX" : "MYR";
+            const earningsText = hasPptLabel
+              ? issue.estimate
+                ? `${formatAmount(estimateToAmount(issue.estimate, currency), currency)} (Pending)`
+                : null
+              : bonus
+                ? `Up to ${formatAmount(bonus.maxAmount, bonusCurrency)}`
+                : null;
+
+            return (
+              <StaggerItem key={issue.id}>
+                <TaskCard
+                  issueId={issue.id}
+                  identifier={issue.identifier}
+                  title={issue.title}
+                  url={issue.url}
+                  estimate={issue.estimate}
+                  variant="active"
+                  currency={currency}
+                  earningsText={earningsText}
+                />
+              </StaggerItem>
+            );
+          })}
         </SimpleGrid>
       </StaggerContainer>
     </FadeIn>
@@ -639,7 +754,7 @@ function HowPPTsWork({ currency }: { currency: CurrencyCode }) {
                 </ListItem>
                 <ListItem>Week runs Monday to Sunday (UTC)</ListItem>
                 <ListItem>
-                  Both pending and paid transactions count toward the limit
+                  Pending and paid PPT transactions count toward the limit
                 </ListItem>
               </List>
               <Text fz="xs" c="dimmed" mt="xs">
@@ -777,8 +892,13 @@ export default async function DashboardPage() {
                 : tx.linearIssueIdentifier || tx.linearIssueId}
             </Text>
           )
+        ) : tx.source === "BONUS" ? (
+          <Text fz="sm">
+            {tx.linearIssueTitle ||
+              `${formatBonusPeriod(tx.bonusPeriod)} Bonus`}
+          </Text>
         ) : (
-          <Text fz="sm">Manual Bonus</Text>
+          <Text fz="sm">Manual Payout</Text>
         )}
       </TableTd>
       <TableTd fw={500}>
@@ -816,7 +936,7 @@ export default async function DashboardPage() {
       <div style={{ marginBottom: "2rem" }}>
         <Title order={1}>Overview</Title>
         <Text c="dimmed" mt="xs">
-          Your earnings and recent PPT activity.
+          Your earnings and recent activity.
         </Text>
       </div>
 

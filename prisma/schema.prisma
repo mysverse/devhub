@@ -96,6 +96,9 @@ model UserProfile {
 
   // Relationships
   transactions     Transaction[]
+  bonusCandidates  BonusCandidate[] @relation("BonusCandidateUser")
+  bonusReviews     BonusCandidate[] @relation("BonusCandidateReviewer")
+  bonusNotifications BonusNotification[]
   invites          Invite[]
   signedDocuments  SignedDocument[]
   pptRequestsMade     PptRequest[] @relation("PptRequestRequester")
@@ -278,6 +281,8 @@ model Transaction {
   linearIssueUrl   String?
   amount           Float
   currency         String   @default("USD") // Or "R$"
+  source           TransactionSource @default(PPT)
+  bonusPeriod      String? // YYYY-MM for grouped monthly bonus payouts
   status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
   autoApproved     Boolean  @default(false) // Pre-vetted under weekly credit limit
   createdAt        DateTime @default(now())
@@ -286,6 +291,13 @@ model Transaction {
   rejectionReason  String?
   pdfBlobUrl       String?
   payout           Payout?
+  bonusCandidates  BonusCandidate[]
+}
+
+enum TransactionSource {
+  PPT
+  BONUS
+  MANUAL
 }
 
 model Payout {
@@ -320,6 +332,86 @@ enum TxStatus {
   PAID
   CANCELLED
   REJECTED
+}
+
+// ── Bonus tables ────────────────────────────────────────────────────────────
+
+model BonusConfig {
+  id                String   @id @default("default")
+  enabled           Boolean  @default(true)
+  myrRatePerPoint   Float    @default(20)
+  robuxRatePerPoint Float    @default(1200)
+  excludedLabels    String[] @default([])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model BonusCandidate {
+  id                    String               @id @default(cuid())
+  linearIssueId         String               @unique
+  linearIssueIdentifier String?
+  linearIssueTitle      String?
+  linearIssueUrl        String?
+  linearIssueStateType  String?
+  linearIssueStateName  String?
+  labels                String[]             @default([])
+  estimate              Int?
+
+  userId                String?
+  user                  UserProfile?         @relation("BonusCandidateUser", fields: [userId], references: [id], onDelete: SetNull)
+  assigneeLinearId      String?
+  assigneeEmail         String?
+  assigneeName          String?
+
+  currency              String               @default("MYR")
+  maxAmount             Float                @default(0)
+  approvedAmount        Float?
+  status                BonusCandidateStatus @default(INELIGIBLE)
+  ineligibilityReason   String?
+  period                String?
+  completedAt           DateTime?
+
+  reviewedById          String?
+  reviewedBy            UserProfile?         @relation("BonusCandidateReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt            DateTime?
+  rejectionReason       String?
+
+  transactionId         String?
+  transaction           Transaction?         @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  notifications         BonusNotification[]
+
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([userId, status])
+  @@index([period, status])
+  @@index([transactionId])
+}
+
+model BonusNotification {
+  id          String                @id @default(cuid())
+  userId      String
+  user        UserProfile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  candidateId String
+  candidate   BonusCandidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  type        BonusNotificationType @default(NEW_ELIGIBLE_BONUS)
+  readAt      DateTime?
+  createdAt   DateTime              @default(now())
+
+  @@unique([userId, candidateId, type])
+  @@index([userId, readAt])
+}
+
+enum BonusCandidateStatus {
+  ELIGIBLE
+  READY_FOR_REVIEW
+  APPROVED
+  REJECTED
+  INELIGIBLE
+}
+
+enum BonusNotificationType {
+  NEW_ELIGIBLE_BONUS
 }
 
 enum DocumentType {

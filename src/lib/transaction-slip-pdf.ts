@@ -10,6 +10,7 @@ import {
   View,
 } from "@react-pdf/renderer";
 import { createElement } from "react";
+import { formatBonusPeriod } from "@/lib/bonus";
 import { siteConfig } from "@/lib/config";
 import {
   getBankDisplayName,
@@ -125,6 +126,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: "Helvetica-Bold",
   },
+  lineItem: {
+    flexDirection: "row" as const,
+    justifyContent: "space-between" as const,
+    gap: 12,
+    paddingBottom: 5,
+    marginBottom: 5,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eeeeee",
+  },
+  lineItemTitle: {
+    flex: 1,
+    fontSize: 10,
+  },
+  lineItemAmount: {
+    width: 90,
+    fontSize: 10,
+    fontFamily: "Helvetica-Bold",
+    textAlign: "right" as const,
+  },
   footer: {
     position: "absolute" as const,
     bottom: 40,
@@ -142,6 +162,8 @@ const styles = StyleSheet.create({
 
 export type TransactionSlipData = {
   transactionId: string;
+  source: "PPT" | "BONUS" | "MANUAL";
+  bonusPeriod: string | null;
   linearIssueIdentifier: string | null;
   linearIssueTitle: string | null;
   amount: number;
@@ -157,6 +179,11 @@ export type TransactionSlipData = {
   bankAccountNumber?: string | null;
   bankAccountName?: string | null;
   robuxUsername?: string | null;
+  bonusLineItems?: {
+    identifier: string | null;
+    title: string | null;
+    amount: number | null;
+  }[];
 };
 
 function formatDate(date: Date): string {
@@ -199,18 +226,24 @@ function statusStyle(status: string) {
   return styles.statusCancelled;
 }
 
+function formatSlipAmount(amount: number, currency: string) {
+  if (currency === "ROBUX") {
+    return `${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })} Robux`;
+  }
+  if (currency === "MYR") return `RM${amount.toFixed(2)}`;
+  return `$${amount.toFixed(2)} ${currency}`;
+}
+
 export function createTransactionSlipPdf(data: TransactionSlipData) {
   const slipId = data.transactionId.slice(-8).toUpperCase();
-  const taskLabel = data.linearIssueTitle
-    ? `${data.linearIssueTitle}${data.linearIssueIdentifier ? ` (${data.linearIssueIdentifier})` : ""}`
-    : data.linearIssueIdentifier || "Manual Bonus";
+  const taskLabel =
+    data.source === "BONUS"
+      ? data.linearIssueTitle || `${formatBonusPeriod(data.bonusPeriod)} Bonus`
+      : data.linearIssueTitle
+        ? `${data.linearIssueTitle}${data.linearIssueIdentifier ? ` (${data.linearIssueIdentifier})` : ""}`
+        : data.linearIssueIdentifier || "Manual Payout";
 
-  const amountStr =
-    data.currency === "ROBUX"
-      ? `${data.amount.toLocaleString("en-US", { maximumFractionDigits: 0 })} Robux`
-      : data.currency === "MYR"
-        ? `RM${data.amount.toFixed(2)}`
-        : `$${data.amount.toFixed(2)} ${data.currency}`;
+  const amountStr = formatSlipAmount(data.amount, data.currency);
 
   const detailRows: React.ReactElement[] = [
     createElement(
@@ -247,6 +280,31 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
       ),
     );
   }
+
+  const bonusLineRows =
+    data.source === "BONUS" && data.bonusLineItems?.length
+      ? data.bonusLineItems.map((item, index) =>
+          createElement(
+            View,
+            {
+              key: `${item.identifier || item.title || index}`,
+              style: styles.lineItem,
+            },
+            createElement(
+              Text,
+              { style: styles.lineItemTitle },
+              `${item.identifier ? `${item.identifier} - ` : ""}${item.title || "Untitled task"}`,
+            ),
+            createElement(
+              Text,
+              { style: styles.lineItemAmount },
+              item.amount != null
+                ? formatSlipAmount(item.amount, data.currency)
+                : "",
+            ),
+          ),
+        )
+      : [];
 
   const paymentRows: React.ReactElement[] = [
     createElement(
@@ -315,6 +373,20 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
         createElement(Text, { style: styles.sectionTitle }, "Payment Details"),
         ...paymentRows,
       ),
+      ...(bonusLineRows.length > 0
+        ? [
+            createElement(
+              View,
+              { key: "bonus-lines", style: styles.section },
+              createElement(
+                Text,
+                { style: styles.sectionTitle },
+                "Bonus Line Items",
+              ),
+              ...bonusLineRows,
+            ),
+          ]
+        : []),
       // Amount
       createElement(
         View,
@@ -348,6 +420,14 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
           robuxUsername: true,
         },
       },
+      bonusCandidates: {
+        select: {
+          linearIssueIdentifier: true,
+          linearIssueTitle: true,
+          approvedAmount: true,
+        },
+        orderBy: { linearIssueIdentifier: "asc" },
+      },
     },
   });
 
@@ -357,6 +437,8 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
 
   const slipData: TransactionSlipData = {
     transactionId: transaction.id,
+    source: transaction.source,
+    bonusPeriod: transaction.bonusPeriod,
     linearIssueIdentifier: transaction.linearIssueIdentifier,
     linearIssueTitle: transaction.linearIssueTitle,
     amount: transaction.amount,
@@ -372,6 +454,11 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
     bankAccountNumber: transaction.user.bankAccountNumber,
     bankAccountName: transaction.user.bankAccountName,
     robuxUsername: transaction.user.robuxUsername,
+    bonusLineItems: transaction.bonusCandidates.map((candidate) => ({
+      identifier: candidate.linearIssueIdentifier,
+      title: candidate.linearIssueTitle,
+      amount: candidate.approvedAmount,
+    })),
   };
 
   const pdfDoc = createTransactionSlipPdf(slipData);

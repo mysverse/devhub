@@ -4,6 +4,8 @@ export type PayoutTransaction = {
   amount: number;
   currency: string;
   status: string;
+  source?: string;
+  bonusPeriod?: string | null;
   taskTitle: string;
   developerName: string;
   paymentMethod: string;
@@ -21,6 +23,13 @@ export type PayoutTransaction = {
   rejectedAt?: string | null;
   rejectionReason?: string | null;
   autoApproved?: boolean;
+  bonusLineItems?: {
+    id: string;
+    identifier?: string | null;
+    title?: string | null;
+    url?: string | null;
+    amount?: number | null;
+  }[];
   payout?: {
     id: string;
     provider: string;

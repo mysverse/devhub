@@ -46,6 +46,7 @@ export async function getUserWeeklyUsage(
     where: {
       userId,
       currency,
+      source: "PPT",
       status: { in: ["PENDING", "PAID"] },
       createdAt: { gte: weekStart, lte: weekEnd },
     },

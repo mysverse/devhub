@@ -1,5 +1,6 @@
 import { sendPaymentConfirmation } from "@/app/dashboard/admin/actions";
 import { createPaymentOrder } from "@/lib/billplz";
+import { formatBonusPeriod } from "@/lib/bonus";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import {
   getXenditBankCode,
@@ -9,6 +10,21 @@ import {
 import prisma from "@/lib/prisma";
 import { createFinSysPayout, verifyGroupMembership } from "@/lib/roblox";
 import { createDisbursement, isXenditEnabled } from "@/lib/xendit";
+
+function getTransactionPayoutDescription(transaction: {
+  source?: string | null;
+  bonusPeriod?: string | null;
+  linearIssueIdentifier?: string | null;
+  linearIssueTitle?: string | null;
+}) {
+  if (transaction.source === "BONUS") {
+    return `Bonus: ${formatBonusPeriod(transaction.bonusPeriod)}`;
+  }
+  if (transaction.linearIssueIdentifier) {
+    return `PPT: ${transaction.linearIssueIdentifier} - ${transaction.linearIssueTitle || ""}`;
+  }
+  return "Manual Payout";
+}
 
 /**
  * Shared helper: mark a payout as completed and its transaction as paid.
@@ -120,9 +136,7 @@ export async function initiateBillplzPayout(transactionId: string) {
   }
 
   const amountCents = Math.round(transaction.amount * 100);
-  const description = transaction.linearIssueIdentifier
-    ? `PPT: ${transaction.linearIssueIdentifier} - ${transaction.linearIssueTitle || ""}`
-    : "PPT Payout";
+  const description = getTransactionPayoutDescription(transaction);
 
   // Create local payout record
   const payout = await prisma.payout.create({
@@ -232,9 +246,7 @@ export async function initiateXenditPayout(transactionId: string) {
     });
   }
 
-  const description = transaction.linearIssueIdentifier
-    ? `PPT: ${transaction.linearIssueIdentifier} - ${transaction.linearIssueTitle || ""}`
-    : "PPT Payout";
+  const description = getTransactionPayoutDescription(transaction);
 
   const payout = await prisma.payout.create({
     data: {
@@ -359,7 +371,10 @@ export async function initiateRobloxPayout(transactionId: string) {
     const result = await createFinSysPayout({
       robloxUserId: Number(user.robloxId),
       amount: transaction.amount,
-      reason: `DevHub payout: tx ${transactionId}`,
+      reason:
+        transaction.source === "BONUS"
+          ? `DevHub bonus: ${formatBonusPeriod(transaction.bonusPeriod)}`
+          : `DevHub payout: tx ${transactionId}`,
     });
 
     console.log(
@@ -427,6 +442,7 @@ export async function initiateAutoPayout(transactionId: string) {
   });
 
   if (!transaction || transaction.status !== "PENDING") return null;
+  if (transaction.source !== "PPT") return null;
 
   if (transaction.currency === "ROBUX") {
     if (!transaction.user.robloxId) return null;

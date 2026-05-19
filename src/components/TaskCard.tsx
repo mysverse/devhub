@@ -88,6 +88,8 @@ type TaskCardProps = {
   subIssueCount?: number;
   variant?: "full" | "compact" | "active";
   currency?: CurrencyCode;
+  earningsText?: string | null;
+  earningsColor?: string;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -161,6 +163,8 @@ export default function TaskCard({
   subIssueCount,
   variant = "full",
   currency = "MYR",
+  earningsText,
+  earningsColor = "green",
 }: TaskCardProps) {
   const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
 
@@ -209,9 +213,10 @@ export default function TaskCard({
             <Badge variant="light" color="blue">
               {identifier}
             </Badge>
-            {pptEstimate > 0 && (
-              <Text fw={700} c="green" fz="sm">
-                {formatAmount(pptEstimate, currency)} (Pending)
+            {(earningsText || pptEstimate > 0) && (
+              <Text fw={700} c={earningsColor} fz="sm">
+                {earningsText ??
+                  `${formatAmount(pptEstimate, currency)} (Pending)`}
               </Text>
             )}
           </Group>

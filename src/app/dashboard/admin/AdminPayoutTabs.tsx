@@ -10,6 +10,10 @@ import {
   Text,
 } from "@mantine/core";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import AdminBonusesTab, {
+  type BonusConfigData,
+  type BonusReviewCandidate,
+} from "./AdminBonusesTab";
 import PayoutCard from "./PayoutCard";
 import type { PptRequestData } from "./PptRequestCard";
 import PptRequestsTab from "./PptRequestsTab";
@@ -48,20 +52,33 @@ export default function AdminPayoutTabs({
   paid,
   rejected,
   pptRequests,
+  bonusConfig,
+  bonusCandidates,
 }: {
   pending: PayoutTransaction[];
   paid: PayoutTransaction[];
   rejected: PayoutTransaction[];
   pptRequests: PptRequestData[];
+  bonusConfig: BonusConfigData;
+  bonusCandidates: BonusReviewCandidate[];
 }) {
   return (
-    <Tabs defaultValue={pptRequests.length > 0 ? "ppt-requests" : "pending"}>
+    <Tabs
+      defaultValue={
+        pptRequests.length > 0
+          ? "ppt-requests"
+          : bonusCandidates.length > 0
+            ? "bonuses"
+            : "pending"
+      }
+    >
       <TabsList mb="lg">
         {pptRequests.length > 0 && (
           <TabsTab value="ppt-requests">
             PPT Requests ({pptRequests.length})
           </TabsTab>
         )}
+        <TabsTab value="bonuses">Bonuses ({bonusCandidates.length})</TabsTab>
         <TabsTab value="pending">Pending ({pending.length})</TabsTab>
         <TabsTab value="paid">Paid ({paid.length})</TabsTab>
         <TabsTab value="rejected">Rejected ({rejected.length})</TabsTab>
@@ -72,6 +89,10 @@ export default function AdminPayoutTabs({
           <PptRequestsTab requests={pptRequests} />
         </TabsPanel>
       )}
+
+      <TabsPanel value="bonuses">
+        <AdminBonusesTab config={bonusConfig} candidates={bonusCandidates} />
+      </TabsPanel>
 
       <TabsPanel value="pending">
         <TransactionGrid

@@ -18,6 +18,7 @@ import { SPRING } from "@/components/animations";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
 import ClaimButton from "./ClaimButton";
+import PptProofButton from "./PptProofButton";
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
   if (!markdown) return null;
@@ -90,6 +91,9 @@ type TaskCardProps = {
   currency?: CurrencyCode;
   earningsText?: string | null;
   earningsColor?: string;
+  isPpt?: boolean;
+  proofStatus?: string | null;
+  proofReason?: string | null;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -165,6 +169,9 @@ export default function TaskCard({
   currency = "MYR",
   earningsText,
   earningsColor = "green",
+  isPpt,
+  proofStatus,
+  proofReason,
 }: TaskCardProps) {
   const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
 
@@ -206,6 +213,20 @@ export default function TaskCard({
   }
 
   if (variant === "active") {
+    const proofBadge =
+      proofStatus === "NEEDS_PROOF"
+        ? { label: "Needs proof", color: "yellow" }
+        : proofStatus === "WAITING_STABILITY"
+          ? { label: "Waiting stability", color: "blue" }
+          : proofStatus === "ON_HOLD"
+            ? { label: "On hold: reopened", color: "orange" }
+            : proofStatus === "READY_FOR_PAYOUT" ||
+                proofStatus === "TRANSACTION_PENDING"
+              ? { label: "Ready for payout", color: "green" }
+              : proofStatus === "FLAGGED"
+                ? { label: "Admin review", color: "red" }
+                : null;
+
     return (
       <HoverLift>
         <Card withBorder radius="md" padding="lg" h="100%">
@@ -223,11 +244,27 @@ export default function TaskCard({
           <Text fw={600} lineClamp={1} mb="md">
             {title}
           </Text>
+          {proofBadge && (
+            <Tooltip label={proofReason || proofBadge.label}>
+              <Badge
+                variant="light"
+                color={proofBadge.color}
+                size="sm"
+                mb="sm"
+                style={{ alignSelf: "flex-start" }}
+              >
+                {proofBadge.label}
+              </Badge>
+            </Tooltip>
+          )}
           <Group justify="space-between" mt="auto">
             <Text fz="sm" c="dimmed">
               {estimate ? `${estimate} pts` : "Unestimated"}
             </Text>
-            <LinearIcon url={url} />
+            <Group gap="xs">
+              {isPpt && <PptProofButton issueId={issueId} compact />}
+              <LinearIcon url={url} />
+            </Group>
           </Group>
         </Card>
       </HoverLift>

@@ -23,6 +23,9 @@ export type PayoutTransaction = {
   rejectedAt?: string | null;
   rejectionReason?: string | null;
   autoApproved?: boolean;
+  proofStatus?: string | null;
+  proofReason?: string | null;
+  proofCommentUrl?: string | null;
   bonusLineItems?: {
     id: string;
     identifier?: string | null;

@@ -14,6 +14,9 @@ import AdminBonusesTab, {
   type BonusConfigData,
   type BonusReviewCandidate,
 } from "./AdminBonusesTab";
+import AdminPptEligibilityTab, {
+  type AdminPptEligibilityState,
+} from "./AdminPptEligibilityTab";
 import PayoutCard from "./PayoutCard";
 import type { PptRequestData } from "./PptRequestCard";
 import PptRequestsTab from "./PptRequestsTab";
@@ -54,6 +57,7 @@ export default function AdminPayoutTabs({
   pptRequests,
   bonusConfig,
   bonusCandidates,
+  pptEligibilityStates,
 }: {
   pending: PayoutTransaction[];
   paid: PayoutTransaction[];
@@ -61,15 +65,18 @@ export default function AdminPayoutTabs({
   pptRequests: PptRequestData[];
   bonusConfig: BonusConfigData;
   bonusCandidates: BonusReviewCandidate[];
+  pptEligibilityStates: AdminPptEligibilityState[];
 }) {
   return (
     <Tabs
       defaultValue={
         pptRequests.length > 0
           ? "ppt-requests"
-          : bonusCandidates.length > 0
-            ? "bonuses"
-            : "pending"
+          : pptEligibilityStates.length > 0
+            ? "ppt-eligibility"
+            : bonusCandidates.length > 0
+              ? "bonuses"
+              : "pending"
       }
     >
       <TabsList mb="lg">
@@ -79,6 +86,9 @@ export default function AdminPayoutTabs({
           </TabsTab>
         )}
         <TabsTab value="bonuses">Bonuses ({bonusCandidates.length})</TabsTab>
+        <TabsTab value="ppt-eligibility">
+          PPT Eligibility ({pptEligibilityStates.length})
+        </TabsTab>
         <TabsTab value="pending">Pending ({pending.length})</TabsTab>
         <TabsTab value="paid">Paid ({paid.length})</TabsTab>
         <TabsTab value="rejected">Rejected ({rejected.length})</TabsTab>
@@ -92,6 +102,10 @@ export default function AdminPayoutTabs({
 
       <TabsPanel value="bonuses">
         <AdminBonusesTab config={bonusConfig} candidates={bonusCandidates} />
+      </TabsPanel>
+
+      <TabsPanel value="ppt-eligibility">
+        <AdminPptEligibilityTab states={pptEligibilityStates} />
       </TabsPanel>
 
       <TabsPanel value="pending">

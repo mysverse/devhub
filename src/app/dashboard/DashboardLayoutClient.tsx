@@ -25,6 +25,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import BonusNotificationPoller from "@/components/BonusNotificationPoller";
 import { Logo } from "@/components/Logo";
+import PptNotificationPoller from "@/components/PptNotificationPoller";
 import { signOut, useSession } from "@/lib/auth-client";
 
 type NavLink = { href: string; label: string };
@@ -236,6 +237,7 @@ export default function DashboardLayoutClient({
         </Container>
       </AppShellMain>
       <BonusNotificationPoller />
+      <PptNotificationPoller />
     </AppShell>
   );
 }

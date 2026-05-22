@@ -118,6 +118,7 @@ const statusConfig: Record<string, { color: string; label: string }> = {
   PAID: { color: "green", label: "Paid" },
   REJECTED: { color: "red", label: "Rejected" },
   CANCELLED: { color: "gray", label: "Cancelled" },
+  ON_HOLD: { color: "orange", label: "On hold" },
 };
 
 export default function PayoutCard({
@@ -364,6 +365,46 @@ export default function PayoutCard({
                   </Box>
                 )}
               </>
+            )}
+
+            {tx.source === "PPT" && tx.proofStatus && (
+              <Box
+                bg="var(--mantine-color-dark-6)"
+                p="sm"
+                style={{ borderRadius: "var(--mantine-radius-md)" }}
+              >
+                <Group justify="space-between" gap="xs">
+                  <Text size="sm" fw={600}>
+                    PPT Eligibility
+                  </Text>
+                  <Badge
+                    size="xs"
+                    color={tx.status === "ON_HOLD" ? "orange" : "blue"}
+                    variant="light"
+                  >
+                    {tx.proofStatus.replaceAll("_", " ")}
+                  </Badge>
+                </Group>
+                {tx.proofReason && (
+                  <Text size="xs" c="dimmed" mt={4}>
+                    {tx.proofReason.replaceAll("_", " ")}
+                  </Text>
+                )}
+                {tx.proofCommentUrl && (
+                  <Button
+                    component="a"
+                    href={tx.proofCommentUrl}
+                    target="_blank"
+                    size="xs"
+                    variant="subtle"
+                    color="gray"
+                    mt="xs"
+                    px={0}
+                  >
+                    Open proof comment
+                  </Button>
+                )}
+              </Box>
             )}
 
             <Box

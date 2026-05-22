@@ -168,7 +168,7 @@ export type TransactionSlipData = {
   linearIssueTitle: string | null;
   amount: number;
   currency: string;
-  status: "PENDING" | "PAID" | "CANCELLED" | "REJECTED";
+  status: "PENDING" | "PAID" | "CANCELLED" | "REJECTED" | "ON_HOLD";
   createdAt: Date;
   paidAt: Date | null;
   legalName: string | null;
@@ -222,6 +222,7 @@ function getPaymentDetails(data: TransactionSlipData): string {
 function statusStyle(status: string) {
   if (status === "PAID") return styles.statusPaid;
   if (status === "PENDING") return styles.statusPending;
+  if (status === "ON_HOLD") return styles.statusPending;
   if (status === "REJECTED") return styles.statusRejected;
   return styles.statusCancelled;
 }

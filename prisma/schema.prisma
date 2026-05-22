@@ -96,6 +96,8 @@ model UserProfile {
 
   // Relationships
   transactions     Transaction[]
+  pptPayoutStates  PptPayoutState[] @relation("PptPayoutStateUser")
+  pptNotifications PptNotification[]
   bonusCandidates  BonusCandidate[] @relation("BonusCandidateUser")
   bonusReviews     BonusCandidate[] @relation("BonusCandidateReviewer")
   bonusNotifications BonusNotification[]
@@ -292,6 +294,7 @@ model Transaction {
   pdfBlobUrl       String?
   payout           Payout?
   bonusCandidates  BonusCandidate[]
+  pptPayoutState    PptPayoutState?
 }
 
 enum TransactionSource {
@@ -332,6 +335,151 @@ enum TxStatus {
   PAID
   CANCELLED
   REJECTED
+  ON_HOLD
+}
+
+// ── PPT payout eligibility tables ──────────────────────────────────────────
+
+model PptPayoutState {
+  id                    String          @id @default(cuid())
+  linearIssueId         String          @unique
+  linearIssueIdentifier String?
+  linearIssueTitle      String?
+  linearIssueUrl        String?
+  latestLinearStateType String?
+  latestLinearStateName String?
+  hasPptLabel           Boolean         @default(false)
+  estimate              Int?
+
+  userId                String?
+  user                  UserProfile?    @relation("PptPayoutStateUser", fields: [userId], references: [id], onDelete: SetNull)
+  assigneeLinearId      String?
+  assigneeEmail         String?
+  assigneeName          String?
+
+  status                PptPayoutStatus @default(BLOCKED)
+  reason                PptPayoutReason?
+  completionEpisode     Int             @default(0)
+  completedAt           DateTime?
+  lastReopenedAt        DateTime?
+  latestAssignmentAt    DateTime?
+
+  proofCommentId        String?
+  proofCommentUrl       String?
+  proofCommentBody      String?
+  proofAuthorLinearId   String?
+  proofProvidedAt       DateTime?
+
+  transactionId         String?         @unique
+  transaction           Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  warningCount          Int             @default(0)
+  lastDeveloperNotifiedAt DateTime?
+  lastAdminNotifiedAt   DateTime?
+  lastLinearCommentReason PptPayoutReason?
+  lastLinearCommentAt   DateTime?
+
+  events                PptPayoutEvent[]
+  notifications         PptNotification[]
+
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+
+  @@index([status, reason])
+  @@index([userId, status])
+  @@index([completedAt])
+}
+
+model PptPayoutEvent {
+  id            String              @id @default(cuid())
+  stateId       String
+  state         PptPayoutState      @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  linearIssueId String
+  type          PptPayoutEventType
+  reason        PptPayoutReason?
+  actorLinearId String?
+  message       String?
+  metadata      Json?
+  createdAt     DateTime            @default(now())
+
+  @@index([stateId, createdAt])
+  @@index([linearIssueId, createdAt])
+  @@index([type, createdAt])
+}
+
+model PptNotification {
+  id        String              @id @default(cuid())
+  userId    String
+  user      UserProfile         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stateId   String
+  state     PptPayoutState      @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  type      PptNotificationType
+  title     String
+  message   String
+  readAt    DateTime?
+  createdAt DateTime            @default(now())
+
+  @@index([userId, readAt])
+  @@index([stateId, createdAt])
+}
+
+enum PptPayoutStatus {
+  BLOCKED
+  NEEDS_PROOF
+  WAITING_STABILITY
+  READY_FOR_PAYOUT
+  TRANSACTION_PENDING
+  ON_HOLD
+  PAID
+  FLAGGED
+}
+
+enum PptPayoutReason {
+  MISSING_PPT_LABEL
+  NOT_COMPLETED
+  MISSING_ESTIMATE
+  MISSING_ASSIGNEE
+  NO_LINKED_USER
+  MISSING_PROOF
+  PROOF_RESET_BY_QUESTION
+  WAITING_STABILITY
+  DUPLICATE_TRANSACTION
+  APPROVED_BONUS_EXISTS
+  LINEAR_API_ERROR
+  REOPENED_BEFORE_PAYOUT
+  REOPENED_DURING_PAYOUT_PROCESSING
+  PAID_ISSUE_REOPENED
+  READY_FOR_PAYOUT
+  TRANSACTION_CREATED
+  AUTO_PAYOUT_STARTED
+}
+
+enum PptPayoutEventType {
+  COMPLETED_DETECTED
+  REOPENED_DETECTED
+  PROOF_MISSING
+  PROOF_ACCEPTED
+  PROOF_RESET
+  WAITING_STABILITY
+  PAYOUT_BLOCKED
+  PAYOUT_HELD
+  PAYOUT_RESUMED
+  PAYOUT_READY
+  TRANSACTION_CREATED
+  AUTO_PAYOUT_STARTED
+  PAID_ISSUE_REOPENED
+  DUPLICATE_SUPPRESSED
+  LINEAR_COMMENTED
+  DEVELOPER_NOTIFIED
+  ADMIN_ALERT_SENT
+}
+
+enum PptNotificationType {
+  BLOCKED
+  HELD
+  READY
+  PROOF_ACCEPTED
+  PAID_REOPENED
 }
 
 // ── Bonus tables ────────────────────────────────────────────────────────────

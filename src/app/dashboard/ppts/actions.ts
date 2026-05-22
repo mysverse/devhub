@@ -8,6 +8,10 @@ import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import {
+  evaluatePptIssueById,
+  postPptProofComment,
+} from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 
 export async function getLinearTeams() {
@@ -226,4 +230,42 @@ export async function submitPptRequest(data: {
   revalidatePath("/dashboard/admin");
 
   return { success: true, requestId: request.id };
+}
+
+export async function submitPptProof(issueId: string, body: string) {
+  const { userId } = await getSession();
+  if (!userId) return { error: "Unauthorized" };
+
+  try {
+    const result = await postPptProofComment({ userId, issueId, body });
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/ppts");
+    revalidatePath("/dashboard/admin");
+    return result;
+  } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      return { error: "reauth_required", reauth: true };
+    }
+    const err = e as Error;
+    return { error: err.message || "Failed to submit proof" };
+  }
+}
+
+export async function retryPptPayoutCheck(issueId: string) {
+  const { userId } = await getSession();
+  if (!userId) return { error: "Unauthorized" };
+
+  try {
+    await evaluatePptIssueById(issueId, { userId, trigger: "developer_retry" });
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/ppts");
+    revalidatePath("/dashboard/admin");
+    return { success: true };
+  } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      return { error: "reauth_required", reauth: true };
+    }
+    const err = e as Error;
+    return { error: err.message || "Failed to retry payout check" };
+  }
 }

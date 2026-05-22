@@ -467,6 +467,21 @@ async function ActiveTasks({
   const bonusByIssueId = new Map(
     bonusCandidates.map((candidate) => [candidate.linearIssueId, candidate]),
   );
+  const pptStates = await prisma.pptPayoutState.findMany({
+    where: {
+      linearIssueId: {
+        in: assignedIssues.map(({ issue }) => issue.id),
+      },
+    },
+    select: {
+      linearIssueId: true,
+      status: true,
+      reason: true,
+    },
+  });
+  const pptStateByIssueId = new Map(
+    pptStates.map((state) => [state.linearIssueId, state]),
+  );
 
   return (
     <FadeIn>
@@ -477,6 +492,7 @@ async function ActiveTasks({
               (label) => label.toUpperCase() === "PPT",
             );
             const bonus = bonusByIssueId.get(issue.id);
+            const pptState = pptStateByIssueId.get(issue.id);
             const bonusCurrency = bonus?.currency === "ROBUX" ? "ROBUX" : "MYR";
             const earningsText = hasPptLabel
               ? issue.estimate
@@ -497,6 +513,9 @@ async function ActiveTasks({
                   variant="active"
                   currency={currency}
                   earningsText={earningsText}
+                  isPpt={hasPptLabel}
+                  proofStatus={pptState?.status ?? null}
+                  proofReason={pptState?.reason?.replaceAll("_", " ") ?? null}
                 />
               </StaggerItem>
             );
@@ -719,6 +738,14 @@ function HowPPTsWork({ currency }: { currency: CurrencyCode }) {
                 </ListItem>
                 <ListItem>Issue is marked as completed</ListItem>
                 <ListItem>Issue is assigned to you</ListItem>
+                <ListItem>
+                  You post a recent <strong>#ppt-proof</strong> comment with
+                  what changed, proof links/screenshots, location, and
+                  verification notes
+                </ListItem>
+                <ListItem>
+                  The issue stays completed through the payout stability window
+                </ListItem>
               </List>
               <Text fz="sm" fw={600} mt="xs">
                 Payout per point
@@ -745,8 +772,8 @@ function HowPPTsWork({ currency }: { currency: CurrencyCode }) {
             <Stack gap="sm">
               <Text fz="sm">
                 Payouts within the weekly credit limit are auto-approved and
-                paid immediately. Payouts that exceed the limit stay pending for
-                manual admin review.
+                paid after proof and the stability window pass. Payouts that
+                exceed the limit stay pending for manual admin review.
               </Text>
               <List size="sm" spacing="xs">
                 <ListItem>
@@ -755,6 +782,10 @@ function HowPPTsWork({ currency }: { currency: CurrencyCode }) {
                 <ListItem>Week runs Monday to Sunday (UTC)</ListItem>
                 <ListItem>
                   Pending and paid PPT transactions count toward the limit
+                </ListItem>
+                <ListItem>
+                  If a task moves from Done back to In Progress, unpaid payouts
+                  are held until it is completed again with fresh proof
                 </ListItem>
               </List>
               <Text fz="xs" c="dimmed" mt="xs">
@@ -911,9 +942,11 @@ export default async function DashboardPage() {
               ? "green"
               : tx.status === "PENDING"
                 ? "yellow"
-                : tx.status === "REJECTED"
-                  ? "red"
-                  : "gray"
+                : tx.status === "ON_HOLD"
+                  ? "orange"
+                  : tx.status === "REJECTED"
+                    ? "red"
+                    : "gray"
           }
           variant="light"
         >

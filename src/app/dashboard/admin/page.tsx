@@ -13,6 +13,7 @@ import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
 import type { BonusReviewCandidate } from "./AdminBonusesTab";
 import AdminPayoutTabs from "./AdminPayoutTabs";
+import type { AdminPptEligibilityState } from "./AdminPptEligibilityTab";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
 import type { PptRequestData } from "./PptRequestCard";
@@ -21,6 +22,11 @@ import type { PayoutTransaction } from "./types";
 type TransactionWithUser = Transaction & {
   user: UserProfile;
   payout: Payout | null;
+  pptPayoutState: {
+    status: string;
+    reason: string | null;
+    proofCommentUrl: string | null;
+  } | null;
   bonusCandidates: {
     id: string;
     linearIssueIdentifier: string | null;
@@ -61,6 +67,9 @@ function buildPayoutTransaction(
     rejectedAt: tx.rejectedAt?.toISOString() ?? null,
     rejectionReason: tx.rejectionReason,
     autoApproved: tx.autoApproved,
+    proofStatus: tx.pptPayoutState?.status ?? null,
+    proofReason: tx.pptPayoutState?.reason ?? null,
+    proofCommentUrl: tx.pptPayoutState?.proofCommentUrl ?? null,
     bonusLineItems: tx.bonusCandidates.map((candidate) => ({
       id: candidate.id,
       identifier: candidate.linearIssueIdentifier,
@@ -105,21 +114,55 @@ export default async function AdminPage() {
     bonusConfig,
     readyBonusCandidates,
     pendingKycCount,
+    pptPayoutStates,
   ] = await Promise.all([
     prisma.transaction.findMany({
-      where: { status: "PENDING" },
-      include: { user: true, payout: true, bonusCandidates: true },
+      where: { status: { in: ["PENDING", "ON_HOLD"] } },
+      include: {
+        user: true,
+        payout: true,
+        bonusCandidates: true,
+        pptPayoutState: {
+          select: {
+            status: true,
+            reason: true,
+            proofCommentUrl: true,
+          },
+        },
+      },
       orderBy: { createdAt: "asc" },
     }),
     prisma.transaction.findMany({
       where: { status: "PAID" },
-      include: { user: true, payout: true, bonusCandidates: true },
+      include: {
+        user: true,
+        payout: true,
+        bonusCandidates: true,
+        pptPayoutState: {
+          select: {
+            status: true,
+            reason: true,
+            proofCommentUrl: true,
+          },
+        },
+      },
       orderBy: { paidAt: "desc" },
       take: 50,
     }),
     prisma.transaction.findMany({
       where: { status: "REJECTED" },
-      include: { user: true, payout: true, bonusCandidates: true },
+      include: {
+        user: true,
+        payout: true,
+        bonusCandidates: true,
+        pptPayoutState: {
+          select: {
+            status: true,
+            reason: true,
+            proofCommentUrl: true,
+          },
+        },
+      },
       orderBy: { rejectedAt: "desc" },
       take: 50,
     }),
@@ -144,6 +187,42 @@ export default async function AdminPage() {
     }),
     prisma.kycVerification.count({
       where: { status: "PENDING" },
+    }),
+    prisma.pptPayoutState.findMany({
+      where: {
+        OR: [
+          {
+            status: {
+              in: [
+                "BLOCKED",
+                "NEEDS_PROOF",
+                "WAITING_STABILITY",
+                "ON_HOLD",
+                "FLAGGED",
+              ],
+            },
+          },
+          {
+            updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          },
+        ],
+      },
+      include: {
+        user: { include: { user: { select: { name: true, email: true } } } },
+        events: {
+          orderBy: { createdAt: "desc" },
+          take: 5,
+          select: {
+            id: true,
+            type: true,
+            reason: true,
+            message: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 50,
     }),
   ]);
 
@@ -246,6 +325,35 @@ export default async function AdminPage() {
       completedAt: candidate.completedAt?.toISOString() ?? null,
     }));
 
+  const pptEligibilityStates: AdminPptEligibilityState[] = pptPayoutStates.map(
+    (state) => ({
+      id: state.id,
+      linearIssueId: state.linearIssueId,
+      linearIssueIdentifier: state.linearIssueIdentifier,
+      linearIssueTitle: state.linearIssueTitle,
+      linearIssueUrl: state.linearIssueUrl,
+      developerName:
+        state.user?.legalName ||
+        state.user?.user.name ||
+        state.assigneeName ||
+        null,
+      assigneeEmail: state.assigneeEmail,
+      status: state.status,
+      reason: state.reason,
+      completionEpisode: state.completionEpisode,
+      proofCommentUrl: state.proofCommentUrl,
+      warningCount: state.warningCount,
+      updatedAt: state.updatedAt.toISOString(),
+      events: state.events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        reason: event.reason,
+        message: event.message,
+        createdAt: event.createdAt.toISOString(),
+      })),
+    }),
+  );
+
   return (
     <FadeIn>
       <Group justify="space-between" mb="xl">
@@ -296,6 +404,7 @@ export default async function AdminPage() {
           excludedLabels: bonusConfig.excludedLabels,
         }}
         bonusCandidates={bonusCandidates}
+        pptEligibilityStates={pptEligibilityStates}
         pptRequests={pendingPptRequests.map(
           (req): PptRequestData => ({
             id: req.id,

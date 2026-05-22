@@ -129,6 +129,12 @@ export async function getLinearClient(userId: string) {
   throw new LinearReauthRequiredError();
 }
 
+export function getLinearServiceClient(): LinearClient | null {
+  const apiKey = process.env.LINEAR_SERVICE_API_KEY;
+  if (!apiKey) return null;
+  return new LinearClient({ apiKey });
+}
+
 /**
  * Executes a Linear API call with the user's OAuth token.
  * If the token is invalid/revoked at runtime, invalidates it and throws

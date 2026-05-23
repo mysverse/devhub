@@ -1,3 +1,4 @@
+import type React from "react";
 import {
   Body,
   Container,
@@ -8,8 +9,7 @@ import {
   Preview,
   Section,
   Text,
-} from "@react-email/components";
-import type React from "react";
+} from "react-email";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 

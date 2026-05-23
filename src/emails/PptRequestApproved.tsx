@@ -1,4 +1,4 @@
-import { Button, Section, Text } from "@react-email/components";
+import { Button, Section, Text } from "react-email";
 import BaseLayout from "./BaseLayout";
 
 export default function PptRequestApproved({

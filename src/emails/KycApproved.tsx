@@ -1,4 +1,4 @@
-import { Button, Text } from "@react-email/components";
+import { Button, Text } from "react-email";
 import BaseLayout from "./BaseLayout";
 
 const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";

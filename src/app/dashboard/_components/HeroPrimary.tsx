@@ -207,7 +207,7 @@ export default function HeroPrimary({
                   )}
                 </StaggerItem>
                 <StaggerItem>
-                  <HelpDrawer currency={currency} />
+                  <HelpDrawer currency={currency} weeklyLimit={weeklyLimit} />
                 </StaggerItem>
               </Stack>
             </StaggerContainer>

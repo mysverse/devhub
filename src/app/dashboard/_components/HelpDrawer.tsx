@@ -13,16 +13,14 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ArrowRight, HelpCircle } from "lucide-react";
-import { WEEKLY_CREDIT_LIMITS } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
 
-type Props = { currency: CurrencyCode };
+type Props = { currency: CurrencyCode; weeklyLimit: number };
 
-export default function HelpDrawer({ currency }: Props) {
+export default function HelpDrawer({ currency, weeklyLimit }: Props) {
   const [opened, { open, close }] = useDisclosure(false);
   const multiplier = currency === "MYR" ? 20 : 1200;
-  const limit = WEEKLY_CREDIT_LIMITS[currency];
   const points = [1, 2, 3, 4, 5];
 
   return (
@@ -118,7 +116,8 @@ export default function HelpDrawer({ currency }: Props) {
               </Text>
               <List size="sm" spacing="xs">
                 <ListItem>
-                  Weekly limit: <strong>{formatAmount(limit, currency)}</strong>
+                  Weekly limit:{" "}
+                  <strong>{formatAmount(weeklyLimit, currency)}</strong>
                 </ListItem>
                 <ListItem>Week runs Monday to Sunday (UTC)</ListItem>
                 <ListItem>

@@ -348,8 +348,9 @@ model PptPayoutState {
   linearIssueUrl        String?
   latestLinearStateType String?
   latestLinearStateName String?
+  latestLinearUpdatedAt DateTime?
   hasPptLabel           Boolean         @default(false)
-  estimate              Int?
+  estimate              Float?
 
   userId                String?
   user                  UserProfile?    @relation("PptPayoutStateUser", fields: [userId], references: [id], onDelete: SetNull)
@@ -361,8 +362,13 @@ model PptPayoutState {
   reason                PptPayoutReason?
   completionEpisode     Int             @default(0)
   completedAt           DateTime?
+  canceledAt            DateTime?
+  archivedAt            DateTime?
+  trashed               Boolean         @default(false)
   lastReopenedAt        DateTime?
   latestAssignmentAt    DateTime?
+  lastAssigneeChangeAt  DateTime?
+  lastEstimateChangeAt  DateTime?
 
   proofCommentId        String?
   proofCommentUrl       String?
@@ -388,6 +394,7 @@ model PptPayoutState {
   @@index([status, reason])
   @@index([userId, status])
   @@index([completedAt])
+  @@index([latestLinearUpdatedAt])
 }
 
 model PptPayoutEvent {
@@ -436,12 +443,22 @@ enum PptPayoutStatus {
 
 enum PptPayoutReason {
   MISSING_PPT_LABEL
+  PPT_LABEL_REMOVED
+  PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING
+  PAID_ISSUE_LABEL_REMOVED
   NOT_COMPLETED
+  ISSUE_CANCELED
+  ISSUE_CANCELED_DURING_PAYOUT_PROCESSING
+  PAID_ISSUE_CANCELED
+  ISSUE_ARCHIVED_OR_TRASHED
+  ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING
+  PAID_ISSUE_ARCHIVED
   MISSING_ESTIMATE
   MISSING_ASSIGNEE
   NO_LINKED_USER
   MISSING_PROOF
   PROOF_RESET_BY_QUESTION
+  PAID_ISSUE_NEEDS_REVIEW
   WAITING_STABILITY
   DUPLICATE_TRANSACTION
   APPROVED_BONUS_EXISTS
@@ -449,6 +466,13 @@ enum PptPayoutReason {
   REOPENED_BEFORE_PAYOUT
   REOPENED_DURING_PAYOUT_PROCESSING
   PAID_ISSUE_REOPENED
+  ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK
+  ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING
+  PAID_ISSUE_REASSIGNED
+  ESTIMATE_CHANGED_RECALCULATED
+  ESTIMATE_CHANGED_DURING_PROCESSING
+  PAID_ISSUE_ESTIMATE_CHANGED
+  STALE_LINEAR_WEBHOOK
   READY_FOR_PAYOUT
   TRANSACTION_CREATED
   AUTO_PAYOUT_STARTED
@@ -457,6 +481,10 @@ enum PptPayoutReason {
 enum PptPayoutEventType {
   COMPLETED_DETECTED
   REOPENED_DETECTED
+  ISSUE_INVALIDATED
+  ASSIGNEE_CHANGED
+  ESTIMATE_CHANGED
+  ESTIMATE_RECALCULATED
   PROOF_MISSING
   PROOF_ACCEPTED
   PROOF_RESET
@@ -468,7 +496,9 @@ enum PptPayoutEventType {
   TRANSACTION_CREATED
   AUTO_PAYOUT_STARTED
   PAID_ISSUE_REOPENED
+  PAID_ISSUE_MUTATED
   DUPLICATE_SUPPRESSED
+  STALE_WEBHOOK_SKIPPED
   LINEAR_COMMENTED
   DEVELOPER_NOTIFIED
   ADMIN_ALERT_SENT

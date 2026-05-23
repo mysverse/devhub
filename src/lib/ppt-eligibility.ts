@@ -25,12 +25,22 @@ const PROOF_LOOKBACK_DAYS = 7;
 
 type PptReason =
   | "MISSING_PPT_LABEL"
+  | "PPT_LABEL_REMOVED"
+  | "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING"
+  | "PAID_ISSUE_LABEL_REMOVED"
   | "NOT_COMPLETED"
+  | "ISSUE_CANCELED"
+  | "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING"
+  | "PAID_ISSUE_CANCELED"
+  | "ISSUE_ARCHIVED_OR_TRASHED"
+  | "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING"
+  | "PAID_ISSUE_ARCHIVED"
   | "MISSING_ESTIMATE"
   | "MISSING_ASSIGNEE"
   | "NO_LINKED_USER"
   | "MISSING_PROOF"
   | "PROOF_RESET_BY_QUESTION"
+  | "PAID_ISSUE_NEEDS_REVIEW"
   | "WAITING_STABILITY"
   | "DUPLICATE_TRANSACTION"
   | "APPROVED_BONUS_EXISTS"
@@ -38,6 +48,13 @@ type PptReason =
   | "REOPENED_BEFORE_PAYOUT"
   | "REOPENED_DURING_PAYOUT_PROCESSING"
   | "PAID_ISSUE_REOPENED"
+  | "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK"
+  | "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING"
+  | "PAID_ISSUE_REASSIGNED"
+  | "ESTIMATE_CHANGED_RECALCULATED"
+  | "ESTIMATE_CHANGED_DURING_PROCESSING"
+  | "PAID_ISSUE_ESTIMATE_CHANGED"
+  | "STALE_LINEAR_WEBHOOK"
   | "READY_FOR_PAYOUT"
   | "TRANSACTION_CREATED"
   | "AUTO_PAYOUT_STARTED";
@@ -55,6 +72,10 @@ type PptStatus =
 type PptEventType =
   | "COMPLETED_DETECTED"
   | "REOPENED_DETECTED"
+  | "ISSUE_INVALIDATED"
+  | "ASSIGNEE_CHANGED"
+  | "ESTIMATE_CHANGED"
+  | "ESTIMATE_RECALCULATED"
   | "PROOF_MISSING"
   | "PROOF_ACCEPTED"
   | "PROOF_RESET"
@@ -66,7 +87,9 @@ type PptEventType =
   | "TRANSACTION_CREATED"
   | "AUTO_PAYOUT_STARTED"
   | "PAID_ISSUE_REOPENED"
+  | "PAID_ISSUE_MUTATED"
   | "DUPLICATE_SUPPRESSED"
+  | "STALE_WEBHOOK_SKIPPED"
   | "LINEAR_COMMENTED"
   | "DEVELOPER_NOTIFIED"
   | "ADMIN_ALERT_SENT";
@@ -103,6 +126,9 @@ type LinearIssueSnapshot = {
   url: string | null;
   estimate: number | null;
   completedAt: Date | null;
+  canceledAt: Date | null;
+  archivedAt: Date | null;
+  trashed: boolean;
   createdAt: Date | null;
   updatedAt: Date | null;
   state: {
@@ -124,6 +150,9 @@ export type PptWebhookIssue = {
   url?: string | null;
   estimate?: number | null;
   completedAt?: string | Date | null;
+  canceledAt?: string | Date | null;
+  archivedAt?: string | Date | null;
+  trashed?: boolean | null;
   createdAt?: string | Date | null;
   updatedAt?: string | Date | null;
   state?: { id?: string | null; type?: string | null; name?: string | null };
@@ -166,7 +195,24 @@ function getIssueTitle(snapshot: LinearIssueSnapshot) {
 function formatReason(reason: PptReason | null | undefined) {
   const copy: Record<PptReason, string> = {
     MISSING_PPT_LABEL: "The issue does not have the PPT label.",
+    PPT_LABEL_REMOVED:
+      "The PPT label was removed after DevHub started tracking payout eligibility.",
+    PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING:
+      "The PPT label was removed while a payout provider was already processing payment.",
+    PAID_ISSUE_LABEL_REMOVED:
+      "The PPT label was removed after DevHub had already marked the payout paid.",
     NOT_COMPLETED: "The issue is not currently in a completed Linear state.",
+    ISSUE_CANCELED: "The Linear issue was canceled before payout was released.",
+    ISSUE_CANCELED_DURING_PAYOUT_PROCESSING:
+      "The issue was canceled while a payout provider was already processing payment.",
+    PAID_ISSUE_CANCELED:
+      "The issue was canceled after DevHub had already marked the payout paid.",
+    ISSUE_ARCHIVED_OR_TRASHED:
+      "The Linear issue was archived or moved to trash before payout was released.",
+    ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING:
+      "The issue was archived or trashed while a payout provider was already processing payment.",
+    PAID_ISSUE_ARCHIVED:
+      "The issue was archived or trashed after DevHub had already marked the payout paid.",
     MISSING_ESTIMATE: "The issue does not have a complexity estimate.",
     MISSING_ASSIGNEE: "The issue is not assigned to a developer.",
     NO_LINKED_USER:
@@ -174,6 +220,8 @@ function formatReason(reason: PptReason | null | undefined) {
     MISSING_PROOF: "A recent #ppt-proof comment from the assignee is required.",
     PROOF_RESET_BY_QUESTION:
       "A follow-up question was asked after completion, so fresh proof is required.",
+    PAID_ISSUE_NEEDS_REVIEW:
+      "The issue changed after payout was paid and needs admin review.",
     WAITING_STABILITY:
       "The task needs to remain completed for the payout stability window.",
     DUPLICATE_TRANSACTION:
@@ -188,6 +236,20 @@ function formatReason(reason: PptReason | null | undefined) {
       "The issue reopened while a payout provider was already processing payment.",
     PAID_ISSUE_REOPENED:
       "The issue reopened after DevHub had already marked the payout paid.",
+    ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK:
+      "The assignee changed after DevHub had already prepared this payout.",
+    ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING:
+      "The assignee changed while a payout provider was already processing payment.",
+    PAID_ISSUE_REASSIGNED:
+      "The issue was reassigned after DevHub had already marked the payout paid.",
+    ESTIMATE_CHANGED_RECALCULATED:
+      "The estimate changed, so DevHub recalculated the unpaid payout.",
+    ESTIMATE_CHANGED_DURING_PROCESSING:
+      "The estimate changed while a payout provider was already processing payment.",
+    PAID_ISSUE_ESTIMATE_CHANGED:
+      "The estimate changed after DevHub had already marked the payout paid.",
+    STALE_LINEAR_WEBHOOK:
+      "DevHub ignored an older Linear webhook because newer issue state is already recorded.",
     READY_FOR_PAYOUT: "The issue is ready for payout.",
     TRANSACTION_CREATED: "A payout transaction was created.",
     AUTO_PAYOUT_STARTED: "Automatic payout was started.",
@@ -205,6 +267,37 @@ function getActionForReason(reason: PptReason | null | undefined) {
   if (reason === "REOPENED_BEFORE_PAYOUT") {
     return "Move the issue back to Done only when it is truly complete, then submit fresh #ppt-proof.";
   }
+  if (
+    reason === "PPT_LABEL_REMOVED" ||
+    reason === "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING" ||
+    reason === "PAID_ISSUE_LABEL_REMOVED"
+  ) {
+    return "Restore the PPT label only if this issue should be payable. DevHub will require a fresh eligibility check before payout.";
+  }
+  if (
+    reason === "ISSUE_CANCELED" ||
+    reason === "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING" ||
+    reason === "PAID_ISSUE_CANCELED" ||
+    reason === "ISSUE_ARCHIVED_OR_TRASHED" ||
+    reason === "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING" ||
+    reason === "PAID_ISSUE_ARCHIVED"
+  ) {
+    return "Restore/reopen the Linear issue only if it is valid work, move it to Done again, and submit fresh #ppt-proof.";
+  }
+  if (
+    reason === "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK" ||
+    reason === "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING" ||
+    reason === "PAID_ISSUE_REASSIGNED"
+  ) {
+    return "The current assignee must submit fresh #ppt-proof before DevHub can release or resume payout.";
+  }
+  if (
+    reason === "ESTIMATE_CHANGED_RECALCULATED" ||
+    reason === "ESTIMATE_CHANGED_DURING_PROCESSING" ||
+    reason === "PAID_ISSUE_ESTIMATE_CHANGED"
+  ) {
+    return "Admins have been notified. Unpaid payouts are recalculated before release; paid or processing payouts require admin review.";
+  }
   if (reason === "NO_LINKED_USER") {
     return "Link your Linear account in DevHub settings or contact an admin.";
   }
@@ -214,30 +307,50 @@ function getActionForReason(reason: PptReason | null | undefined) {
   return "Open the task and follow the DevHub payout guidance.";
 }
 
-function makeGuidanceComment(reason: PptReason, snapshot: LinearIssueSnapshot) {
+function shouldShowProofTemplate(reason: PptReason) {
   return [
+    "MISSING_PROOF",
+    "PROOF_RESET_BY_QUESTION",
+    "WAITING_STABILITY",
+    "REOPENED_BEFORE_PAYOUT",
+    "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
+  ].includes(reason);
+}
+
+function makeGuidanceComment(reason: PptReason, snapshot: LinearIssueSnapshot) {
+  const lines = [
     "DevHub payout check",
     "",
     `Status: ${formatReason(reason)}`,
     "",
-    "To qualify this PPT for payout, the current assignee must post a recent proof comment before payout is released:",
+    `Next step: ${getActionForReason(reason)}`,
     "",
-    `${PROOF_TAG}`,
-    "- What changed:",
-    "- Proof links/screenshots:",
-    "- Where it is located or implemented:",
-    "- Verification notes:",
-    "",
-    reason === "REOPENED_BEFORE_PAYOUT"
-      ? "Because this issue moved out of Done, previous proof for the old completion no longer qualifies."
-      : `The issue must also remain in Done for ${getStabilityMinutes()} minutes.`,
-    "",
+  ];
+
+  if (shouldShowProofTemplate(reason)) {
+    lines.push(
+      "To qualify this PPT for payout, the current assignee must post a recent proof comment before payout is released:",
+      "",
+      `${PROOF_TAG}`,
+      "- What changed:",
+      "- Proof links/screenshots:",
+      "- Where it is located or implemented:",
+      "- Verification notes:",
+      "",
+      reason === "REOPENED_BEFORE_PAYOUT"
+        ? "Because this issue moved out of Done, previous proof for the old completion no longer qualifies."
+        : `The issue must also remain in Done for ${getStabilityMinutes()} minutes.`,
+      "",
+    );
+  }
+
+  lines.push(
     snapshot.url
       ? `[Open in DevHub](${process.env.NEXT_PUBLIC_APP_URL ?? ""}/dashboard)`
       : "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  );
+
+  return lines.filter(Boolean).join("\n");
 }
 
 function isDevHubGuidanceComment(body: string) {
@@ -268,6 +381,78 @@ function isUniqueConstraintError(error: unknown) {
   );
 }
 
+function issueHasPptLabel(snapshot: LinearIssueSnapshot) {
+  return snapshot.labels.some((label) => label.toUpperCase() === PPT_LABEL);
+}
+
+function isActiveProviderPayout(payout: { status: string } | null | undefined) {
+  return Boolean(payout && ["PENDING", "PROCESSING"].includes(payout.status));
+}
+
+function estimatesMatch(
+  left: number | null | undefined,
+  right: number | null | undefined,
+) {
+  if (left == null && right == null) return true;
+  if (left == null || right == null) return false;
+  return Math.abs(left - right) < 0.0001;
+}
+
+function getCompletedAtForState(
+  snapshot: LinearIssueSnapshot,
+  previousState: PptState,
+) {
+  if (snapshot.state.type !== "completed") return snapshot.completedAt;
+  return snapshot.completedAt ?? previousState?.completedAt ?? new Date();
+}
+
+function isCanceledIssue(snapshot: LinearIssueSnapshot) {
+  const stateType = snapshot.state.type?.toLowerCase();
+  const stateName = snapshot.state.name?.toLowerCase();
+  return (
+    Boolean(snapshot.canceledAt) ||
+    stateType === "canceled" ||
+    stateName === "canceled" ||
+    stateName === "cancelled"
+  );
+}
+
+function isArchivedOrTrashedIssue(snapshot: LinearIssueSnapshot) {
+  return Boolean(snapshot.archivedAt || snapshot.trashed);
+}
+
+function shouldClearProofForReason(reason: PptReason) {
+  return [
+    "MISSING_PROOF",
+    "PROOF_RESET_BY_QUESTION",
+    "REOPENED_BEFORE_PAYOUT",
+    "PPT_LABEL_REMOVED",
+    "ISSUE_CANCELED",
+    "ISSUE_ARCHIVED_OR_TRASHED",
+    "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
+    "LINEAR_API_ERROR",
+  ].includes(reason);
+}
+
+function shouldHoldTransactionForReason(reason: PptReason) {
+  return [
+    "MISSING_PPT_LABEL",
+    "PPT_LABEL_REMOVED",
+    "NOT_COMPLETED",
+    "ISSUE_CANCELED",
+    "ISSUE_ARCHIVED_OR_TRASHED",
+    "MISSING_ESTIMATE",
+    "MISSING_ASSIGNEE",
+    "NO_LINKED_USER",
+    "MISSING_PROOF",
+    "PROOF_RESET_BY_QUESTION",
+    "APPROVED_BONUS_EXISTS",
+    "LINEAR_API_ERROR",
+    "REOPENED_BEFORE_PAYOUT",
+    "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
+  ].includes(reason);
+}
+
 function issueFromWebhook(issue: PptWebhookIssue): LinearIssueSnapshot {
   return {
     id: issue.id,
@@ -276,6 +461,9 @@ function issueFromWebhook(issue: PptWebhookIssue): LinearIssueSnapshot {
     url: issue.url ?? null,
     estimate: issue.estimate ?? null,
     completedAt: coerceDate(issue.completedAt),
+    canceledAt: coerceDate(issue.canceledAt),
+    archivedAt: coerceDate(issue.archivedAt),
+    trashed: Boolean(issue.trashed),
     createdAt: coerceDate(issue.createdAt),
     updatedAt: coerceDate(issue.updatedAt),
     state: {
@@ -351,6 +539,9 @@ async function fetchIssueSnapshot(
         url: null,
         estimate: null,
         completedAt: null,
+        canceledAt: null,
+        archivedAt: null,
+        trashed: false,
         createdAt: null,
         updatedAt: null,
         state: { id: null, type: null, name: null },
@@ -365,6 +556,11 @@ async function fetchIssueSnapshot(
 
   try {
     const issue = await client.issue(issueId);
+    const linearIssue = issue as typeof issue & {
+      archivedAt?: Date | null;
+      canceledAt?: Date | null;
+      trashed?: boolean | null;
+    };
     const [state, assignee, labels, comments, history] = await Promise.all([
       issue.state,
       issue.assignee,
@@ -380,6 +576,9 @@ async function fetchIssueSnapshot(
       url: issue.url,
       estimate: issue.estimate ?? null,
       completedAt: issue.completedAt ?? null,
+      canceledAt: linearIssue.canceledAt ?? null,
+      archivedAt: linearIssue.archivedAt ?? null,
+      trashed: Boolean(linearIssue.trashed),
       createdAt: issue.createdAt ?? null,
       updatedAt: issue.updatedAt ?? null,
       state: {
@@ -423,6 +622,9 @@ async function fetchIssueSnapshot(
         url: null,
         estimate: null,
         completedAt: null,
+        canceledAt: null,
+        archivedAt: null,
+        trashed: false,
         createdAt: null,
         updatedAt: null,
         state: { id: null, type: null, name: null },
@@ -452,12 +654,16 @@ function latestAssignmentAt(snapshot: LinearIssueSnapshot, state: PptState) {
     .filter((entry) => entry.toAssigneeId && entry.toAssigneeId === assigneeId)
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())[0];
 
-  return (
-    latestHistory?.createdAt ??
-    state?.latestAssignmentAt ??
-    snapshot.createdAt ??
-    new Date(0)
-  );
+  if (latestHistory?.createdAt) return latestHistory.createdAt;
+  if (
+    state?.assigneeLinearId &&
+    assigneeId &&
+    state.assigneeLinearId !== assigneeId
+  ) {
+    return snapshot.updatedAt ?? new Date();
+  }
+
+  return state?.latestAssignmentAt ?? snapshot.createdAt ?? new Date(0);
 }
 
 function lowerBoundForProof(
@@ -510,10 +716,11 @@ function findQualifyingProof(
 function findResetQuestion(
   snapshot: LinearIssueSnapshot,
   proof: LinearCommentSnapshot | null,
+  state: PptState,
 ) {
   const assigneeId = snapshot.assignee?.id;
   const proofAt = proof ? (proof.editedAt ?? proof.createdAt) : null;
-  const completedAt = snapshot.completedAt ?? new Date(0);
+  const completedAt = snapshot.completedAt ?? state?.completedAt ?? new Date(0);
 
   return snapshot.comments
     .filter((comment) => {
@@ -537,6 +744,9 @@ async function upsertStateBase(
   reason: PptReason | null,
   completionEpisode: number,
   assignmentAt: Date | null,
+  completedAt: Date | null,
+  assigneeChangedAt: Date | null,
+  estimateChangedAt: Date | null,
 ) {
   return prisma.pptPayoutState.upsert({
     where: { linearIssueId: snapshot.id },
@@ -547,9 +757,8 @@ async function upsertStateBase(
       linearIssueUrl: snapshot.url,
       latestLinearStateType: snapshot.state.type,
       latestLinearStateName: snapshot.state.name,
-      hasPptLabel: snapshot.labels.some(
-        (label) => label.toUpperCase() === PPT_LABEL,
-      ),
+      latestLinearUpdatedAt: snapshot.updatedAt ?? undefined,
+      hasPptLabel: issueHasPptLabel(snapshot),
       estimate: snapshot.estimate,
       userId,
       assigneeLinearId: snapshot.assignee?.id ?? null,
@@ -559,8 +768,13 @@ async function upsertStateBase(
       status,
       reason,
       completionEpisode,
-      completedAt: snapshot.completedAt,
+      completedAt,
+      canceledAt: snapshot.canceledAt,
+      archivedAt: snapshot.archivedAt,
+      trashed: snapshot.trashed,
       latestAssignmentAt: assignmentAt,
+      lastAssigneeChangeAt: assigneeChangedAt,
+      lastEstimateChangeAt: estimateChangedAt,
     },
     update: {
       linearIssueIdentifier: snapshot.identifier,
@@ -568,9 +782,8 @@ async function upsertStateBase(
       linearIssueUrl: snapshot.url,
       latestLinearStateType: snapshot.state.type,
       latestLinearStateName: snapshot.state.name,
-      hasPptLabel: snapshot.labels.some(
-        (label) => label.toUpperCase() === PPT_LABEL,
-      ),
+      latestLinearUpdatedAt: snapshot.updatedAt ?? undefined,
+      hasPptLabel: issueHasPptLabel(snapshot),
       estimate: snapshot.estimate,
       userId,
       assigneeLinearId: snapshot.assignee?.id ?? null,
@@ -580,8 +793,13 @@ async function upsertStateBase(
       status,
       reason,
       completionEpisode,
-      completedAt: snapshot.completedAt,
+      completedAt,
+      canceledAt: snapshot.canceledAt,
+      archivedAt: snapshot.archivedAt,
+      trashed: snapshot.trashed,
       latestAssignmentAt: assignmentAt,
+      lastAssigneeChangeAt: assigneeChangedAt ?? undefined,
+      lastEstimateChangeAt: estimateChangedAt ?? undefined,
     },
   });
 }
@@ -804,50 +1022,230 @@ async function blockPayout(
   status: PptStatus = "BLOCKED",
   eventType: PptEventType = "PAYOUT_BLOCKED",
 ) {
+  const existingTransaction = await prisma.transaction.findUnique({
+    where: { linearIssueId: snapshot.id },
+    include: { payout: true },
+  });
+  let nextStatus = status;
+  let nextReason = reason;
+  let nextEventType = eventType;
+  let adminDetail: string | null = null;
+
+  if (existingTransaction && shouldHoldTransactionForReason(reason)) {
+    if (existingTransaction.status === "PAID") {
+      nextStatus = "FLAGGED";
+      nextReason = "PAID_ISSUE_NEEDS_REVIEW";
+      nextEventType = "PAID_ISSUE_MUTATED";
+      adminDetail = `A paid PPT issue no longer satisfies payout eligibility: ${formatReason(reason)}`;
+    } else if (isActiveProviderPayout(existingTransaction.payout)) {
+      nextStatus = "FLAGGED";
+      nextEventType = "PAYOUT_HELD";
+      adminDetail = `A payout provider is already active while eligibility changed: ${formatReason(reason)}`;
+    } else if (existingTransaction.status === "PENDING") {
+      await prisma.transaction.update({
+        where: { id: existingTransaction.id },
+        data: { status: "ON_HOLD" },
+      });
+      nextStatus = "ON_HOLD";
+      nextEventType = "PAYOUT_HELD";
+    } else if (existingTransaction.status === "ON_HOLD") {
+      nextStatus = "ON_HOLD";
+      nextEventType = "PAYOUT_HELD";
+    } else if (existingTransaction.status === "CANCELLED") {
+      nextStatus = "FLAGGED";
+      adminDetail =
+        "A cancelled transaction already exists for this Linear issue; DevHub will not create a duplicate automatically.";
+    }
+  }
+
+  const clearProof = shouldClearProofForReason(reason);
   await prisma.pptPayoutState.update({
     where: { id: stateId },
     data: {
-      status,
-      reason,
+      status: nextStatus,
+      reason: nextReason,
       warningCount: { increment: 1 },
-      proofCommentId:
-        reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION"
-          ? null
-          : undefined,
-      proofCommentUrl:
-        reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION"
-          ? null
-          : undefined,
-      proofCommentBody:
-        reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION"
-          ? null
-          : undefined,
-      proofAuthorLinearId:
-        reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION"
-          ? null
-          : undefined,
-      proofProvidedAt:
-        reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION"
-          ? null
-          : undefined,
+      proofCommentId: clearProof ? null : undefined,
+      proofCommentUrl: clearProof ? null : undefined,
+      proofCommentBody: clearProof ? null : undefined,
+      proofAuthorLinearId: clearProof ? null : undefined,
+      proofProvidedAt: clearProof ? null : undefined,
     },
   });
   await appendEvent({
     stateId,
     linearIssueId: snapshot.id,
-    type: eventType,
-    reason,
+    type: nextEventType,
+    reason: nextReason,
     message: formatReason(reason),
+    metadata:
+      nextReason === reason
+        ? undefined
+        : {
+            originalReason: reason,
+            transactionId: existingTransaction?.id ?? null,
+          },
   });
 
   await notifyDeveloper(
     stateId,
     userId,
     snapshot,
-    reason,
-    status === "ON_HOLD" ? "HELD" : "BLOCKED",
+    nextReason,
+    existingTransaction?.status === "PAID"
+      ? "PAID_REOPENED"
+      : nextStatus === "ON_HOLD" || nextStatus === "FLAGGED"
+        ? "HELD"
+        : "BLOCKED",
   );
-  await commentGuidanceIfNeeded(stateId, snapshot, reason);
+  await commentGuidanceIfNeeded(stateId, snapshot, nextReason);
+
+  if (adminDetail) {
+    await notifyAdmins(stateId, snapshot, nextReason, adminDetail);
+  }
+}
+
+async function invalidateTrackedIssue({
+  snapshot,
+  stateId,
+  existingState,
+  userId,
+  reason,
+  processingReason,
+  paidReason,
+  detail,
+}: {
+  snapshot: LinearIssueSnapshot;
+  stateId: string;
+  existingState: PptState;
+  userId: string | null;
+  reason: PptReason;
+  processingReason: PptReason;
+  paidReason: PptReason;
+  detail: string;
+}) {
+  const existingTransaction =
+    existingState?.transaction ??
+    (await prisma.transaction.findUnique({
+      where: { linearIssueId: snapshot.id },
+      include: { payout: true },
+    }));
+
+  await prisma.pptPayoutState.update({
+    where: { id: stateId },
+    data: {
+      proofCommentId: null,
+      proofCommentUrl: null,
+      proofCommentBody: null,
+      proofAuthorLinearId: null,
+      proofProvidedAt: null,
+    },
+  });
+  await appendEvent({
+    stateId,
+    linearIssueId: snapshot.id,
+    type: "ISSUE_INVALIDATED",
+    reason,
+    message: detail,
+  });
+
+  if (!existingTransaction || existingTransaction.status === "REJECTED") {
+    await blockPayout(snapshot, stateId, userId, reason, "BLOCKED");
+    return;
+  }
+
+  if (existingTransaction.status === "PAID") {
+    await prisma.pptPayoutState.update({
+      where: { id: stateId },
+      data: { status: "FLAGGED", reason: paidReason },
+    });
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "PAID_ISSUE_MUTATED",
+      reason: paidReason,
+      message: detail,
+    });
+    await notifyDeveloper(
+      stateId,
+      userId,
+      snapshot,
+      paidReason,
+      "PAID_REOPENED",
+    );
+    await notifyAdmins(stateId, snapshot, paidReason, detail);
+    await commentGuidanceIfNeeded(stateId, snapshot, paidReason);
+    return;
+  }
+
+  if (isActiveProviderPayout(existingTransaction.payout)) {
+    await prisma.pptPayoutState.update({
+      where: { id: stateId },
+      data: { status: "FLAGGED", reason: processingReason },
+    });
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "PAYOUT_HELD",
+      reason: processingReason,
+      message: detail,
+    });
+    await notifyDeveloper(stateId, userId, snapshot, processingReason, "HELD");
+    await notifyAdmins(
+      stateId,
+      snapshot,
+      processingReason,
+      `${detail} DevHub did not attempt unsupported provider cancellation automatically.`,
+    );
+    await commentGuidanceIfNeeded(stateId, snapshot, processingReason);
+    return;
+  }
+
+  if (existingTransaction.status === "PENDING") {
+    await prisma.transaction.update({
+      where: { id: existingTransaction.id },
+      data: { status: "ON_HOLD" },
+    });
+  }
+
+  await blockPayout(
+    snapshot,
+    stateId,
+    userId,
+    reason,
+    "ON_HOLD",
+    "PAYOUT_HELD",
+  );
+}
+
+async function notifyAdminsForReopenBounceIfNeeded(
+  stateId: string,
+  snapshot: LinearIssueSnapshot,
+) {
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const [reopenCount, state] = await Promise.all([
+    prisma.pptPayoutEvent.count({
+      where: {
+        stateId,
+        type: "REOPENED_DETECTED",
+        createdAt: { gte: since },
+      },
+    }),
+    prisma.pptPayoutState.findUnique({
+      where: { id: stateId },
+      select: { lastAdminNotifiedAt: true },
+    }),
+  ]);
+  if (reopenCount < 2) return;
+  const lastNotified = state?.lastAdminNotifiedAt?.getTime() ?? 0;
+  if (Date.now() - lastNotified < DEVELOPER_NOTIFY_COOLDOWN_MS) return;
+
+  await notifyAdmins(
+    stateId,
+    snapshot,
+    "REOPENED_BEFORE_PAYOUT",
+    `This PPT has bounced out of Done ${reopenCount} times in the last 24 hours. DevHub is blocking or holding automatic payout until the latest completion has fresh proof.`,
+  );
 }
 
 async function handleReopenedIssue(
@@ -881,6 +1279,7 @@ async function handleReopenedIssue(
     type: "REOPENED_DETECTED",
     reason: "REOPENED_BEFORE_PAYOUT",
   });
+  await notifyAdminsForReopenBounceIfNeeded(stateId, snapshot);
 
   if (!existingTransaction || existingTransaction.status === "REJECTED") {
     await blockPayout(
@@ -922,10 +1321,7 @@ async function handleReopenedIssue(
     return;
   }
 
-  if (
-    existingTransaction.payout &&
-    ["PENDING", "PROCESSING"].includes(existingTransaction.payout.status)
-  ) {
+  if (isActiveProviderPayout(existingTransaction.payout)) {
     await prisma.pptPayoutState.update({
       where: { id: stateId },
       data: {
@@ -977,6 +1373,166 @@ async function handleReopenedIssue(
   );
 }
 
+async function handleEstimateChange(
+  snapshot: LinearIssueSnapshot,
+  stateId: string,
+  existingState: PptState,
+  userId: string | null,
+  currency: CurrencyCode | null,
+) {
+  const previousEstimate = existingState?.estimate;
+  if (
+    previousEstimate == null ||
+    snapshot.estimate == null ||
+    estimatesMatch(previousEstimate, snapshot.estimate)
+  ) {
+    return "NONE" as const;
+  }
+
+  const existingTransaction =
+    existingState?.transaction ??
+    (await prisma.transaction.findUnique({
+      where: { linearIssueId: snapshot.id },
+      include: { payout: true },
+    }));
+
+  await appendEvent({
+    stateId,
+    linearIssueId: snapshot.id,
+    type: "ESTIMATE_CHANGED",
+    reason: "ESTIMATE_CHANGED_RECALCULATED",
+    metadata: {
+      previousEstimate,
+      currentEstimate: snapshot.estimate,
+    },
+  });
+
+  if (!existingTransaction || existingTransaction.status === "REJECTED") {
+    return "RECORDED" as const;
+  }
+
+  const detail = `Estimate changed from ${previousEstimate} to ${snapshot.estimate}.`;
+  if (existingTransaction.status === "PAID") {
+    await prisma.pptPayoutState.update({
+      where: { id: stateId },
+      data: { status: "FLAGGED", reason: "PAID_ISSUE_ESTIMATE_CHANGED" },
+    });
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "PAID_ISSUE_MUTATED",
+      reason: "PAID_ISSUE_ESTIMATE_CHANGED",
+      message: detail,
+    });
+    await notifyDeveloper(
+      stateId,
+      userId,
+      snapshot,
+      "PAID_ISSUE_ESTIMATE_CHANGED",
+      "PAID_REOPENED",
+    );
+    await notifyAdmins(
+      stateId,
+      snapshot,
+      "PAID_ISSUE_ESTIMATE_CHANGED",
+      detail,
+    );
+    await commentGuidanceIfNeeded(
+      stateId,
+      snapshot,
+      "PAID_ISSUE_ESTIMATE_CHANGED",
+    );
+    return "FLAGGED" as const;
+  }
+
+  if (isActiveProviderPayout(existingTransaction.payout)) {
+    await prisma.pptPayoutState.update({
+      where: { id: stateId },
+      data: {
+        status: "FLAGGED",
+        reason: "ESTIMATE_CHANGED_DURING_PROCESSING",
+      },
+    });
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "PAYOUT_HELD",
+      reason: "ESTIMATE_CHANGED_DURING_PROCESSING",
+      message: detail,
+    });
+    await notifyDeveloper(
+      stateId,
+      userId,
+      snapshot,
+      "ESTIMATE_CHANGED_DURING_PROCESSING",
+      "HELD",
+    );
+    await notifyAdmins(
+      stateId,
+      snapshot,
+      "ESTIMATE_CHANGED_DURING_PROCESSING",
+      `${detail} A provider payout is already active; DevHub did not attempt automatic cancellation.`,
+    );
+    await commentGuidanceIfNeeded(
+      stateId,
+      snapshot,
+      "ESTIMATE_CHANGED_DURING_PROCESSING",
+    );
+    return "FLAGGED" as const;
+  }
+
+  if (
+    !userId ||
+    !currency ||
+    !["PENDING", "ON_HOLD"].includes(existingTransaction.status)
+  ) {
+    return "RECORDED" as const;
+  }
+
+  const amount = estimateToAmount(snapshot.estimate, currency);
+  const withinLimit = await isWithinCreditLimit(userId, currency, amount);
+  await prisma.transaction.update({
+    where: { id: existingTransaction.id },
+    data: {
+      userId,
+      linearIssueIdentifier: snapshot.identifier,
+      linearIssueTitle: snapshot.title,
+      linearIssueUrl: snapshot.url,
+      amount,
+      currency,
+      autoApproved: withinLimit,
+    },
+  });
+  await prisma.pptPayoutState.update({
+    where: { id: stateId },
+    data: {
+      reason: "ESTIMATE_CHANGED_RECALCULATED",
+      lastEstimateChangeAt: snapshot.updatedAt ?? new Date(),
+    },
+  });
+  await appendEvent({
+    stateId,
+    linearIssueId: snapshot.id,
+    type: "ESTIMATE_RECALCULATED",
+    reason: "ESTIMATE_CHANGED_RECALCULATED",
+    metadata: { amount, currency, withinLimit },
+  });
+  await notifyDeveloper(
+    stateId,
+    userId,
+    snapshot,
+    "ESTIMATE_CHANGED_RECALCULATED",
+    existingTransaction.status === "ON_HOLD" ? "HELD" : "READY",
+  );
+  await notifyAdmins(
+    stateId,
+    snapshot,
+    "ESTIMATE_CHANGED_RECALCULATED",
+    `${detail} Unpaid transaction ${existingTransaction.id} was recalculated to ${amount} ${currency}.`,
+  );
+  return "UPDATED" as const;
+}
+
 async function handleEligiblePayout(
   snapshot: LinearIssueSnapshot,
   stateId: string,
@@ -990,11 +1546,11 @@ async function handleEligiblePayout(
     include: { payout: true },
   });
 
-  if (existing && ["PENDING", "PAID"].includes(existing.status)) {
+  if (existing?.status === "PAID") {
     await prisma.pptPayoutState.update({
       where: { id: stateId },
       data: {
-        status: existing.status === "PAID" ? "PAID" : "TRANSACTION_PENDING",
+        status: "PAID",
         reason: "DUPLICATE_TRANSACTION",
         transactionId: existing.id,
       },
@@ -1005,6 +1561,119 @@ async function handleEligiblePayout(
       type: "DUPLICATE_SUPPRESSED",
       reason: "DUPLICATE_TRANSACTION",
     });
+    return;
+  }
+
+  if (existing?.status === "CANCELLED") {
+    await prisma.pptPayoutState.update({
+      where: { id: stateId },
+      data: {
+        status: "FLAGGED",
+        reason: "DUPLICATE_TRANSACTION",
+        transactionId: existing.id,
+      },
+    });
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "DUPLICATE_SUPPRESSED",
+      reason: "DUPLICATE_TRANSACTION",
+      message:
+        "A cancelled transaction already exists for this Linear issue; DevHub will not create a duplicate automatically.",
+    });
+    await notifyAdmins(
+      stateId,
+      snapshot,
+      "DUPLICATE_TRANSACTION",
+      "A cancelled transaction already exists for this Linear issue. Manual admin review is required before any payout retry.",
+    );
+    return;
+  }
+
+  if (existing?.status === "PENDING") {
+    const withinLimit = await isWithinCreditLimit(userId, currency, amount);
+    const transactionChanged =
+      existing.userId !== userId ||
+      !estimatesMatch(existing.amount, amount) ||
+      existing.currency !== currency ||
+      existing.linearIssueIdentifier !== snapshot.identifier ||
+      existing.linearIssueTitle !== snapshot.title ||
+      existing.linearIssueUrl !== snapshot.url ||
+      existing.autoApproved !== withinLimit;
+
+    const transactionUpdated =
+      !isActiveProviderPayout(existing.payout) && transactionChanged;
+
+    if (transactionUpdated) {
+      await prisma.transaction.update({
+        where: { id: existing.id },
+        data: {
+          userId,
+          linearIssueIdentifier: snapshot.identifier,
+          linearIssueTitle: snapshot.title,
+          linearIssueUrl: snapshot.url,
+          amount,
+          currency,
+          autoApproved: withinLimit,
+        },
+      });
+      await appendEvent({
+        stateId,
+        linearIssueId: snapshot.id,
+        type: "ESTIMATE_RECALCULATED",
+        reason: "ESTIMATE_CHANGED_RECALCULATED",
+        metadata: { amount, currency, withinLimit },
+      });
+    }
+
+    await prisma.pptPayoutState.update({
+      where: { id: stateId },
+      data: {
+        status: "TRANSACTION_PENDING",
+        reason: transactionUpdated
+          ? "ESTIMATE_CHANGED_RECALCULATED"
+          : "DUPLICATE_TRANSACTION",
+        transactionId: existing.id,
+        proofCommentId: proof.id,
+        proofCommentUrl: proof.url,
+        proofCommentBody: proof.body.slice(0, 1000),
+        proofAuthorLinearId: proof.userId,
+        proofProvidedAt: proof.editedAt ?? proof.createdAt,
+      },
+    });
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "DUPLICATE_SUPPRESSED",
+      reason: "DUPLICATE_TRANSACTION",
+    });
+
+    if (
+      withinLimit &&
+      !isActiveProviderPayout(existing.payout) &&
+      existing.payout?.status !== "COMPLETED"
+    ) {
+      try {
+        const payout = await initiateAutoPayout(existing.id);
+        if (payout) {
+          await appendEvent({
+            stateId,
+            linearIssueId: snapshot.id,
+            type: "AUTO_PAYOUT_STARTED",
+            reason: "AUTO_PAYOUT_STARTED",
+            metadata: { payoutId: payout.id },
+          });
+        }
+      } catch (error) {
+        console.error("[ppt-eligibility] Auto-payout retry failed:", error);
+        await notifyAdmins(
+          stateId,
+          snapshot,
+          "AUTO_PAYOUT_STARTED",
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
     return;
   }
 
@@ -1111,7 +1780,11 @@ async function handleEligiblePayout(
           where: { id: stateId },
           data: {
             status:
-              duplicate.status === "PAID" ? "PAID" : "TRANSACTION_PENDING",
+              duplicate.status === "PAID"
+                ? "PAID"
+                : duplicate.status === "ON_HOLD"
+                  ? "ON_HOLD"
+                  : "TRANSACTION_PENDING",
             reason: "DUPLICATE_TRANSACTION",
             transactionId: duplicate.id,
           },
@@ -1197,8 +1870,12 @@ export async function evaluatePptIssueById(
         url: fallbackState.linearIssueUrl,
         estimate: fallbackState.estimate,
         completedAt: fallbackState.completedAt,
+        canceledAt: fallbackState.canceledAt,
+        archivedAt: fallbackState.archivedAt,
+        trashed: fallbackState.trashed,
         createdAt: fallbackState.createdAt,
-        updatedAt: fallbackState.updatedAt,
+        updatedAt:
+          fallbackState.latestLinearUpdatedAt ?? fallbackState.updatedAt,
         state: {
           id: null,
           type: fallbackState.latestLinearStateType,
@@ -1240,9 +1917,30 @@ async function evaluatePptSnapshot(
   const previousState = await findPptState(snapshot.id);
   const linkedUser = await findLinkedUser(snapshot.assignee);
   const isCompleted = snapshot.state.type === "completed";
-  const hasPptLabel = snapshot.labels.some(
-    (label) => label.toUpperCase() === PPT_LABEL,
-  );
+  const hasPptLabel = issueHasPptLabel(snapshot);
+  if (
+    snapshot.linearApiError &&
+    previousState?.latestLinearUpdatedAt &&
+    snapshot.updatedAt &&
+    snapshot.updatedAt < previousState.latestLinearUpdatedAt
+  ) {
+    await appendEvent({
+      stateId: previousState.id,
+      linearIssueId: snapshot.id,
+      type: "STALE_WEBHOOK_SKIPPED",
+      reason: "STALE_LINEAR_WEBHOOK",
+      metadata: {
+        trigger,
+        webhookUpdatedAt: snapshot.updatedAt.toISOString(),
+        latestLinearUpdatedAt:
+          previousState.latestLinearUpdatedAt.toISOString(),
+      },
+    });
+    return {
+      status: "SKIPPED" as const,
+      reason: "STALE_LINEAR_WEBHOOK" as const,
+    };
+  }
   if (!hasPptLabel && !previousState) {
     return { status: "SKIPPED" as const };
   }
@@ -1254,6 +1952,16 @@ async function evaluatePptSnapshot(
     ? (previousState?.completionEpisode ?? 0) + 1
     : (previousState?.completionEpisode ?? (isCompleted ? 1 : 0));
   const assignmentAt = latestAssignmentAt(snapshot, previousState);
+  const assigneeChanged = Boolean(
+    previousState?.assigneeLinearId &&
+      snapshot.assignee?.id &&
+      previousState.assigneeLinearId !== snapshot.assignee.id,
+  );
+  const estimateChanged = Boolean(
+    previousState?.estimate != null &&
+      !estimatesMatch(previousState.estimate, snapshot.estimate),
+  );
+  const mutationAt = snapshot.updatedAt ?? new Date();
 
   const base = await upsertStateBase(
     snapshot,
@@ -1262,6 +1970,9 @@ async function evaluatePptSnapshot(
     previousState?.reason ?? null,
     completionEpisode,
     assignmentAt,
+    getCompletedAtForState(snapshot, previousState),
+    assigneeChanged ? mutationAt : null,
+    estimateChanged ? mutationAt : null,
   );
 
   if (enteredCompleted) {
@@ -1274,6 +1985,54 @@ async function evaluatePptSnapshot(
     });
   }
 
+  if (!hasPptLabel) {
+    await invalidateTrackedIssue({
+      snapshot,
+      stateId: base.id,
+      existingState: previousState,
+      userId: linkedUser?.id ?? null,
+      reason: "PPT_LABEL_REMOVED",
+      processingReason: "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING",
+      paidReason: "PAID_ISSUE_LABEL_REMOVED",
+      detail:
+        "The PPT label was removed, so DevHub stopped automatic payout for this issue.",
+    });
+    return { status: "BLOCKED" as const, reason: "PPT_LABEL_REMOVED" as const };
+  }
+
+  if (isCanceledIssue(snapshot)) {
+    await invalidateTrackedIssue({
+      snapshot,
+      stateId: base.id,
+      existingState: previousState,
+      userId: linkedUser?.id ?? null,
+      reason: "ISSUE_CANCELED",
+      processingReason: "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING",
+      paidReason: "PAID_ISSUE_CANCELED",
+      detail:
+        "The Linear issue was canceled, so DevHub stopped automatic payout for this issue.",
+    });
+    return { status: "BLOCKED" as const, reason: "ISSUE_CANCELED" as const };
+  }
+
+  if (isArchivedOrTrashedIssue(snapshot)) {
+    await invalidateTrackedIssue({
+      snapshot,
+      stateId: base.id,
+      existingState: previousState,
+      userId: linkedUser?.id ?? null,
+      reason: "ISSUE_ARCHIVED_OR_TRASHED",
+      processingReason: "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING",
+      paidReason: "PAID_ISSUE_ARCHIVED",
+      detail:
+        "The Linear issue was archived or moved to trash, so DevHub stopped automatic payout for this issue.",
+    });
+    return {
+      status: "BLOCKED" as const,
+      reason: "ISSUE_ARCHIVED_OR_TRASHED" as const,
+    };
+  }
+
   if (reopened) {
     await handleReopenedIssue(
       snapshot,
@@ -1284,15 +2043,6 @@ async function evaluatePptSnapshot(
     return { status: "REOPENED" as const };
   }
 
-  if (!hasPptLabel) {
-    await blockPayout(
-      snapshot,
-      base.id,
-      linkedUser?.id ?? null,
-      "MISSING_PPT_LABEL",
-    );
-    return { status: "BLOCKED" as const, reason: "MISSING_PPT_LABEL" as const };
-  }
   if (!isCompleted) {
     await blockPayout(
       snapshot,
@@ -1315,6 +2065,59 @@ async function evaluatePptSnapshot(
     await blockPayout(snapshot, base.id, null, "MISSING_ASSIGNEE");
     return { status: "BLOCKED" as const, reason: "MISSING_ASSIGNEE" as const };
   }
+
+  const existingTransactionForAssigneeChange =
+    assigneeChanged && previousState?.transaction
+      ? previousState.transaction
+      : assigneeChanged
+        ? await prisma.transaction.findUnique({
+            where: { linearIssueId: snapshot.id },
+            include: { payout: true },
+          })
+        : null;
+  if (
+    assigneeChanged &&
+    existingTransactionForAssigneeChange &&
+    existingTransactionForAssigneeChange.status !== "REJECTED"
+  ) {
+    await appendEvent({
+      stateId: base.id,
+      linearIssueId: snapshot.id,
+      type: "ASSIGNEE_CHANGED",
+      reason: "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
+      metadata: {
+        previousAssigneeLinearId: previousState?.assigneeLinearId ?? null,
+        currentAssigneeLinearId: snapshot.assignee.id,
+      },
+    });
+    await invalidateTrackedIssue({
+      snapshot,
+      stateId: base.id,
+      existingState: previousState,
+      userId: linkedUser?.id ?? null,
+      reason: "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
+      processingReason: "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING",
+      paidReason: "PAID_ISSUE_REASSIGNED",
+      detail:
+        "The issue assignee changed after a payout check, so the current assignee must provide fresh proof before payout can resume.",
+    });
+    return {
+      status: "BLOCKED" as const,
+      reason: "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK" as const,
+    };
+  }
+
+  const estimateChangeResult = await handleEstimateChange(
+    snapshot,
+    base.id,
+    previousState,
+    linkedUser?.id ?? null,
+    linkedUser ? getCurrencyForPaymentMethod(linkedUser.paymentMethod) : null,
+  );
+  if (estimateChangeResult === "FLAGGED") {
+    return { status: "FLAGGED" as const };
+  }
+
   if (!linkedUser) {
     await blockPayout(snapshot, base.id, null, "NO_LINKED_USER");
     return { status: "BLOCKED" as const, reason: "NO_LINKED_USER" as const };
@@ -1331,7 +2134,7 @@ async function evaluatePptSnapshot(
   }
 
   const proof = findQualifyingProof(snapshot, previousState, assignmentAt);
-  const resetQuestion = findResetQuestion(snapshot, proof);
+  const resetQuestion = findResetQuestion(snapshot, proof, previousState);
   if (resetQuestion) {
     await blockPayout(
       snapshot,
@@ -1392,7 +2195,7 @@ async function evaluatePptSnapshot(
     "Your proof was accepted. DevHub is checking the stability window.",
   );
 
-  const completedAt = snapshot.completedAt ?? new Date();
+  const completedAt = base.completedAt ?? snapshot.completedAt ?? new Date();
   const stableAt = new Date(
     completedAt.getTime() + getStabilityMinutes() * 60 * 1000,
   );
@@ -1507,9 +2310,13 @@ export async function sendPptAdminDigest() {
     ),
   ).length;
   const heldCount = events.filter((event) =>
-    ["REOPENED_DETECTED", "PAYOUT_HELD", "PAID_ISSUE_REOPENED"].includes(
-      event.type,
-    ),
+    [
+      "REOPENED_DETECTED",
+      "ISSUE_INVALIDATED",
+      "PAYOUT_HELD",
+      "PAID_ISSUE_REOPENED",
+      "PAID_ISSUE_MUTATED",
+    ].includes(event.type),
   ).length;
 
   const { default: PptPayoutAdminDigest } = await import(

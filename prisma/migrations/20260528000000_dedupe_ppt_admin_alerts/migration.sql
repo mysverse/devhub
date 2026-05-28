@@ -2,7 +2,7 @@ WITH ranked_admin_alerts AS (
   SELECT
     ctid,
     ROW_NUMBER() OVER (
-      PARTITION BY "stateId", COALESCE("reason"::TEXT, '')
+      PARTITION BY "stateId", "reason"
       ORDER BY "createdAt", "id"
     ) AS row_number
   FROM "PptPayoutEvent"
@@ -14,8 +14,6 @@ WHERE e.ctid = ranked.ctid
   AND ranked.row_number > 1;
 
 CREATE UNIQUE INDEX IF NOT EXISTS "PptPayoutEvent_adminAlert_dedupe_key"
-ON "PptPayoutEvent" (
-  "stateId",
-  COALESCE("reason"::TEXT, '')
-)
-WHERE "type" = 'ADMIN_ALERT_SENT';
+ON "PptPayoutEvent" ("stateId", "reason")
+WHERE "type" = 'ADMIN_ALERT_SENT'
+  AND "reason" IS NOT NULL;

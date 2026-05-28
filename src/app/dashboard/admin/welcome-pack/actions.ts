@@ -243,6 +243,8 @@ export async function approveWelcomePackOrder(orderId: string) {
         await sendEmail({
           to: recipient.email,
           subject: "Welcome Pack order approved",
+          category: "welcome_pack_order_approved",
+          idempotencyKey: `welcome-pack:approved:${orderId}`,
           react: createElement(WelcomePackOrderApproved, {
             userName: recipient.name,
             idCardName: order.idCardName,
@@ -288,6 +290,8 @@ export async function rejectWelcomePackOrder(orderId: string, reason?: string) {
         await sendEmail({
           to: recipient.email,
           subject: "Welcome Pack order update",
+          category: "welcome_pack_order_rejected",
+          idempotencyKey: `welcome-pack:rejected:${orderId}`,
           react: createElement(WelcomePackOrderRejected, {
             userName: recipient.name,
             reason: reason?.trim() || undefined,
@@ -346,6 +350,8 @@ export async function markWelcomePackOrderShipped(
         await sendEmail({
           to: recipient.email,
           subject: "Welcome Pack on the way",
+          category: "welcome_pack_order_shipped",
+          idempotencyKey: `welcome-pack:shipped:${orderId}`,
           react: createElement(WelcomePackOrderShipped, {
             userName: recipient.name,
             trackingNumber: tracking,

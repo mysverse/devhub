@@ -30,6 +30,8 @@ export async function sendLegalNameReminder(userId: string) {
     await sendEmail({
       to: email,
       subject: "Action Required: Please Update Your Legal Name",
+      category: "admin_notice_legal_name",
+      idempotencyKey: `admin-notice:legal-name:${userId}:${new Date().toISOString().slice(0, 10)}`,
       react: LegalNameReminder({ userName: name }),
     });
 
@@ -62,6 +64,8 @@ export async function sendDocumentInvalidatedNotice(
     await sendEmail({
       to: email,
       subject: "Action Required: Document Re-signing Needed",
+      category: "admin_notice_document_invalidated",
+      idempotencyKey: `admin-notice:document-invalidated:${userId}:${documentType}:${new Date().toISOString().slice(0, 10)}`,
       react: DocumentInvalidated({ userName: name, documentType }),
     });
 
@@ -82,6 +86,8 @@ export async function sendPaymentInfoNotice(userId: string, reason?: string) {
     await sendEmail({
       to: email,
       subject: "Action Required: Payment Information Issue",
+      category: "admin_notice_payment_info",
+      idempotencyKey: `admin-notice:payment-info:${userId}:${new Date().toISOString().slice(0, 10)}`,
       react: PaymentInfoInvalid({ userName: name, reason }),
     });
 

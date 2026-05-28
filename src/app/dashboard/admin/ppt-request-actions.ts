@@ -120,6 +120,8 @@ export async function approvePptRequest(
           await sendEmail({
             to: email,
             subject: `PPT Request Approved: ${issueIdentifier}`,
+            category: "ppt_request_approved",
+            idempotencyKey: `ppt-request:approved:${requestId}`,
             react: createElement(PptRequestApproved, {
               userName: name,
               issueIdentifier,
@@ -187,6 +189,8 @@ export async function rejectPptRequest(requestId: string, reason?: string) {
       await sendEmail({
         to: email,
         subject: `PPT Request Rejected: ${request.linearIssueTitle}`,
+        category: "ppt_request_rejected",
+        idempotencyKey: `ppt-request:rejected:${requestId}`,
         react: createElement(PptRequestRejected, {
           userName: name,
           issueTitle: request.linearIssueTitle,

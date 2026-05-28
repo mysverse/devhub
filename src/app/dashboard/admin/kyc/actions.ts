@@ -46,6 +46,8 @@ export async function approveKyc(verificationId: string) {
       await sendEmail({
         to: email,
         subject: "Identity Verified — Automatic Payouts Available",
+        category: "kyc_approved",
+        idempotencyKey: `kyc:approved:${verificationId}`,
         react: KycApproved({ userName: name }),
       });
     }
@@ -100,6 +102,8 @@ export async function rejectKyc(verificationId: string, reason: string) {
       await sendEmail({
         to: email,
         subject: "Identity Verification — Action Required",
+        category: "kyc_rejected",
+        idempotencyKey: `kyc:rejected:${verificationId}`,
         react: KycRejected({ userName: name, reason: reason.trim() }),
       });
     }

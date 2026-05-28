@@ -877,6 +877,8 @@ async function notifyDeveloper(
       await sendEmail({
         to: state.user.user.email,
         subject: `PPT payout update: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
+        category: "ppt_developer_notice",
+        idempotencyKey: `ppt:developer:${stateId}:${state.completionEpisode}:${reason}`,
         react: createElement(PptPayoutBlocked, {
           userName: state.user.legalName || state.user.user.name || "developer",
           issueIdentifier: snapshot.identifier,
@@ -909,14 +911,27 @@ async function notifyAdmins(
   reason: PptReason,
   detail?: string,
 ) {
-  const state = await prisma.pptPayoutState.findUnique({
-    where: { id: stateId },
-    include: { user: { include: { user: { select: { name: true } } } } },
+  const message = detail?.trim() || null;
+  const existingAlert = await prisma.pptPayoutEvent.findFirst({
+    where: {
+      stateId,
+      type: "ADMIN_ALERT_SENT",
+      reason,
+    },
+    select: { id: true },
   });
-  const admins = await prisma.userProfile.findMany({
-    where: ADMIN_ACCESS_WHERE,
-    include: { user: { select: { email: true, name: true } } },
-  });
+  if (existingAlert) return;
+
+  const [state, admins] = await Promise.all([
+    prisma.pptPayoutState.findUnique({
+      where: { id: stateId },
+      include: { user: { include: { user: { select: { name: true } } } } },
+    }),
+    prisma.userProfile.findMany({
+      where: ADMIN_ACCESS_WHERE,
+      include: { user: { select: { email: true, name: true } } },
+    }),
+  ]);
 
   for (const admin of admins) {
     if (!admin.user.email) continue;
@@ -924,6 +939,8 @@ async function notifyAdmins(
       await sendEmail({
         to: admin.user.email,
         subject: `PPT payout alert: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
+        category: "ppt_admin_alert",
+        idempotencyKey: `ppt:admin-alert:${stateId}:${reason}`,
         react: createElement(PptPayoutAdminAlert, {
           issueIdentifier: snapshot.identifier,
           issueTitle: getIssueTitle(snapshot),
@@ -933,7 +950,7 @@ async function notifyAdmins(
             snapshot.assignee?.displayName ||
             snapshot.assignee?.name,
           reason: formatReason(reason),
-          detail,
+          detail: message ?? undefined,
         }),
       });
     } catch (error) {
@@ -945,13 +962,17 @@ async function notifyAdmins(
     where: { id: stateId },
     data: { lastAdminNotifiedAt: new Date() },
   });
-  await appendEvent({
-    stateId,
-    linearIssueId: snapshot.id,
-    type: "ADMIN_ALERT_SENT",
-    reason,
-    message: detail,
-  });
+  try {
+    await appendEvent({
+      stateId,
+      linearIssueId: snapshot.id,
+      type: "ADMIN_ALERT_SENT",
+      reason,
+      message,
+    });
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+  }
 }
 
 async function commentGuidanceIfNeeded(
@@ -2328,11 +2349,14 @@ export async function sendPptAdminDigest() {
   });
 
   let sent = 0;
+  const digestDay = new Date().toISOString().slice(0, 10);
   for (const admin of admins) {
     if (!admin.user.email) continue;
-    await sendEmail({
+    const result = await sendEmail({
       to: admin.user.email,
       subject: "Daily PPT payout digest - MYSverse DevHub",
+      category: "ppt_admin_digest",
+      idempotencyKey: `ppt:admin-digest:${digestDay}`,
       react: createElement(PptPayoutAdminDigest, {
         eventCount: events.length,
         blockedCount,
@@ -2340,7 +2364,7 @@ export async function sendPptAdminDigest() {
         heldCount,
       }),
     });
-    sent++;
+    if (result.status === "sent") sent++;
   }
   return sent;
 }

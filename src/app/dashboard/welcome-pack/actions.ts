@@ -207,6 +207,8 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
           sendEmail({
             to,
             subject: `New Welcome Pack order — ${developerName}`,
+            category: "welcome_pack_order_submitted",
+            idempotencyKey: `welcome-pack:submitted:${order.id}`,
             react: createElement(WelcomePackOrderSubmitted, {
               developerName,
               recipientName: order.recipientName,

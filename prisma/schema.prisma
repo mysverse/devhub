@@ -123,6 +123,34 @@ model Invite {
   createdAt        DateTime @default(now())
 }
 
+model EmailDelivery {
+  id             String              @id @default(cuid())
+  dedupeKey      String              @unique
+  idempotencyKey String?
+  fingerprint    String
+  recipient      String
+  subject        String
+  category       String
+  status         EmailDeliveryStatus @default(PENDING)
+  providerId     String?
+  error          String?
+  sentAt         DateTime?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([recipient, createdAt])
+  @@index([idempotencyKey])
+  @@index([fingerprint, createdAt])
+  @@index([category, createdAt])
+  @@index([status, createdAt])
+}
+
+enum EmailDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 enum Role {
   ADMIN
   DEVELOPER

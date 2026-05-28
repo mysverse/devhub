@@ -203,6 +203,8 @@ export async function submitPptRequest(data: {
       await sendEmail({
         to: admin.user.email,
         subject: `New PPT Request: ${data.linearIssueTitle}`,
+        category: "ppt_request_submitted",
+        idempotencyKey: `ppt-request:submitted:${request.id}`,
         react: createElement(PptRequestSubmitted, {
           requesterName,
           issueTitle: data.linearIssueTitle,

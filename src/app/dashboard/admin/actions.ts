@@ -53,6 +53,8 @@ export async function sendPaymentConfirmation(transactionId: string) {
   await sendEmail({
     to: email,
     subject: "Payment Processed - MYSverse DevHub",
+    category: "payment_processed",
+    idempotencyKey: `transaction:paid:${transactionId}`,
     react: PaymentProcessed({
       userName: name,
       amount: formatAmount(
@@ -183,6 +185,8 @@ export async function rejectTransaction(
       await sendEmail({
         to: email,
         subject: "Payout Rejected - MYSverse DevHub",
+        category: "payment_rejected",
+        idempotencyKey: `transaction:rejected:${transactionId}`,
         react: PaymentRejected({
           userName: name,
           amount: formatAmount(

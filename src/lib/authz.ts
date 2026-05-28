@@ -1,8 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth-utils";
+import { isDevMode } from "@/lib/dev-mode";
 import { isDeveloperAdminRank } from "@/lib/developer-access";
-import prisma from "@/lib/prisma";
 
 export const ADMIN_ACCESS_WHERE: Prisma.UserProfileWhereInput = {
   OR: [
@@ -23,9 +23,18 @@ export function hasAdminAccess(
 }
 
 export async function getCurrentUserProfileForAccess() {
+  if (isDevMode()) {
+    const { MOCK_USER_ID } = await import("@/lib/dev/mock-data");
+    return {
+      userId: MOCK_USER_ID,
+      profile: { role: "ADMIN" as const, developerRank: "DEVELOPER_COUNCIL" },
+    };
+  }
+
   const { userId } = await getSession();
   if (!userId) return { userId: null, profile: null };
 
+  const prisma = (await import("@/lib/prisma")).default;
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
     select: { role: true, developerRank: true },
@@ -35,6 +44,11 @@ export async function getCurrentUserProfileForAccess() {
 }
 
 export async function requireAdmin() {
+  if (isDevMode()) {
+    const { MOCK_USER_ID } = await import("@/lib/dev/mock-data");
+    return MOCK_USER_ID;
+  }
+
   const { userId, profile } = await getCurrentUserProfileForAccess();
   if (!userId) throw new Error("Unauthorized");
   if (!hasAdminAccess(profile)) {
@@ -44,6 +58,11 @@ export async function requireAdmin() {
 }
 
 export async function requireAdminPage(returnTo = "/dashboard") {
+  if (isDevMode()) {
+    const { MOCK_USER_ID } = await import("@/lib/dev/mock-data");
+    return MOCK_USER_ID;
+  }
+
   const { userId, profile } = await getCurrentUserProfileForAccess();
   if (!userId) redirect("/sign-in");
   if (!hasAdminAccess(profile)) redirect(returnTo);

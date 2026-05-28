@@ -2,6 +2,7 @@ import { ColorSchemeScript, createTheme, MantineProvider } from "@mantine/core";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
+import DevModeBanner from "@/components/DevModeBanner";
 import { siteConfig } from "@/lib/config";
 import "@mantine/core/styles.css";
 import "./globals.css";
@@ -46,6 +47,7 @@ export default function RootLayout({
       >
         <MantineProvider theme={theme} defaultColorScheme="dark">
           {children}
+          <DevModeBanner />
           <Toaster theme="dark" richColors />
         </MantineProvider>
       </body>

@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { isDevMode } from "@/lib/dev-mode";
 
 const protectedPaths = ["/dashboard", "/settings", "/onboarding"];
 
@@ -8,10 +8,16 @@ function isProtected(pathname: string) {
 }
 
 export default async function middleware(req: NextRequest) {
+  // Dev mode: skip all auth checks
+  if (isDevMode()) {
+    return NextResponse.next();
+  }
+
   if (!isProtected(req.nextUrl.pathname)) {
     return NextResponse.next();
   }
 
+  const { auth } = await import("@/lib/auth");
   const session = await auth.api.getSession({
     headers: req.headers,
   });

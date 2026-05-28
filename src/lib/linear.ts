@@ -1,4 +1,5 @@
 import { LinearClient } from "@linear/sdk";
+import { isDevMode } from "./dev-mode";
 import prisma from "./prisma";
 
 export class LinearReauthRequiredError extends Error {
@@ -115,10 +116,16 @@ function isAuthError(error: unknown): boolean {
 }
 
 export async function getLinearToken(userId: string): Promise<string | null> {
+  if (isDevMode()) return "mock-linear-token";
   return getValidLinearToken(userId);
 }
 
 export async function getLinearClient(userId: string) {
+  if (isDevMode()) {
+    const { createMockLinearClient } = await import("./dev/mock-linear");
+    return createMockLinearClient() as unknown as LinearClient;
+  }
+
   const token = await getValidLinearToken(userId);
 
   if (token) {
@@ -130,6 +137,7 @@ export async function getLinearClient(userId: string) {
 }
 
 export function getLinearServiceClient(): LinearClient | null {
+  if (isDevMode()) return null;
   const apiKey = process.env.LINEAR_SERVICE_API_KEY;
   if (!apiKey) return null;
   return new LinearClient({ apiKey });
@@ -145,6 +153,11 @@ export async function withLinearFallback<T>(
   fn: (client: LinearClient) => Promise<T>,
 ): Promise<T> {
   const client = await getLinearClient(userId);
+
+  // Dev mode: skip error handling since mock client won't throw auth errors
+  if (isDevMode()) {
+    return fn(client);
+  }
 
   try {
     return await fn(client);

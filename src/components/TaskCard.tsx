@@ -94,6 +94,7 @@ type TaskCardProps = {
   isPpt?: boolean;
   proofStatus?: string | null;
   proofReason?: string | null;
+  proofNextStep?: string | null;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -172,6 +173,7 @@ export default function TaskCard({
   isPpt,
   proofStatus,
   proofReason,
+  proofNextStep,
 }: TaskCardProps) {
   const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
 
@@ -245,17 +247,23 @@ export default function TaskCard({
             {title}
           </Text>
           {proofBadge && (
-            <Tooltip label={proofReason || proofBadge.label}>
-              <Badge
-                variant="light"
-                color={proofBadge.color}
-                size="sm"
-                mb="sm"
-                style={{ alignSelf: "flex-start" }}
-              >
-                {proofBadge.label}
-              </Badge>
-            </Tooltip>
+            <div style={{ marginBottom: "var(--mantine-spacing-sm)" }}>
+              <Tooltip label={proofReason || proofBadge.label}>
+                <Badge
+                  variant="light"
+                  color={proofBadge.color}
+                  size="sm"
+                  style={{ alignSelf: "flex-start" }}
+                >
+                  {proofBadge.label}
+                </Badge>
+              </Tooltip>
+              {proofNextStep && (
+                <Text size="xs" c="dimmed" mt={6} style={{ lineHeight: 1.45 }}>
+                  {proofNextStep}
+                </Text>
+              )}
+            </div>
           )}
           <Group justify="space-between" mt="auto">
             <Text fz="sm" c="dimmed">

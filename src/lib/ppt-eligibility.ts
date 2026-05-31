@@ -23,7 +23,7 @@ const PROOF_TAG = "#ppt-proof";
 const DEVELOPER_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
 const PROOF_LOOKBACK_DAYS = 7;
 
-type PptReason =
+export type PptReason =
   | "MISSING_PPT_LABEL"
   | "PPT_LABEL_REMOVED"
   | "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING"
@@ -59,7 +59,7 @@ type PptReason =
   | "TRANSACTION_CREATED"
   | "AUTO_PAYOUT_STARTED";
 
-type PptStatus =
+export type PptStatus =
   | "BLOCKED"
   | "NEEDS_PROOF"
   | "WAITING_STABILITY"
@@ -69,7 +69,7 @@ type PptStatus =
   | "PAID"
   | "FLAGGED";
 
-type PptEventType =
+export type PptEventType =
   | "COMPLETED_DETECTED"
   | "REOPENED_DETECTED"
   | "ISSUE_INVALIDATED"
@@ -79,6 +79,7 @@ type PptEventType =
   | "PROOF_MISSING"
   | "PROOF_ACCEPTED"
   | "PROOF_RESET"
+  | "PROOF_OVERRIDDEN"
   | "WAITING_STABILITY"
   | "PAYOUT_BLOCKED"
   | "PAYOUT_HELD"
@@ -93,6 +94,16 @@ type PptEventType =
   | "LINEAR_COMMENTED"
   | "DEVELOPER_NOTIFIED"
   | "ADMIN_ALERT_SENT";
+
+export type PptTrigger =
+  | "admin_override"
+  | "admin_retry"
+  | "comment"
+  | "developer_retry"
+  | "manual"
+  | "proof_submission"
+  | "stability_cron"
+  | "webhook";
 
 type LinearUserSnapshot = {
   id: string | null;
@@ -257,7 +268,7 @@ function formatReason(reason: PptReason | null | undefined) {
   return reason ? copy[reason] : "PPT payout eligibility changed.";
 }
 
-function getActionForReason(reason: PptReason | null | undefined) {
+export function getActionForReason(reason: PptReason | null | undefined) {
   if (reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION") {
     return "Reply in Linear or use DevHub with #ppt-proof, what changed, proof links/screenshots, where it is implemented, and verification notes.";
   }
@@ -304,7 +315,83 @@ function getActionForReason(reason: PptReason | null | undefined) {
   if (reason === "MISSING_ESTIMATE") {
     return "Ask an admin or task owner to add the Linear estimate.";
   }
+  if (reason === "READY_FOR_PAYOUT") {
+    return "DevHub will create or route the payout automatically.";
+  }
+  if (
+    reason === "TRANSACTION_CREATED" ||
+    reason === "AUTO_PAYOUT_STARTED" ||
+    reason === "DUPLICATE_TRANSACTION"
+  ) {
+    return "DevHub is already tracking this payout. No developer action is needed.";
+  }
   return "Open the task and follow the DevHub payout guidance.";
+}
+
+export function describePptNextStep(
+  status: PptStatus | string | null | undefined,
+  reason: PptReason | string | null | undefined,
+): {
+  owner: "developer" | "admin" | "automatic";
+  action: string | null;
+} {
+  const pptStatus = status as PptStatus | null | undefined;
+  const pptReason = reason as PptReason | null | undefined;
+
+  if (pptStatus === "PAID") {
+    return { owner: "automatic", action: null };
+  }
+
+  const developerReasons = new Set<PptReason>([
+    "MISSING_PROOF",
+    "PROOF_RESET_BY_QUESTION",
+    "MISSING_ESTIMATE",
+    "MISSING_ASSIGNEE",
+    "NO_LINKED_USER",
+    "PPT_LABEL_REMOVED",
+    "REOPENED_BEFORE_PAYOUT",
+  ]);
+  const adminReasons = new Set<PptReason>([
+    "PAID_ISSUE_LABEL_REMOVED",
+    "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING",
+    "PAID_ISSUE_CANCELED",
+    "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING",
+    "PAID_ISSUE_ARCHIVED",
+    "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING",
+    "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
+    "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING",
+    "PAID_ISSUE_REASSIGNED",
+    "ESTIMATE_CHANGED_DURING_PROCESSING",
+    "PAID_ISSUE_ESTIMATE_CHANGED",
+    "DUPLICATE_TRANSACTION",
+    "APPROVED_BONUS_EXISTS",
+    "LINEAR_API_ERROR",
+  ]);
+  const automaticReasons = new Set<PptReason>([
+    "WAITING_STABILITY",
+    "READY_FOR_PAYOUT",
+    "TRANSACTION_CREATED",
+    "AUTO_PAYOUT_STARTED",
+    "DUPLICATE_TRANSACTION",
+  ]);
+
+  const owner =
+    pptStatus === "FLAGGED" || (pptReason && adminReasons.has(pptReason))
+      ? "admin"
+      : pptReason && developerReasons.has(pptReason)
+        ? "developer"
+        : pptReason && automaticReasons.has(pptReason)
+          ? "automatic"
+          : pptStatus === "WAITING_STABILITY" ||
+              pptStatus === "READY_FOR_PAYOUT" ||
+              pptStatus === "TRANSACTION_PENDING"
+            ? "automatic"
+            : "admin";
+
+  return {
+    owner,
+    action: pptReason ? getActionForReason(pptReason) : null,
+  };
 }
 
 function shouldShowProofTemplate(reason: PptReason) {
@@ -387,6 +474,39 @@ function issueHasPptLabel(snapshot: LinearIssueSnapshot) {
 
 function isActiveProviderPayout(payout: { status: string } | null | undefined) {
   return Boolean(payout && ["PENDING", "PROCESSING"].includes(payout.status));
+}
+
+function clearProofOverrideData() {
+  return {
+    proofOverride: false,
+    proofOverrideById: null,
+    proofOverrideAt: null,
+    proofOverrideNote: null,
+    proofOverrideEpisode: null,
+  };
+}
+
+function clearProofData() {
+  return {
+    proofCommentId: null,
+    proofCommentUrl: null,
+    proofCommentBody: null,
+    proofAuthorLinearId: null,
+    proofProvidedAt: null,
+    ...clearProofOverrideData(),
+  };
+}
+
+function getProofData(proof: LinearCommentSnapshot | null) {
+  return proof
+    ? {
+        proofCommentId: proof.id,
+        proofCommentUrl: proof.url,
+        proofCommentBody: proof.body.slice(0, 1000),
+        proofAuthorLinearId: proof.userId,
+        proofProvidedAt: proof.editedAt ?? proof.createdAt,
+      }
+    : {};
 }
 
 function estimatesMatch(
@@ -1086,11 +1206,7 @@ async function blockPayout(
       status: nextStatus,
       reason: nextReason,
       warningCount: { increment: 1 },
-      proofCommentId: clearProof ? null : undefined,
-      proofCommentUrl: clearProof ? null : undefined,
-      proofCommentBody: clearProof ? null : undefined,
-      proofAuthorLinearId: clearProof ? null : undefined,
-      proofProvidedAt: clearProof ? null : undefined,
+      ...(clearProof ? clearProofData() : {}),
     },
   });
   await appendEvent({
@@ -1154,13 +1270,7 @@ async function invalidateTrackedIssue({
 
   await prisma.pptPayoutState.update({
     where: { id: stateId },
-    data: {
-      proofCommentId: null,
-      proofCommentUrl: null,
-      proofCommentBody: null,
-      proofAuthorLinearId: null,
-      proofProvidedAt: null,
-    },
+    data: clearProofData(),
   });
   await appendEvent({
     stateId,
@@ -1287,11 +1397,7 @@ async function handleReopenedIssue(
     where: { id: stateId },
     data: {
       lastReopenedAt: now,
-      proofCommentId: null,
-      proofCommentUrl: null,
-      proofCommentBody: null,
-      proofAuthorLinearId: null,
-      proofProvidedAt: null,
+      ...clearProofData(),
     },
   });
   await appendEvent({
@@ -1427,6 +1533,10 @@ async function handleEstimateChange(
       currentEstimate: snapshot.estimate,
     },
   });
+  await prisma.pptPayoutState.update({
+    where: { id: stateId },
+    data: clearProofOverrideData(),
+  });
 
   if (!existingTransaction || existingTransaction.status === "REJECTED") {
     return "RECORDED" as const;
@@ -1560,8 +1670,9 @@ async function handleEligiblePayout(
   userId: string,
   currency: CurrencyCode,
   amount: number,
-  proof: LinearCommentSnapshot,
+  proof: LinearCommentSnapshot | null,
 ) {
+  const proofData = getProofData(proof);
   const existing = await prisma.transaction.findUnique({
     where: { linearIssueId: snapshot.id },
     include: { payout: true },
@@ -1655,11 +1766,7 @@ async function handleEligiblePayout(
           ? "ESTIMATE_CHANGED_RECALCULATED"
           : "DUPLICATE_TRANSACTION",
         transactionId: existing.id,
-        proofCommentId: proof.id,
-        proofCommentUrl: proof.url,
-        proofCommentBody: proof.body.slice(0, 1000),
-        proofAuthorLinearId: proof.userId,
-        proofProvidedAt: proof.editedAt ?? proof.createdAt,
+        ...proofData,
       },
     });
     await appendEvent({
@@ -1737,11 +1844,7 @@ async function handleEligiblePayout(
           status: "TRANSACTION_PENDING",
           reason: "TRANSACTION_CREATED",
           transactionId: updated.id,
-          proofCommentId: proof.id,
-          proofCommentUrl: proof.url,
-          proofCommentBody: proof.body.slice(0, 1000),
-          proofAuthorLinearId: proof.userId,
-          proofProvidedAt: proof.editedAt ?? proof.createdAt,
+          ...proofData,
         },
       });
       return updated;
@@ -1782,11 +1885,7 @@ async function handleEligiblePayout(
             status: "TRANSACTION_PENDING",
             reason: "TRANSACTION_CREATED",
             transactionId: created.id,
-            proofCommentId: proof.id,
-            proofCommentUrl: proof.url,
-            proofCommentBody: proof.body.slice(0, 1000),
-            proofAuthorLinearId: proof.userId,
-            proofProvidedAt: proof.editedAt ?? proof.createdAt,
+            ...proofData,
           },
         });
         return created;
@@ -1880,7 +1979,7 @@ async function handleEligiblePayout(
 
 export async function evaluatePptIssueById(
   issueId: string,
-  options: { userId?: string | null; trigger?: string } = {},
+  options: { userId?: string | null; trigger?: PptTrigger } = {},
 ) {
   const fallbackState = await findPptState(issueId);
   const fallback: LinearIssueSnapshot | undefined = fallbackState
@@ -1933,7 +2032,7 @@ export async function handlePptCommentWebhook(comment: PptWebhookComment) {
 
 async function evaluatePptSnapshot(
   snapshot: LinearIssueSnapshot,
-  trigger: string,
+  trigger: PptTrigger,
 ) {
   const previousState = await findPptState(snapshot.id);
   const linkedUser = await findLinkedUser(snapshot.assignee);
@@ -2127,6 +2226,12 @@ async function evaluatePptSnapshot(
       reason: "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK" as const,
     };
   }
+  if (assigneeChanged) {
+    await prisma.pptPayoutState.update({
+      where: { id: base.id },
+      data: clearProofOverrideData(),
+    });
+  }
 
   const estimateChangeResult = await handleEstimateChange(
     snapshot,
@@ -2152,6 +2257,61 @@ async function evaluatePptSnapshot(
       snapshot.linearApiError,
     );
     return { status: "BLOCKED" as const, reason: "LINEAR_API_ERROR" as const };
+  }
+
+  const overrideActive =
+    !assigneeChanged &&
+    !estimateChanged &&
+    base.proofOverride &&
+    base.proofOverrideEpisode === base.completionEpisode;
+  if (overrideActive) {
+    const proofProvidedAt = base.proofOverrideAt ?? new Date();
+    const proofCommentBody = `Admin proof override${
+      base.proofOverrideNote ? `: ${base.proofOverrideNote}` : ""
+    }`.slice(0, 1000);
+
+    await prisma.pptPayoutState.update({
+      where: { id: base.id },
+      data: {
+        proofProvidedAt,
+        proofAuthorLinearId: null,
+        proofCommentId: null,
+        proofCommentUrl: null,
+        proofCommentBody,
+      },
+    });
+    await appendEvent({
+      stateId: base.id,
+      linearIssueId: snapshot.id,
+      type: "PROOF_OVERRIDDEN",
+      reason: "READY_FOR_PAYOUT",
+      message: "Proof requirement satisfied by admin override",
+      metadata: {
+        proofOverrideById: base.proofOverrideById,
+        proofOverrideAt: proofProvidedAt.toISOString(),
+      },
+    });
+
+    const currency = getCurrencyForPaymentMethod(linkedUser.paymentMethod);
+    const amount = estimateToAmount(snapshot.estimate, currency);
+    await handleEligiblePayout(
+      snapshot,
+      base.id,
+      linkedUser.id,
+      currency,
+      amount,
+      null,
+    );
+    return { status: "READY_FOR_PAYOUT" as const };
+  }
+  if (
+    base.proofOverride &&
+    base.proofOverrideEpisode !== base.completionEpisode
+  ) {
+    await prisma.pptPayoutState.update({
+      where: { id: base.id },
+      data: clearProofOverrideData(),
+    });
   }
 
   const proof = findQualifyingProof(snapshot, previousState, assignmentAt);

@@ -8,6 +8,7 @@ import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getUserWeeklyUsage } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
+import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
@@ -209,6 +210,15 @@ export default async function AdminPage() {
       },
       include: {
         user: { include: { user: { select: { name: true, email: true } } } },
+        transaction: {
+          include: {
+            payout: {
+              select: {
+                status: true,
+              },
+            },
+          },
+        },
         events: {
           orderBy: { createdAt: "desc" },
           take: 5,
@@ -325,33 +335,71 @@ export default async function AdminPage() {
       completedAt: candidate.completedAt?.toISOString() ?? null,
     }));
 
+  const proofOverrideByIds = [
+    ...new Set(
+      pptPayoutStates
+        .map((state) => state.proofOverrideById)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const proofOverrideProfiles =
+    proofOverrideByIds.length > 0
+      ? await prisma.userProfile.findMany({
+          where: { id: { in: proofOverrideByIds } },
+          select: {
+            id: true,
+            legalName: true,
+            user: { select: { name: true, email: true } },
+          },
+        })
+      : [];
+  const proofOverrideNameById = new Map(
+    proofOverrideProfiles.map((profile) => [
+      profile.id,
+      profile.legalName || profile.user.name || profile.user.email,
+    ]),
+  );
+
   const pptEligibilityStates: AdminPptEligibilityState[] = pptPayoutStates.map(
-    (state) => ({
-      id: state.id,
-      linearIssueId: state.linearIssueId,
-      linearIssueIdentifier: state.linearIssueIdentifier,
-      linearIssueTitle: state.linearIssueTitle,
-      linearIssueUrl: state.linearIssueUrl,
-      developerName:
-        state.user?.legalName ||
-        state.user?.user.name ||
-        state.assigneeName ||
-        null,
-      assigneeEmail: state.assigneeEmail,
-      status: state.status,
-      reason: state.reason,
-      completionEpisode: state.completionEpisode,
-      proofCommentUrl: state.proofCommentUrl,
-      warningCount: state.warningCount,
-      updatedAt: state.updatedAt.toISOString(),
-      events: state.events.map((event) => ({
-        id: event.id,
-        type: event.type,
-        reason: event.reason,
-        message: event.message,
-        createdAt: event.createdAt.toISOString(),
-      })),
-    }),
+    (state) => {
+      const nextStep = describePptNextStep(state.status, state.reason);
+
+      return {
+        id: state.id,
+        linearIssueId: state.linearIssueId,
+        linearIssueIdentifier: state.linearIssueIdentifier,
+        linearIssueTitle: state.linearIssueTitle,
+        linearIssueUrl: state.linearIssueUrl,
+        developerName:
+          state.user?.legalName ||
+          state.user?.user.name ||
+          state.assigneeName ||
+          null,
+        assigneeEmail: state.assigneeEmail,
+        status: state.status,
+        reason: state.reason,
+        owner: nextStep.owner,
+        nextStep: nextStep.action,
+        completionEpisode: state.completionEpisode,
+        proofCommentUrl: state.proofCommentUrl,
+        proofOverride: state.proofOverride,
+        proofOverrideNote: state.proofOverrideNote,
+        proofOverrideByName: state.proofOverrideById
+          ? (proofOverrideNameById.get(state.proofOverrideById) ?? null)
+          : null,
+        transactionStatus: state.transaction?.status ?? null,
+        payoutStatus: state.transaction?.payout?.status ?? null,
+        warningCount: state.warningCount,
+        updatedAt: state.updatedAt.toISOString(),
+        events: state.events.map((event) => ({
+          id: event.id,
+          type: event.type,
+          reason: event.reason,
+          message: event.message,
+          createdAt: event.createdAt.toISOString(),
+        })),
+      };
+    },
   );
 
   return (

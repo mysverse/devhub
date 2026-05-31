@@ -403,6 +403,11 @@ model PptPayoutState {
   proofCommentBody      String?
   proofAuthorLinearId   String?
   proofProvidedAt       DateTime?
+  proofOverride         Boolean         @default(false)
+  proofOverrideById     String?
+  proofOverrideAt       DateTime?
+  proofOverrideNote     String?
+  proofOverrideEpisode  Int?
 
   transactionId         String?         @unique
   transaction           Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
@@ -516,6 +521,7 @@ enum PptPayoutEventType {
   PROOF_MISSING
   PROOF_ACCEPTED
   PROOF_RESET
+  PROOF_OVERRIDDEN
   WAITING_STABILITY
   PAYOUT_BLOCKED
   PAYOUT_HELD

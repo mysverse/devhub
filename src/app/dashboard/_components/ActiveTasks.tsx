@@ -8,6 +8,7 @@ import TaskCard from "@/components/TaskCard";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import ActiveTasksEmptyState from "./ActiveTasksEmptyState";
 import DashboardSectionHeader from "./DashboardSectionHeader";
@@ -146,6 +147,9 @@ export default async function ActiveTasks({
             );
             const bonus = bonusByIssueId.get(issue.id);
             const pptState = pptStateByIssueId.get(issue.id);
+            const proofNextStep = pptState
+              ? describePptNextStep(pptState.status, pptState.reason).action
+              : null;
             const bonusCurrency = bonus?.currency === "ROBUX" ? "ROBUX" : "MYR";
             const earningsText = hasPptLabel
               ? issue.estimate
@@ -172,6 +176,7 @@ export default async function ActiveTasks({
                   isPpt={hasPptLabel}
                   proofStatus={pptState?.status ?? null}
                   proofReason={pptState?.reason?.replaceAll("_", " ") ?? null}
+                  proofNextStep={proofNextStep}
                 />
               </StaggerItem>
             );

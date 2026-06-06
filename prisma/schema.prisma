@@ -9,17 +9,17 @@ datasource db {
 // ── better-auth tables ──────────────────────────────────────────────────────
 
 model User {
-  id            String    @id
+  id            String   @id
   name          String
-  email         String    @unique
-  emailVerified Boolean   @default(false)
+  email         String   @unique
+  emailVerified Boolean  @default(false)
   image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
-  sessions      Session[]
-  accounts      Account[]
-  profile       UserProfile?
+  sessions Session[]
+  accounts Account[]
+  profile  UserProfile?
 }
 
 model Session {
@@ -65,62 +65,68 @@ model Verification {
 // ── Application tables ──────────────────────────────────────────────────────
 
 model UserProfile {
-  id               String   @id // Matches better-auth User.id
-  user             User     @relation(fields: [id], references: [id], onDelete: Cascade)
-  discordId        String?  @unique
-  robloxId         String?  @unique
-  linearId         String?  @unique
-  linearEmail      String?  @unique
-  legalName        String?
-  shippingAddress  String?  // For merch
+  id              String  @id // Matches better-auth User.id
+  user            User    @relation(fields: [id], references: [id], onDelete: Cascade)
+  discordId       String? @unique
+  robloxId        String? @unique
+  linearId        String? @unique
+  linearEmail     String? @unique
+  legalName       String?
+  shippingAddress String? // For merch
 
   // Roles and Permissions
-  role             Role     @default(DEVELOPER)
-  developerRank    DeveloperRank @default(PROBATIONARY_DEVELOPER)
-  specialties      DeveloperSpecialty[] @default([])
-  probationStartedAt DateTime @default(now())
-  initialReviewAt  DateTime?
-  finalReviewAt    DateTime?
+  role               Role                 @default(DEVELOPER)
+  developerRank      DeveloperRank        @default(PROBATIONARY_DEVELOPER)
+  specialties        DeveloperSpecialty[] @default([])
+  probationStartedAt DateTime             @default(now())
+  initialReviewAt    DateTime?
+  finalReviewAt      DateTime?
 
   // Payment Preferences
-  paymentMethod    PaymentMethod @default(PAYPAL)
-  paypalEmail      String?
-  duitNowId        String?
-  bankName         String?
+  paymentMethod     PaymentMethod @default(PAYPAL)
+  paypalEmail       String?
+  duitNowId         String?
+  bankName          String?
   bankAccountNumber String?
-  bankAccountName  String?
-  robuxUsername    String?
+  bankAccountName   String?
+  robuxUsername     String?
 
   // Auto-payout opt-in for ewallet methods (requires KYC)
-  autoPayoutEnabled Boolean  @default(false)
+  autoPayoutEnabled Boolean @default(false)
 
   // Relationships
-  transactions     Transaction[]
-  pptPayoutStates  PptPayoutState[] @relation("PptPayoutStateUser")
-  pptNotifications PptNotification[]
-  bonusCandidates  BonusCandidate[] @relation("BonusCandidateUser")
-  bonusReviews     BonusCandidate[] @relation("BonusCandidateReviewer")
-  bonusNotifications BonusNotification[]
-  invites          Invite[]
-  signedDocuments  SignedDocument[]
-  pptRequestsMade     PptRequest[] @relation("PptRequestRequester")
-  pptRequestsReviewed PptRequest[] @relation("PptRequestReviewer")
-  kycVerifications KycVerification[]
-  welcomePackOrder WelcomePackOrder?
-  projectMemberships ProjectMembership[] @relation("ProjectMember")
-  projectAssignmentsMade ProjectMembership[] @relation("ProjectAssignmentActor")
-  accessSyncLogs AccessSyncLog[] @relation("AccessSyncUser")
-  accessSyncActions AccessSyncLog[] @relation("AccessSyncActor")
+  transactions            Transaction[]
+  pptPayoutStates         PptPayoutState[]        @relation("PptPayoutStateUser")
+  pptNotifications        PptNotification[]
+  bonusCandidates         BonusCandidate[]        @relation("BonusCandidateUser")
+  bonusReviews            BonusCandidate[]        @relation("BonusCandidateReviewer")
+  bonusNotifications      BonusNotification[]
+  issueCompletions        IssueCompletion[]       @relation("IssueCompletionUser")
+  incentiveAwards         IncentiveAward[]        @relation("IncentiveAwardUser")
+  incentiveAwardsDisputed IncentiveAward[]        @relation("IncentiveAwardDisputer")
+  incentiveNotifications  IncentiveNotification[]
+  incentiveActivityDays   UserActivityDay[]
+  incentiveClawbackDebts  IncentiveClawbackDebt[] @relation("IncentiveClawbackDebtUser")
+  invites                 Invite[]
+  signedDocuments         SignedDocument[]
+  pptRequestsMade         PptRequest[]            @relation("PptRequestRequester")
+  pptRequestsReviewed     PptRequest[]            @relation("PptRequestReviewer")
+  kycVerifications        KycVerification[]
+  welcomePackOrder        WelcomePackOrder?
+  projectMemberships      ProjectMembership[]     @relation("ProjectMember")
+  projectAssignmentsMade  ProjectMembership[]     @relation("ProjectAssignmentActor")
+  accessSyncLogs          AccessSyncLog[]         @relation("AccessSyncUser")
+  accessSyncActions       AccessSyncLog[]         @relation("AccessSyncActor")
 }
 
 model Invite {
-  id               String   @id @default(cuid())
-  token            String   @unique
-  creatorId        String
-  creator          UserProfile @relation(fields: [creatorId], references: [id])
-  used             Boolean  @default(false)
-  usedById         String?
-  createdAt        DateTime @default(now())
+  id        String      @id @default(cuid())
+  token     String      @unique
+  creatorId String
+  creator   UserProfile @relation(fields: [creatorId], references: [id])
+  used      Boolean     @default(false)
+  usedById  String?
+  createdAt DateTime    @default(now())
 }
 
 model EmailDelivery {
@@ -192,28 +198,28 @@ enum AccessSyncStatus {
 }
 
 model AccessIntegrationConfig {
-  id                                     String   @id @default("default")
-  robloxDevelopmentGroupId               String?
-  robloxPublisherGroupId                 String?
-  robloxDevelopmentLegacyFallbackRoleId  Int?
-  robloxPublisherLegacyFallbackRoleId    Int?
-  robloxOpenCloudEnabled                 Boolean  @default(true)
-  robloxLegacyEnabled                    Boolean  @default(false)
-  discordGuildId                         String?
-  discordEnabled                         Boolean  @default(true)
-  linearEnabled                          Boolean  @default(true)
-  createdAt                              DateTime @default(now())
-  updatedAt                              DateTime @updatedAt
+  id                                    String   @id @default("default")
+  robloxDevelopmentGroupId              String?
+  robloxPublisherGroupId                String?
+  robloxDevelopmentLegacyFallbackRoleId Int?
+  robloxPublisherLegacyFallbackRoleId   Int?
+  robloxOpenCloudEnabled                Boolean  @default(true)
+  robloxLegacyEnabled                   Boolean  @default(false)
+  discordGuildId                        String?
+  discordEnabled                        Boolean  @default(true)
+  linearEnabled                         Boolean  @default(true)
+  createdAt                             DateTime @default(now())
+  updatedAt                             DateTime @updatedAt
 }
 
 model RankRoleMapping {
-  id                String        @id @default(cuid())
-  rank              DeveloperRank @unique
-  robloxRoleId      String?
+  id                 String        @id @default(cuid())
+  rank               DeveloperRank @unique
+  robloxRoleId       String?
   robloxLegacyRoleId Int?
-  discordRoleId     String?
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
+  discordRoleId      String?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
 }
 
 model SpecialtyRoleMapping {
@@ -225,40 +231,40 @@ model SpecialtyRoleMapping {
 }
 
 model DevProject {
-  id                         String              @id @default(cuid())
-  name                       String              @unique
-  slug                       String              @unique
-  description                String?
-  isActive                   Boolean             @default(true)
-  robloxContributorRoleId    String?
-  robloxDeveloperRoleId      String?
-  robloxPublisherRoleId      String?
+  id                            String              @id @default(cuid())
+  name                          String              @unique
+  slug                          String              @unique
+  description                   String?
+  isActive                      Boolean             @default(true)
+  robloxContributorRoleId       String?
+  robloxDeveloperRoleId         String?
+  robloxPublisherRoleId         String?
   robloxContributorLegacyRoleId Int?
   robloxDeveloperLegacyRoleId   Int?
   robloxPublisherLegacyRoleId   Int?
-  discordContributorRoleId   String?
-  discordDeveloperRoleId     String?
-  discordPublisherRoleId     String?
-  linearTeamId               String?
-  linearProjectId            String?
-  memberships                ProjectMembership[]
-  createdAt                  DateTime            @default(now())
-  updatedAt                  DateTime            @updatedAt
+  discordContributorRoleId      String?
+  discordDeveloperRoleId        String?
+  discordPublisherRoleId        String?
+  linearTeamId                  String?
+  linearProjectId               String?
+  memberships                   ProjectMembership[]
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @updatedAt
 }
 
 model ProjectMembership {
-  id                       String             @id @default(cuid())
-  userId                   String
-  user                     UserProfile        @relation("ProjectMember", fields: [userId], references: [id], onDelete: Cascade)
-  projectId                String
-  project                  DevProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  accessLevel              ProjectAccessLevel
-  allowJuniorRobloxAccess  Boolean            @default(false)
-  assignedById             String?
-  assignedBy               UserProfile?       @relation("ProjectAssignmentActor", fields: [assignedById], references: [id])
-  notes                    String?
-  createdAt                DateTime           @default(now())
-  updatedAt                DateTime           @updatedAt
+  id                      String             @id @default(cuid())
+  userId                  String
+  user                    UserProfile        @relation("ProjectMember", fields: [userId], references: [id], onDelete: Cascade)
+  projectId               String
+  project                 DevProject         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  accessLevel             ProjectAccessLevel
+  allowJuniorRobloxAccess Boolean            @default(false)
+  assignedById            String?
+  assignedBy              UserProfile?       @relation("ProjectAssignmentActor", fields: [assignedById], references: [id])
+  notes                   String?
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
 
   @@unique([userId, projectId])
   @@index([projectId])
@@ -302,33 +308,35 @@ enum PaymentMethod {
 }
 
 model Transaction {
-  id               String   @id @default(cuid())
-  userId           String
-  user             UserProfile @relation(fields: [userId], references: [id])
-  linearIssueId    String?  @unique // To prevent double crediting
+  id                    String            @id @default(cuid())
+  userId                String
+  user                  UserProfile       @relation(fields: [userId], references: [id])
+  linearIssueId         String?           @unique // To prevent double crediting
   linearIssueIdentifier String? // e.g. "DEV-123"
-  linearIssueTitle String?
-  linearIssueUrl   String?
-  amount           Float
-  currency         String   @default("USD") // Or "R$"
-  source           TransactionSource @default(PPT)
-  bonusPeriod      String? // YYYY-MM for grouped monthly bonus payouts
-  status           TxStatus @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
-  autoApproved     Boolean  @default(false) // Pre-vetted under weekly credit limit
-  createdAt        DateTime @default(now())
-  paidAt           DateTime?
-  rejectedAt       DateTime?
-  rejectionReason  String?
-  pdfBlobUrl       String?
-  payout           Payout?
-  bonusCandidates  BonusCandidate[]
-  pptPayoutState    PptPayoutState?
+  linearIssueTitle      String?
+  linearIssueUrl        String?
+  amount                Float
+  currency              String            @default("USD") // Or "R$"
+  source                TransactionSource @default(PPT)
+  bonusPeriod           String? // YYYY-MM for grouped monthly bonus payouts
+  status                TxStatus          @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
+  autoApproved          Boolean           @default(false) // Pre-vetted under weekly credit limit
+  createdAt             DateTime          @default(now())
+  paidAt                DateTime?
+  rejectedAt            DateTime?
+  rejectionReason       String?
+  pdfBlobUrl            String?
+  payout                Payout?
+  bonusCandidates       BonusCandidate[]
+  incentiveAwards       IncentiveAward[]
+  pptPayoutState        PptPayoutState?
 }
 
 enum TransactionSource {
   PPT
   BONUS
   MANUAL
+  INCENTIVE
 }
 
 model Payout {
@@ -338,7 +346,7 @@ model Payout {
   provider         PayoutProvider
   providerPayoutId String?        @unique // External ID from provider (e.g. Billplz payment order ID)
   status           PayoutStatus   @default(PENDING)
-  providerData     Json?          // Provider-specific request/response data
+  providerData     Json? // Provider-specific request/response data
   errorMessage     String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
@@ -369,60 +377,60 @@ enum TxStatus {
 // ── PPT payout eligibility tables ──────────────────────────────────────────
 
 model PptPayoutState {
-  id                    String          @id @default(cuid())
-  linearIssueId         String          @unique
+  id                    String    @id @default(cuid())
+  linearIssueId         String    @unique
   linearIssueIdentifier String?
   linearIssueTitle      String?
   linearIssueUrl        String?
   latestLinearStateType String?
   latestLinearStateName String?
   latestLinearUpdatedAt DateTime?
-  hasPptLabel           Boolean         @default(false)
+  hasPptLabel           Boolean   @default(false)
   estimate              Float?
 
-  userId                String?
-  user                  UserProfile?    @relation("PptPayoutStateUser", fields: [userId], references: [id], onDelete: SetNull)
-  assigneeLinearId      String?
-  assigneeEmail         String?
-  assigneeName          String?
+  userId           String?
+  user             UserProfile? @relation("PptPayoutStateUser", fields: [userId], references: [id], onDelete: SetNull)
+  assigneeLinearId String?
+  assigneeEmail    String?
+  assigneeName     String?
 
-  status                PptPayoutStatus @default(BLOCKED)
-  reason                PptPayoutReason?
-  completionEpisode     Int             @default(0)
-  completedAt           DateTime?
-  canceledAt            DateTime?
-  archivedAt            DateTime?
-  trashed               Boolean         @default(false)
-  lastReopenedAt        DateTime?
-  latestAssignmentAt    DateTime?
-  lastAssigneeChangeAt  DateTime?
-  lastEstimateChangeAt  DateTime?
+  status               PptPayoutStatus  @default(BLOCKED)
+  reason               PptPayoutReason?
+  completionEpisode    Int              @default(0)
+  completedAt          DateTime?
+  canceledAt           DateTime?
+  archivedAt           DateTime?
+  trashed              Boolean          @default(false)
+  lastReopenedAt       DateTime?
+  latestAssignmentAt   DateTime?
+  lastAssigneeChangeAt DateTime?
+  lastEstimateChangeAt DateTime?
 
-  proofCommentId        String?
-  proofCommentUrl       String?
-  proofCommentBody      String?
-  proofAuthorLinearId   String?
-  proofProvidedAt       DateTime?
-  proofOverride         Boolean         @default(false)
-  proofOverrideById     String?
-  proofOverrideAt       DateTime?
-  proofOverrideNote     String?
-  proofOverrideEpisode  Int?
+  proofCommentId       String?
+  proofCommentUrl      String?
+  proofCommentBody     String?
+  proofAuthorLinearId  String?
+  proofProvidedAt      DateTime?
+  proofOverride        Boolean   @default(false)
+  proofOverrideById    String?
+  proofOverrideAt      DateTime?
+  proofOverrideNote    String?
+  proofOverrideEpisode Int?
 
-  transactionId         String?         @unique
-  transaction           Transaction?    @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  transactionId String?      @unique
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
-  warningCount          Int             @default(0)
+  warningCount            Int              @default(0)
   lastDeveloperNotifiedAt DateTime?
-  lastAdminNotifiedAt   DateTime?
+  lastAdminNotifiedAt     DateTime?
   lastLinearCommentReason PptPayoutReason?
-  lastLinearCommentAt   DateTime?
+  lastLinearCommentAt     DateTime?
 
-  events                PptPayoutEvent[]
-  notifications         PptNotification[]
+  events        PptPayoutEvent[]
+  notifications PptNotification[]
 
-  createdAt             DateTime        @default(now())
-  updatedAt             DateTime        @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([status, reason])
   @@index([userId, status])
@@ -431,16 +439,16 @@ model PptPayoutState {
 }
 
 model PptPayoutEvent {
-  id            String              @id @default(cuid())
+  id            String             @id @default(cuid())
   stateId       String
-  state         PptPayoutState      @relation(fields: [stateId], references: [id], onDelete: Cascade)
+  state         PptPayoutState     @relation(fields: [stateId], references: [id], onDelete: Cascade)
   linearIssueId String
   type          PptPayoutEventType
   reason        PptPayoutReason?
   actorLinearId String?
   message       String?
   metadata      Json?
-  createdAt     DateTime            @default(now())
+  createdAt     DateTime           @default(now())
 
   @@index([stateId, createdAt])
   @@index([linearIssueId, createdAt])
@@ -559,41 +567,41 @@ model BonusConfig {
 }
 
 model BonusCandidate {
-  id                    String               @id @default(cuid())
-  linearIssueId         String               @unique
+  id                    String   @id @default(cuid())
+  linearIssueId         String   @unique
   linearIssueIdentifier String?
   linearIssueTitle      String?
   linearIssueUrl        String?
   linearIssueStateType  String?
   linearIssueStateName  String?
-  labels                String[]             @default([])
+  labels                String[] @default([])
   estimate              Int?
 
-  userId                String?
-  user                  UserProfile?         @relation("BonusCandidateUser", fields: [userId], references: [id], onDelete: SetNull)
-  assigneeLinearId      String?
-  assigneeEmail         String?
-  assigneeName          String?
+  userId           String?
+  user             UserProfile? @relation("BonusCandidateUser", fields: [userId], references: [id], onDelete: SetNull)
+  assigneeLinearId String?
+  assigneeEmail    String?
+  assigneeName     String?
 
-  currency              String               @default("MYR")
-  maxAmount             Float                @default(0)
-  approvedAmount        Float?
-  status                BonusCandidateStatus @default(INELIGIBLE)
-  ineligibilityReason   String?
-  period                String?
-  completedAt           DateTime?
+  currency            String               @default("MYR")
+  maxAmount           Float                @default(0)
+  approvedAmount      Float?
+  status              BonusCandidateStatus @default(INELIGIBLE)
+  ineligibilityReason String?
+  period              String?
+  completedAt         DateTime?
 
-  reviewedById          String?
-  reviewedBy            UserProfile?         @relation("BonusCandidateReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
-  reviewedAt            DateTime?
-  rejectionReason       String?
+  reviewedById    String?
+  reviewedBy      UserProfile? @relation("BonusCandidateReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt      DateTime?
+  rejectionReason String?
 
-  transactionId         String?
-  transaction           Transaction?         @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-  notifications         BonusNotification[]
+  transactionId String?
+  transaction   Transaction?        @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  notifications BonusNotification[]
 
-  createdAt             DateTime             @default(now())
-  updatedAt             DateTime             @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId, status])
   @@index([period, status])
@@ -626,6 +634,230 @@ enum BonusNotificationType {
   NEW_ELIGIBLE_BONUS
 }
 
+// ── Incentive tables ────────────────────────────────────────────────────────
+
+model IncentiveConfig {
+  id                        String                @id @default("default")
+  enabled                   Boolean               @default(false)
+  activatedAt               DateTime?
+  weeklyEnabled             Boolean               @default(true)
+  weeklyThreshold           Int                   @default(5)
+  weeklyMyrAmount           Float                 @default(30)
+  weeklyRobuxAmount         Float                 @default(1800)
+  weeklyTiers               Json?
+  streakEnabled             Boolean               @default(true)
+  streakThresholdWeeks      Int                   @default(4)
+  streakMyrAmount           Float                 @default(50)
+  streakRobuxAmount         Float                 @default(3000)
+  milestoneEnabled          Boolean               @default(true)
+  milestones                Json?
+  leaderboardEnabled        Boolean               @default(true)
+  leaderboardTopN           Int                   @default(3)
+  leaderboardMyrAmount      Float                 @default(40)
+  leaderboardRobuxAmount    Float                 @default(2400)
+  activeDayKickerEnabled    Boolean               @default(false)
+  activeDayThreshold        Int                   @default(3)
+  activeDayKickerMyr        Float                 @default(5)
+  activeDayKickerRobux      Float                 @default(300)
+  minEstimateToCount        Int                   @default(1)
+  excludedLabels            String[]              @default([])
+  stabilityMinutes          Int                   @default(60)
+  disputeWindowHours        Int                   @default(48)
+  autoPayout                Boolean               @default(true)
+  perUserWeeklyCapMyr       Float                 @default(150)
+  perUserWeeklyCapRobux     Float                 @default(9000)
+  perUserMonthlyCapMyr      Float                 @default(400)
+  perUserMonthlyCapRobux    Float                 @default(24000)
+  programWeeklyBudgetMyr    Float                 @default(0)
+  programWeeklyBudgetRobux  Float                 @default(0)
+  programMonthlyBudgetMyr   Float                 @default(0)
+  programMonthlyBudgetRobux Float                 @default(0)
+  anomalyMultiplier         Float                 @default(3)
+  anomalyMinBaselineWeeks   Int                   @default(2)
+  noEstimateRatioFlag       Float                 @default(0.5)
+  clawbackMode              IncentiveClawbackMode @default(NET_NEXT)
+  createdAt                 DateTime              @default(now())
+  updatedAt                 DateTime              @updatedAt
+}
+
+model IssueCompletion {
+  id                    String                @id @default(cuid())
+  linearIssueId         String                @unique
+  linearIssueIdentifier String?
+  linearIssueTitle      String?
+  linearIssueUrl        String?
+  userId                String?
+  user                  UserProfile?          @relation("IssueCompletionUser", fields: [userId], references: [id], onDelete: SetNull)
+  assigneeLinearId      String?
+  assigneeEmail         String?
+  assigneeName          String?
+  assigneeAtCompletion  String?
+  estimate              Int?
+  labels                String[]              @default([])
+  hasPptLabel           Boolean               @default(false)
+  completed             Boolean               @default(false)
+  observedCompletedAt   DateTime?
+  linearCompletedAt     DateTime?
+  completionEpisode     Int                   @default(0)
+  countedInWeek         String?
+  weekKey               String?
+  latestLinearStateType String?
+  latestLinearStateName String?
+  latestLinearUpdatedAt DateTime?
+  archivedAt            DateTime?
+  trashed               Boolean               @default(false)
+  awardIssues           IncentiveAwardIssue[]
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  @@index([userId, weekKey])
+  @@index([weekKey, completed])
+  @@index([observedCompletedAt])
+  @@index([latestLinearUpdatedAt])
+}
+
+model IncentiveAward {
+  id              String                  @id @default(cuid())
+  userId          String
+  user            UserProfile             @relation("IncentiveAwardUser", fields: [userId], references: [id], onDelete: Cascade)
+  type            IncentiveType
+  period          String
+  thresholdMet    Int
+  detail          Json?
+  amount          Float
+  netAmount       Float?
+  clawbackApplied Float                   @default(0)
+  currency        String                  @default("MYR")
+  status          IncentiveAwardStatus    @default(PENDING)
+  heldReason      String?
+  transactionId   String?
+  transaction     Transaction?            @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  releaseAt       DateTime?
+  claimedAt       DateTime?
+  releaseClaimId  String?
+  disputedById    String?
+  disputedBy      UserProfile?            @relation("IncentiveAwardDisputer", fields: [disputedById], references: [id], onDelete: SetNull)
+  disputedAt      DateTime?
+  disputeReason   String?
+  awardIssues     IncentiveAwardIssue[]
+  notifications   IncentiveNotification[]
+  events          IncentiveEvent[]
+  clawbackDebts   IncentiveClawbackDebt[] @relation("OriginalClawbackAward")
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@unique([userId, type, period])
+  @@index([userId, status])
+  @@index([status, releaseAt])
+  @@index([transactionId])
+}
+
+model IncentiveAwardIssue {
+  id                String          @id @default(cuid())
+  awardId           String
+  award             IncentiveAward  @relation(fields: [awardId], references: [id], onDelete: Cascade)
+  issueCompletionId String
+  issueCompletion   IssueCompletion @relation(fields: [issueCompletionId], references: [id], onDelete: Cascade)
+  createdAt         DateTime        @default(now())
+
+  @@unique([awardId, issueCompletionId])
+  @@index([issueCompletionId])
+}
+
+model IncentiveNotification {
+  id        String                    @id @default(cuid())
+  userId    String
+  user      UserProfile               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  awardId   String
+  award     IncentiveAward            @relation(fields: [awardId], references: [id], onDelete: Cascade)
+  type      IncentiveNotificationType @default(NEW_INCENTIVE)
+  readAt    DateTime?
+  createdAt DateTime                  @default(now())
+
+  @@unique([userId, awardId, type])
+  @@index([userId, readAt])
+}
+
+model IncentiveEvent {
+  id        String          @id @default(cuid())
+  awardId   String?
+  award     IncentiveAward? @relation(fields: [awardId], references: [id], onDelete: SetNull)
+  userId    String?
+  type      String
+  period    String?
+  message   String?
+  metadata  Json?
+  createdAt DateTime        @default(now())
+
+  @@index([userId, createdAt])
+  @@index([awardId, createdAt])
+  @@index([type, createdAt])
+}
+
+model UserActivityDay {
+  id           String      @id @default(cuid())
+  userId       String
+  user         UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityDate String
+  createdAt    DateTime    @default(now())
+
+  @@unique([userId, activityDate])
+  @@index([userId, activityDate])
+}
+
+model IncentiveClawbackDebt {
+  id              String                  @id @default(cuid())
+  userId          String
+  user            UserProfile             @relation("IncentiveClawbackDebtUser", fields: [userId], references: [id], onDelete: Cascade)
+  currency        String                  @default("MYR")
+  originalAwardId String?
+  originalAward   IncentiveAward?         @relation("OriginalClawbackAward", fields: [originalAwardId], references: [id], onDelete: SetNull)
+  amount          Float
+  remainingAmount Float
+  status          IncentiveClawbackStatus @default(OPEN)
+  reason          String?
+  settledAt       DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+
+  @@index([userId, currency, status])
+  @@index([originalAwardId])
+}
+
+enum IncentiveType {
+  WEEKLY_THROUGHPUT
+  STREAK
+  MILESTONE
+  LEADERBOARD
+}
+
+enum IncentiveAwardStatus {
+  PENDING
+  HELD
+  RELEASING
+  TRANSACTION_PENDING
+  PAID
+  CANCELLED
+  CLAWBACK_REQUESTED
+  SETTLED_BY_CLAWBACK
+}
+
+enum IncentiveNotificationType {
+  NEW_INCENTIVE
+  INCENTIVE_DISPUTED
+}
+
+enum IncentiveClawbackMode {
+  NET_NEXT
+  MANUAL_ADJUSTMENT
+}
+
+enum IncentiveClawbackStatus {
+  OPEN
+  SETTLED
+  MANUAL_ADJUSTMENT
+}
+
 enum DocumentType {
   COI
   NDA
@@ -642,7 +874,7 @@ model SignedDocument {
   signedAt        DateTime     @default(now())
   ipAddress       String?
 
-  coiEntries      CoiEntry[]
+  coiEntries CoiEntry[]
 
   @@unique([userId, documentType])
 }
@@ -650,7 +882,7 @@ model SignedDocument {
 model CoiEntry {
   id                  String         @id @default(cuid())
   signedDocumentId    String
-  signedDocument      SignedDocument  @relation(fields: [signedDocumentId], references: [id], onDelete: Cascade)
+  signedDocument      SignedDocument @relation(fields: [signedDocumentId], references: [id], onDelete: Cascade)
   organizationName    String
   natureOfInvolvement String
   description         String
@@ -667,30 +899,30 @@ enum PptRequestStatus {
 }
 
 model PptRequest {
-  id                    String           @id @default(cuid())
-  requesterId           String
-  requester             UserProfile      @relation("PptRequestRequester", fields: [requesterId], references: [id])
-  reviewerId            String?
-  reviewer              UserProfile?     @relation("PptRequestReviewer", fields: [reviewerId], references: [id])
+  id          String       @id @default(cuid())
+  requesterId String
+  requester   UserProfile  @relation("PptRequestRequester", fields: [requesterId], references: [id])
+  reviewerId  String?
+  reviewer    UserProfile? @relation("PptRequestReviewer", fields: [reviewerId], references: [id])
 
   // Linear issue data (null linearIssueId means issue will be created on approval)
-  linearIssueId         String?          @unique
+  linearIssueId         String? @unique
   linearIssueIdentifier String?
   linearIssueTitle      String
   linearIssueUrl        String?
   linearTeamId          String
 
   // Request details
-  requestedEstimate     Int
-  projectedDueDate      DateTime
-  description           String?
-  note                  String?
+  requestedEstimate Int
+  projectedDueDate  DateTime
+  description       String?
+  note              String?
 
   // Status
-  status                PptRequestStatus @default(PENDING)
-  rejectionReason       String?
-  createdAt             DateTime         @default(now())
-  reviewedAt            DateTime?
+  status          PptRequestStatus @default(PENDING)
+  rejectionReason String?
+  createdAt       DateTime         @default(now())
+  reviewedAt      DateTime?
 
   @@index([requesterId])
   @@index([status])
@@ -706,35 +938,35 @@ enum KycStatus {
 }
 
 model KycVerification {
-  id                  String     @id @default(cuid())
-  userId              String
-  user                UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status              KycStatus  @default(PENDING)
-  legalName           String
-  documentType        String?    // mykad | passport | driving_licence
-  idDocumentBlobUrl   String?
-  selfieBlobUrl       String?
-  rejectionReason     String?
-  reviewerId          String?
-  submittedAt         DateTime   @default(now())
-  reviewedAt          DateTime?
-  documentsDeletedAt  DateTime?
-  expiresAt           DateTime
+  id                 String      @id @default(cuid())
+  userId             String
+  user               UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status             KycStatus   @default(PENDING)
+  legalName          String
+  documentType       String? // mykad | passport | driving_licence
+  idDocumentBlobUrl  String?
+  selfieBlobUrl      String?
+  rejectionReason    String?
+  reviewerId         String?
+  submittedAt        DateTime    @default(now())
+  reviewedAt         DateTime?
+  documentsDeletedAt DateTime?
+  expiresAt          DateTime
 
-  auditLogs           KycAuditLog[]
+  auditLogs KycAuditLog[]
 
   @@index([userId])
   @@index([status])
 }
 
 model KycAuditLog {
-  id               String          @id @default(cuid())
-  verificationId   String
-  verification     KycVerification @relation(fields: [verificationId], references: [id])
-  actorId          String
-  action           String          // SUBMITTED | APPROVED | REJECTED | EXPIRED | DOCUMENTS_DELETED
-  details          String?
-  createdAt        DateTime        @default(now())
+  id             String          @id @default(cuid())
+  verificationId String
+  verification   KycVerification @relation(fields: [verificationId], references: [id])
+  actorId        String
+  action         String // SUBMITTED | APPROVED | REJECTED | EXPIRED | DOCUMENTS_DELETED
+  details        String?
+  createdAt      DateTime        @default(now())
 
   @@index([verificationId])
 }
@@ -756,12 +988,12 @@ enum ShippingRegion {
 }
 
 model WelcomePack {
-  id          String   @id @default(cuid())
+  id          String  @id @default(cuid())
   name        String
   description String?
-  isActive    Boolean  @default(true)
-  currentWave Int      @default(1)
-  wave2Open   Boolean  @default(false)
+  isActive    Boolean @default(true)
+  currentWave Int     @default(1)
+  wave2Open   Boolean @default(false)
 
   // ID card overlay configuration
   idCardTemplateBlobUrl String?
@@ -782,58 +1014,58 @@ model WelcomePack {
   idCardNameAlign       String?
   idCardNameWrapMode    String?
 
-  items     WelcomePackItem[]
-  orders    WelcomePackOrder[]
+  items  WelcomePackItem[]
+  orders WelcomePackOrder[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model WelcomePackItem {
-  id               String      @id @default(cuid())
-  packId           String
-  pack             WelcomePack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  id     String      @id @default(cuid())
+  packId String
+  pack   WelcomePack @relation(fields: [packId], references: [id], onDelete: Cascade)
 
-  name             String
-  description      String?
-  imageBlobUrl     String?
+  name         String
+  description  String?
+  imageBlobUrl String?
 
-  requiresSize     Boolean     @default(false)
+  requiresSize     Boolean  @default(false)
   sizeChartBlobUrl String?
   sizeOptions      String[]
 
-  displayOrder     Int         @default(0)
-  isActive         Boolean     @default(true)
+  displayOrder Int     @default(0)
+  isActive     Boolean @default(true)
 
-  selections       WelcomePackOrderItemSelection[]
+  selections WelcomePackOrderItemSelection[]
 
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([packId])
 }
 
 model WelcomePackOrder {
-  id              String                 @id @default(cuid())
-  userId          String                 @unique
-  user            UserProfile            @relation(fields: [userId], references: [id])
-  packId          String
-  pack            WelcomePack            @relation(fields: [packId], references: [id])
+  id     String      @id @default(cuid())
+  userId String      @unique
+  user   UserProfile @relation(fields: [userId], references: [id])
+  packId String
+  pack   WelcomePack @relation(fields: [packId], references: [id])
 
-  status          WelcomePackOrderStatus @default(PENDING)
-  wave            Int
+  status WelcomePackOrderStatus @default(PENDING)
+  wave   Int
 
-  idCardName      String
+  idCardName String
 
-  region          ShippingRegion
-  recipientName   String
-  phone           String
-  addressLine1    String
-  addressLine2    String?
-  city            String
-  stateProvince   String?
-  postalCode      String
-  country         String
+  region        ShippingRegion
+  recipientName String
+  phone         String
+  addressLine1  String
+  addressLine2  String?
+  city          String
+  stateProvince String?
+  postalCode    String
+  country       String
 
   trackingNumber  String?
   trackingUrl     String?
@@ -845,13 +1077,13 @@ model WelcomePackOrder {
   // that the wave-2 flag was open at submission time.
   eligibilitySnapshot Json?
 
-  selections      WelcomePackOrderItemSelection[]
+  selections WelcomePackOrderItemSelection[]
 
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  approvedAt      DateTime?
-  shippedAt       DateTime?
-  deliveredAt     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  approvedAt  DateTime?
+  shippedAt   DateTime?
+  deliveredAt DateTime?
 
   @@index([status])
   @@index([packId])

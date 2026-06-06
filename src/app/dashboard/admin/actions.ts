@@ -10,6 +10,11 @@ import { formatBonusPeriod } from "@/lib/bonus";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
 import {
+  cancelIncentiveAwardsForTransaction,
+  formatAwardType,
+  markIncentiveAwardsPaidForTransaction,
+} from "@/lib/incentives";
+import {
   initiateBillplzPayout,
   initiateRobloxPayout,
   initiateXenditPayout,
@@ -46,9 +51,29 @@ export async function sendPaymentConfirmation(transactionId: string) {
     transaction.source === "BONUS"
       ? transaction.linearIssueTitle ||
         `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
-      : transaction.linearIssueTitle ||
-        transaction.linearIssueIdentifier ||
-        "Manual Payout";
+      : transaction.source === "INCENTIVE"
+        ? transaction.linearIssueTitle || "DevHub incentive awards"
+        : transaction.linearIssueTitle ||
+          transaction.linearIssueIdentifier ||
+          "Manual Payout";
+  const lineItems =
+    transaction.source === "INCENTIVE"
+      ? transaction.incentiveAwards.map((award) => ({
+          label: `${formatAwardType(award.type)} - ${award.period}`,
+          amount: formatAmount(
+            award.netAmount ?? award.amount,
+            transaction.currency as CurrencyCode,
+          ),
+        }))
+      : transaction.source === "BONUS"
+        ? transaction.bonusCandidates.map((candidate) => ({
+            label: `${candidate.linearIssueIdentifier ? `${candidate.linearIssueIdentifier} - ` : ""}${candidate.linearIssueTitle || "Bonus item"}`,
+            amount: formatAmount(
+              candidate.approvedAmount ?? 0,
+              transaction.currency as CurrencyCode,
+            ),
+          }))
+        : undefined;
 
   await sendEmail({
     to: email,
@@ -62,6 +87,7 @@ export async function sendPaymentConfirmation(transactionId: string) {
         transaction.currency as CurrencyCode,
       ),
       taskTitle,
+      lineItems,
     }),
     attachments: [{ filename, content: Buffer.from(buffer) }],
   });
@@ -88,6 +114,7 @@ export async function markTransactionAsPaid(transactionId: string) {
     }
 
     revalidatePath("/dashboard/admin");
+    await markIncentiveAwardsPaidForTransaction(transactionId);
 
     // Send payment confirmation email with PDF slip
     try {
@@ -145,6 +172,7 @@ export async function rejectTransaction(
     }
 
     revalidatePath("/dashboard/admin");
+    await cancelIncentiveAwardsForTransaction(transactionId, reason || null);
 
     // Fetch the transaction for email and PDF generation
     const transaction = await prisma.transaction.findUnique({
@@ -178,9 +206,11 @@ export async function rejectTransaction(
         transaction.source === "BONUS"
           ? transaction.linearIssueTitle ||
             `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
-          : transaction.linearIssueTitle ||
-            transaction.linearIssueIdentifier ||
-            "Manual Payout";
+          : transaction.source === "INCENTIVE"
+            ? transaction.linearIssueTitle || "DevHub incentive awards"
+            : transaction.linearIssueTitle ||
+              transaction.linearIssueIdentifier ||
+              "Manual Payout";
 
       await sendEmail({
         to: email,

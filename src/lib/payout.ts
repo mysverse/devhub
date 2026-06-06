@@ -20,6 +20,9 @@ function getTransactionPayoutDescription(transaction: {
   if (transaction.source === "BONUS") {
     return `Bonus: ${formatBonusPeriod(transaction.bonusPeriod)}`;
   }
+  if (transaction.source === "INCENTIVE") {
+    return transaction.linearIssueTitle || "DevHub incentive awards";
+  }
   if (transaction.linearIssueIdentifier) {
     return `PPT: ${transaction.linearIssueIdentifier} - ${transaction.linearIssueTitle || ""}`;
   }
@@ -62,6 +65,18 @@ export async function handlePayoutCompletion(
       `[payout] Transaction ${transactionId} already moved from PENDING, skipping email`,
     );
     return false;
+  }
+
+  try {
+    const { markIncentiveAwardsPaidForTransaction } = await import(
+      "@/lib/incentives"
+    );
+    await markIncentiveAwardsPaidForTransaction(transactionId);
+  } catch (err) {
+    console.error(
+      `Failed to mark incentive awards paid for ${transactionId}:`,
+      err,
+    );
   }
 
   try {
@@ -374,7 +389,9 @@ export async function initiateRobloxPayout(transactionId: string) {
       reason:
         transaction.source === "BONUS"
           ? `DevHub bonus: ${formatBonusPeriod(transaction.bonusPeriod)}`
-          : `DevHub payout: tx ${transactionId}`,
+          : transaction.source === "INCENTIVE"
+            ? `DevHub incentive: tx ${transactionId}`
+            : `DevHub payout: tx ${transactionId}`,
     });
 
     console.log(
@@ -441,8 +458,10 @@ export async function initiateAutoPayout(transactionId: string) {
     include: { user: true },
   });
 
-  if (!transaction || transaction.status !== "PENDING") return null;
-  if (transaction.source !== "PPT") return null;
+  if (transaction?.status !== "PENDING") return null;
+  if (transaction.source !== "PPT" && transaction.source !== "INCENTIVE") {
+    return null;
+  }
 
   if (transaction.currency === "ROBUX") {
     if (!transaction.user.robloxId) return null;

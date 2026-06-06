@@ -162,7 +162,7 @@ const styles = StyleSheet.create({
 
 export type TransactionSlipData = {
   transactionId: string;
-  source: "PPT" | "BONUS" | "MANUAL";
+  source: "PPT" | "BONUS" | "MANUAL" | "INCENTIVE";
   bonusPeriod: string | null;
   linearIssueIdentifier: string | null;
   linearIssueTitle: string | null;
@@ -183,6 +183,12 @@ export type TransactionSlipData = {
     identifier: string | null;
     title: string | null;
     amount: number | null;
+  }[];
+  incentiveLineItems?: {
+    type: string;
+    period: string;
+    amount: number;
+    netAmount: number | null;
   }[];
 };
 
@@ -235,14 +241,24 @@ function formatSlipAmount(amount: number, currency: string) {
   return `$${amount.toFixed(2)} ${currency}`;
 }
 
+function formatIncentiveType(type: string) {
+  if (type === "WEEKLY_THROUGHPUT") return "Weekly throughput";
+  if (type === "STREAK") return "Streak";
+  if (type === "MILESTONE") return "Milestone";
+  if (type === "LEADERBOARD") return "Leaderboard";
+  return type;
+}
+
 export function createTransactionSlipPdf(data: TransactionSlipData) {
   const slipId = data.transactionId.slice(-8).toUpperCase();
   const taskLabel =
     data.source === "BONUS"
       ? data.linearIssueTitle || `${formatBonusPeriod(data.bonusPeriod)} Bonus`
-      : data.linearIssueTitle
-        ? `${data.linearIssueTitle}${data.linearIssueIdentifier ? ` (${data.linearIssueIdentifier})` : ""}`
-        : data.linearIssueIdentifier || "Manual Payout";
+      : data.source === "INCENTIVE"
+        ? data.linearIssueTitle || "Incentive Awards"
+        : data.linearIssueTitle
+          ? `${data.linearIssueTitle}${data.linearIssueIdentifier ? ` (${data.linearIssueIdentifier})` : ""}`
+          : data.linearIssueIdentifier || "Manual Payout";
 
   const amountStr = formatSlipAmount(data.amount, data.currency);
 
@@ -302,6 +318,28 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
               item.amount != null
                 ? formatSlipAmount(item.amount, data.currency)
                 : "",
+            ),
+          ),
+        )
+      : [];
+  const incentiveLineRows =
+    data.source === "INCENTIVE" && data.incentiveLineItems?.length
+      ? data.incentiveLineItems.map((item, index) =>
+          createElement(
+            View,
+            {
+              key: `${item.type}:${item.period}:${index}`,
+              style: styles.lineItem,
+            },
+            createElement(
+              Text,
+              { style: styles.lineItemTitle },
+              `${formatIncentiveType(item.type)} - ${item.period}`,
+            ),
+            createElement(
+              Text,
+              { style: styles.lineItemAmount },
+              formatSlipAmount(item.netAmount ?? item.amount, data.currency),
             ),
           ),
         )
@@ -388,6 +426,20 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
             ),
           ]
         : []),
+      ...(incentiveLineRows.length > 0
+        ? [
+            createElement(
+              View,
+              { key: "incentive-lines", style: styles.section },
+              createElement(
+                Text,
+                { style: styles.sectionTitle },
+                "Incentive Line Items",
+              ),
+              ...incentiveLineRows,
+            ),
+          ]
+        : []),
       // Amount
       createElement(
         View,
@@ -429,6 +481,15 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
         },
         orderBy: { linearIssueIdentifier: "asc" },
       },
+      incentiveAwards: {
+        select: {
+          type: true,
+          period: true,
+          amount: true,
+          netAmount: true,
+        },
+        orderBy: { createdAt: "asc" },
+      },
     },
   });
 
@@ -459,6 +520,12 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
       identifier: candidate.linearIssueIdentifier,
       title: candidate.linearIssueTitle,
       amount: candidate.approvedAmount,
+    })),
+    incentiveLineItems: transaction.incentiveAwards.map((award) => ({
+      type: award.type,
+      period: award.period,
+      amount: award.amount,
+      netAmount: award.netAmount,
     })),
   };
 

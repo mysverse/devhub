@@ -7,10 +7,12 @@ export default function PaymentProcessed({
   userName,
   amount,
   taskTitle,
+  lineItems,
 }: {
   userName: string;
   amount: string;
   taskTitle: string;
+  lineItems?: { label: string; amount: string }[];
 }) {
   return (
     <BaseLayout previewText="Your payment has been processed">
@@ -66,6 +68,23 @@ export default function PaymentProcessed({
         >
           {taskTitle}
         </Text>
+        {lineItems && lineItems.length > 0 && (
+          <Section style={{ marginTop: "12px" }}>
+            {lineItems.map((item) => (
+              <Text
+                key={`${item.label}:${item.amount}`}
+                style={{
+                  color: "#c1c2c5",
+                  fontSize: "13px",
+                  lineHeight: "20px",
+                  margin: "2px 0",
+                }}
+              >
+                {item.label}: {item.amount}
+              </Text>
+            ))}
+          </Section>
+        )}
       </Section>
       <Button
         href={`${appUrl}/dashboard`}

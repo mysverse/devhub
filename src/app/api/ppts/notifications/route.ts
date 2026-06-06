@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
+import { recordUserActivityDay } from "@/lib/incentives";
 import prisma from "@/lib/prisma";
 
 export async function GET() {
@@ -7,6 +8,8 @@ export async function GET() {
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  await recordUserActivityDay(userId);
 
   const notifications = await prisma.pptNotification.findMany({
     where: { userId, readAt: null },

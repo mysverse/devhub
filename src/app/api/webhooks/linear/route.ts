@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { NextResponse } from "next/server";
 import { syncBonusCandidateFromLinearIssue } from "@/lib/bonus";
+import { recordIssueCompletionFromLinear } from "@/lib/incentives";
 import {
   evaluatePptIssueFromWebhook,
   handlePptCommentWebhook,
@@ -40,6 +41,33 @@ export async function POST(req: Request) {
       url: issueData.url || null,
       estimate: issueData.estimate ?? null,
       completedAt: issueData.completedAt ?? null,
+      state: issueData.state
+        ? {
+            type: issueData.state.type ?? null,
+            name: issueData.state.name ?? null,
+          }
+        : null,
+      assignee: issueData.assignee
+        ? {
+            id: issueData.assignee.id ?? null,
+            email: issueData.assignee.email ?? null,
+            name: issueData.assignee.name ?? null,
+            displayName: issueData.assignee.displayName ?? null,
+          }
+        : null,
+      labels: Array.isArray(issueData.labels) ? issueData.labels : [],
+    });
+
+    await recordIssueCompletionFromLinear({
+      id: issueData.id,
+      identifier: issueData.identifier || null,
+      title: issueData.title || null,
+      url: issueData.url || null,
+      estimate: issueData.estimate ?? null,
+      completedAt: issueData.completedAt ?? null,
+      updatedAt: issueData.updatedAt ?? null,
+      archivedAt: issueData.archivedAt ?? null,
+      trashed: issueData.trashed ?? null,
       state: issueData.state
         ? {
             type: issueData.state.type ?? null,

@@ -11,6 +11,14 @@
     {
       "path": "/api/cron/kyc-cleanup",
       "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/cron/incentives-weekly",
+      "schedule": "0 1 * * 1"
+    },
+    {
+      "path": "/api/cron/incentives-release",
+      "schedule": "0 * * * *"
     }
   ]
 }

@@ -148,6 +148,7 @@ export default function PayoutCard({
   const isPaid = tx.status === "PAID";
   const isRejected = tx.status === "REJECTED";
   const isBonus = tx.source === "BONUS";
+  const isIncentive = tx.source === "INCENTIVE";
   const { color, label } = statusConfig[tx.status] ?? {
     color: "gray",
     label: tx.status,
@@ -294,6 +295,11 @@ export default function PayoutCard({
                     Bonus
                   </Badge>
                 )}
+                {isIncentive && (
+                  <Badge size="xs" color="blue" variant="light">
+                    Incentive
+                  </Badge>
+                )}
                 {tx.autoApproved && isPending && (
                   <Badge size="xs" color="teal" variant="light">
                     Auto-approved
@@ -338,6 +344,39 @@ export default function PayoutCard({
                 </Stack>
               </Box>
             )}
+
+            {isIncentive &&
+              tx.incentiveLineItems &&
+              tx.incentiveLineItems.length > 0 && (
+                <Box
+                  bg="var(--mantine-color-dark-6)"
+                  p="sm"
+                  style={{ borderRadius: "var(--mantine-radius-md)" }}
+                >
+                  <Text size="sm" fw={600} mb="xs">
+                    Incentive Line Items
+                  </Text>
+                  <Stack gap={6}>
+                    {tx.incentiveLineItems.map((item) => (
+                      <Group
+                        key={item.id}
+                        justify="space-between"
+                        wrap="nowrap"
+                      >
+                        <Text size="xs" c="dimmed" lineClamp={1}>
+                          {item.type.replaceAll("_", " ")} - {item.period}
+                        </Text>
+                        <Text size="xs" fw={600}>
+                          {formatAmount(
+                            item.netAmount ?? item.amount,
+                            tx.currency as CurrencyCode,
+                          )}
+                        </Text>
+                      </Group>
+                    ))}
+                  </Stack>
+                </Box>
+              )}
 
             {isPaid && tx.paidAt && (
               <Text size="xs" c="dimmed">
@@ -446,6 +485,7 @@ export default function PayoutCard({
 
             {isPending &&
               !isBonus &&
+              !isIncentive &&
               tx.creditLimitUsage &&
               tx.creditLimitUsage.limit > 0 && (
                 <Text size="xs" c="dimmed">
@@ -461,7 +501,11 @@ export default function PayoutCard({
                 style={{ borderRadius: "var(--mantine-radius-md)" }}
               >
                 <Text size="sm" fw={600} mb="xs">
-                  {isBonus ? "Bonus Transfer Fields" : "Bank Transfer Fields"}
+                  {isBonus
+                    ? "Bonus Transfer Fields"
+                    : isIncentive
+                      ? "Incentive Transfer Fields"
+                      : "Bank Transfer Fields"}
                 </Text>
                 <Stack gap={6}>
                   <CopyField
@@ -469,17 +513,23 @@ export default function PayoutCard({
                     value={
                       isBonus
                         ? `Bonus / ${tx.bonusPeriod || tx.id}`
-                        : `PPT task / ${tx.linearIssueIdentifier || "N/A"}`
+                        : isIncentive
+                          ? `Incentive / ${tx.id.slice(-8)}`
+                          : `PPT task / ${tx.linearIssueIdentifier || "N/A"}`
                     }
                   />
                   <CopyField
                     label="Other Payment Details"
-                    value={isBonus ? tx.taskTitle : tx.linearIssueUrl || ""}
+                    value={
+                      isBonus || isIncentive
+                        ? tx.taskTitle
+                        : tx.linearIssueUrl || ""
+                    }
                   />
                   <CopyField label="Email Address" value={tx.email || ""} />
                   <CopyField
                     label="Message to Beneficiary"
-                    value={`Payment of ${formatAmount(tx.amount, tx.currency as CurrencyCode)} for ${isBonus ? "monthly bonus" : tx.linearIssueIdentifier || "PPT task"}: ${tx.taskTitle}. Thank you for your contribution to MYSverse!`}
+                    value={`Payment of ${formatAmount(tx.amount, tx.currency as CurrencyCode)} for ${isBonus ? "monthly bonus" : isIncentive ? "DevHub incentives" : tx.linearIssueIdentifier || "PPT task"}: ${tx.taskTitle}. Thank you for your contribution to MYSverse!`}
                   />
                 </Stack>
               </Box>

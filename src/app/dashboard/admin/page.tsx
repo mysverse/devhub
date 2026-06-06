@@ -7,12 +7,17 @@ import { requireAdminPage } from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getUserWeeklyUsage } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
+import { getIncentiveConfig } from "@/lib/incentives";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
 import type { BonusReviewCandidate } from "./AdminBonusesTab";
+import type {
+  AdminIncentiveAwardData,
+  IncentiveConfigData,
+} from "./AdminIncentivesTab";
 import AdminPayoutTabs from "./AdminPayoutTabs";
 import type { AdminPptEligibilityState } from "./AdminPptEligibilityTab";
 import { getBillplzCollectionId } from "./actions";
@@ -34,6 +39,14 @@ type TransactionWithUser = Transaction & {
     linearIssueTitle: string | null;
     linearIssueUrl: string | null;
     approvedAmount: number | null;
+  }[];
+  incentiveAwards: {
+    id: string;
+    type: string;
+    period: string;
+    amount: number;
+    netAmount: number | null;
+    status: string;
   }[];
 };
 
@@ -78,6 +91,14 @@ function buildPayoutTransaction(
       url: candidate.linearIssueUrl,
       amount: candidate.approvedAmount,
     })),
+    incentiveLineItems: tx.incentiveAwards.map((award) => ({
+      id: award.id,
+      type: award.type,
+      period: award.period,
+      amount: award.amount,
+      netAmount: award.netAmount,
+      status: award.status,
+    })),
     payout: tx.payout
       ? {
           id: tx.payout.id,
@@ -99,6 +120,13 @@ function getStoredTaskTitle(tx: TransactionWithUser) {
     );
   }
 
+  if (tx.source === "INCENTIVE") {
+    return (
+      tx.linearIssueTitle ||
+      `Incentive Awards - ${tx.incentiveAwards.length} item${tx.incentiveAwards.length === 1 ? "" : "s"}`
+    );
+  }
+
   return tx.linearIssueTitle
     ? `${tx.linearIssueIdentifier} - ${tx.linearIssueTitle}`
     : tx.linearIssueIdentifier || "Manual Payout";
@@ -113,6 +141,8 @@ export default async function AdminPage() {
     rejectedTransactions,
     pendingPptRequests,
     bonusConfig,
+    incentiveConfig,
+    incentiveAwards,
     readyBonusCandidates,
     pendingKycCount,
     pptPayoutStates,
@@ -123,6 +153,7 @@ export default async function AdminPage() {
         user: true,
         payout: true,
         bonusCandidates: true,
+        incentiveAwards: true,
         pptPayoutState: {
           select: {
             status: true,
@@ -139,6 +170,7 @@ export default async function AdminPage() {
         user: true,
         payout: true,
         bonusCandidates: true,
+        incentiveAwards: true,
         pptPayoutState: {
           select: {
             status: true,
@@ -156,6 +188,7 @@ export default async function AdminPage() {
         user: true,
         payout: true,
         bonusCandidates: true,
+        incentiveAwards: true,
         pptPayoutState: {
           select: {
             status: true,
@@ -177,6 +210,26 @@ export default async function AdminPage() {
       orderBy: { createdAt: "asc" },
     }),
     getBonusConfig(),
+    getIncentiveConfig(),
+    prisma.incentiveAward.findMany({
+      include: {
+        user: { include: { user: { select: { name: true, email: true } } } },
+        awardIssues: {
+          include: {
+            issueCompletion: {
+              select: {
+                id: true,
+                linearIssueIdentifier: true,
+                linearIssueTitle: true,
+                linearIssueUrl: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    }),
     prisma.bonusCandidate.findMany({
       where: { status: "READY_FOR_REVIEW" },
       include: {
@@ -335,6 +388,77 @@ export default async function AdminPage() {
       completedAt: candidate.completedAt?.toISOString() ?? null,
     }));
 
+  const incentiveConfigData: IncentiveConfigData = {
+    enabled: incentiveConfig.enabled,
+    activatedAt: incentiveConfig.activatedAt?.toISOString() ?? null,
+    weeklyEnabled: incentiveConfig.weeklyEnabled,
+    weeklyThreshold: incentiveConfig.weeklyThreshold,
+    weeklyMyrAmount: incentiveConfig.weeklyMyrAmount,
+    weeklyRobuxAmount: incentiveConfig.weeklyRobuxAmount,
+    streakEnabled: incentiveConfig.streakEnabled,
+    streakThresholdWeeks: incentiveConfig.streakThresholdWeeks,
+    streakMyrAmount: incentiveConfig.streakMyrAmount,
+    streakRobuxAmount: incentiveConfig.streakRobuxAmount,
+    milestoneEnabled: incentiveConfig.milestoneEnabled,
+    milestonesText: incentiveConfig.milestones
+      ? JSON.stringify(incentiveConfig.milestones, null, 2)
+      : "",
+    leaderboardEnabled: incentiveConfig.leaderboardEnabled,
+    leaderboardTopN: incentiveConfig.leaderboardTopN,
+    leaderboardMyrAmount: incentiveConfig.leaderboardMyrAmount,
+    leaderboardRobuxAmount: incentiveConfig.leaderboardRobuxAmount,
+    activeDayKickerEnabled: incentiveConfig.activeDayKickerEnabled,
+    activeDayThreshold: incentiveConfig.activeDayThreshold,
+    activeDayKickerMyr: incentiveConfig.activeDayKickerMyr,
+    activeDayKickerRobux: incentiveConfig.activeDayKickerRobux,
+    minEstimateToCount: incentiveConfig.minEstimateToCount,
+    excludedLabels: incentiveConfig.excludedLabels,
+    stabilityMinutes: incentiveConfig.stabilityMinutes,
+    disputeWindowHours: incentiveConfig.disputeWindowHours,
+    autoPayout: incentiveConfig.autoPayout,
+    perUserWeeklyCapMyr: incentiveConfig.perUserWeeklyCapMyr,
+    perUserWeeklyCapRobux: incentiveConfig.perUserWeeklyCapRobux,
+    perUserMonthlyCapMyr: incentiveConfig.perUserMonthlyCapMyr,
+    perUserMonthlyCapRobux: incentiveConfig.perUserMonthlyCapRobux,
+    programWeeklyBudgetMyr: incentiveConfig.programWeeklyBudgetMyr,
+    programWeeklyBudgetRobux: incentiveConfig.programWeeklyBudgetRobux,
+    programMonthlyBudgetMyr: incentiveConfig.programMonthlyBudgetMyr,
+    programMonthlyBudgetRobux: incentiveConfig.programMonthlyBudgetRobux,
+    anomalyMultiplier: incentiveConfig.anomalyMultiplier,
+    anomalyMinBaselineWeeks: incentiveConfig.anomalyMinBaselineWeeks,
+    noEstimateRatioFlag: incentiveConfig.noEstimateRatioFlag,
+    clawbackMode: incentiveConfig.clawbackMode,
+  };
+
+  const incentiveAwardRows: AdminIncentiveAwardData[] = incentiveAwards.map(
+    (award) => ({
+      id: award.id,
+      developerName:
+        award.user.legalName ||
+        award.user.user.name ||
+        award.user.user.email ||
+        "Unknown Developer",
+      type: award.type,
+      period: award.period,
+      thresholdMet: award.thresholdMet,
+      amount: award.amount,
+      netAmount: award.netAmount,
+      clawbackApplied: award.clawbackApplied,
+      currency: award.currency,
+      status: award.status,
+      heldReason: award.heldReason,
+      releaseAt: award.releaseAt?.toISOString() ?? null,
+      createdAt: award.createdAt.toISOString(),
+      transactionId: award.transactionId,
+      issues: award.awardIssues.map(({ issueCompletion }) => ({
+        id: issueCompletion.id,
+        identifier: issueCompletion.linearIssueIdentifier,
+        title: issueCompletion.linearIssueTitle,
+        url: issueCompletion.linearIssueUrl,
+      })),
+    }),
+  );
+
   const proofOverrideByIds = [
     ...new Set(
       pptPayoutStates
@@ -452,6 +576,8 @@ export default async function AdminPage() {
           excludedLabels: bonusConfig.excludedLabels,
         }}
         bonusCandidates={bonusCandidates}
+        incentiveConfig={incentiveConfigData}
+        incentiveAwards={incentiveAwardRows}
         pptEligibilityStates={pptEligibilityStates}
         pptRequests={pendingPptRequests.map(
           (req): PptRequestData => ({

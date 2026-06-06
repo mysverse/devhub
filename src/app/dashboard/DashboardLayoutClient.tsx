@@ -24,6 +24,7 @@ import { motion } from "motion/react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import BonusNotificationPoller from "@/components/BonusNotificationPoller";
+import IncentiveNotificationPoller from "@/components/IncentiveNotificationPoller";
 import { Logo } from "@/components/Logo";
 import PptNotificationPoller from "@/components/PptNotificationPoller";
 import { signOut, useSession } from "@/lib/auth-client";
@@ -237,6 +238,7 @@ export default function DashboardLayoutClient({
         </Container>
       </AppShellMain>
       <BonusNotificationPoller />
+      <IncentiveNotificationPoller />
       <PptNotificationPoller />
     </AppShell>
   );

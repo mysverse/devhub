@@ -6,12 +6,14 @@ import { getCurrencyForPaymentMethod } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 import ActiveTasks from "./_components/ActiveTasks";
 import Hero from "./_components/Hero";
+import IncentiveProgress from "./_components/IncentiveProgress";
 import Leaderboard from "./_components/Leaderboard";
 import RecentTransactions from "./_components/RecentTransactions";
 import {
   ActiveTasksSkeleton,
   CarouselSkeleton,
   HeroSkeleton,
+  IncentiveProgressSkeleton,
   LeaderboardSkeleton,
 } from "./_components/Skeletons";
 import SuggestedPPTs from "./_components/SuggestedPPTs";
@@ -84,6 +86,10 @@ export default async function DashboardPage() {
             />
           </Suspense>
         )}
+
+        <Suspense fallback={<IncentiveProgressSkeleton />}>
+          <IncentiveProgress userId={userId} />
+        </Suspense>
 
         <Suspense fallback={<CarouselSkeleton />}>
           <SuggestedPPTs userId={userId} currency={userCurrency} />

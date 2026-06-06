@@ -99,3 +99,29 @@ export function LeaderboardSkeleton() {
     </Card>
   );
 }
+
+export function IncentiveProgressSkeleton() {
+  return (
+    <Card withBorder radius="md" padding="lg">
+      <Stack gap="lg">
+        <Group justify="space-between">
+          <Skeleton height={20} width={180} />
+          <Skeleton height={18} width={90} />
+        </Group>
+        <Skeleton height={6} radius="xl" />
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+          {[...Array(3)].map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
+            <Group key={i} gap="sm">
+              <Skeleton height={24} width={24} circle />
+              <Stack gap={6} style={{ flex: 1 }}>
+                <Skeleton height={10} width="60%" />
+                <Skeleton height={16} width="40%" />
+              </Stack>
+            </Group>
+          ))}
+        </SimpleGrid>
+      </Stack>
+    </Card>
+  );
+}

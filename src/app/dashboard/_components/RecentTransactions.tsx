@@ -37,6 +37,10 @@ function getTransactionTitle(tx: Transaction) {
     return tx.linearIssueTitle ?? `${formatBonusPeriod(tx.bonusPeriod)} Bonus`;
   }
 
+  if (tx.source === "INCENTIVE") {
+    return tx.linearIssueTitle ?? "DevHub incentive awards";
+  }
+
   if (tx.linearIssueId) {
     return tx.linearIssueTitle ?? tx.linearIssueIdentifier ?? tx.linearIssueId;
   }

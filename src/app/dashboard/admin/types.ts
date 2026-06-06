@@ -33,6 +33,14 @@ export type PayoutTransaction = {
     url?: string | null;
     amount?: number | null;
   }[];
+  incentiveLineItems?: {
+    id: string;
+    type: string;
+    period: string;
+    amount: number;
+    netAmount?: number | null;
+    status: string;
+  }[];
   payout?: {
     id: string;
     provider: string;

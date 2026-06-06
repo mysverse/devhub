@@ -14,6 +14,10 @@ import AdminBonusesTab, {
   type BonusConfigData,
   type BonusReviewCandidate,
 } from "./AdminBonusesTab";
+import AdminIncentivesTab, {
+  type AdminIncentiveAwardData,
+  type IncentiveConfigData,
+} from "./AdminIncentivesTab";
 import AdminPptEligibilityTab, {
   type AdminPptEligibilityState,
 } from "./AdminPptEligibilityTab";
@@ -57,6 +61,8 @@ export default function AdminPayoutTabs({
   pptRequests,
   bonusConfig,
   bonusCandidates,
+  incentiveConfig,
+  incentiveAwards,
   pptEligibilityStates,
 }: {
   pending: PayoutTransaction[];
@@ -65,6 +71,8 @@ export default function AdminPayoutTabs({
   pptRequests: PptRequestData[];
   bonusConfig: BonusConfigData;
   bonusCandidates: BonusReviewCandidate[];
+  incentiveConfig: IncentiveConfigData;
+  incentiveAwards: AdminIncentiveAwardData[];
   pptEligibilityStates: AdminPptEligibilityState[];
 }) {
   return (
@@ -76,7 +84,9 @@ export default function AdminPayoutTabs({
             ? "ppt-eligibility"
             : bonusCandidates.length > 0
               ? "bonuses"
-              : "pending"
+              : incentiveAwards.some((award) => award.status === "HELD")
+                ? "incentives"
+                : "pending"
       }
     >
       <TabsList mb="lg">
@@ -86,6 +96,9 @@ export default function AdminPayoutTabs({
           </TabsTab>
         )}
         <TabsTab value="bonuses">Bonuses ({bonusCandidates.length})</TabsTab>
+        <TabsTab value="incentives">
+          Incentives ({incentiveAwards.length})
+        </TabsTab>
         <TabsTab value="ppt-eligibility">
           PPT Eligibility ({pptEligibilityStates.length})
         </TabsTab>
@@ -102,6 +115,10 @@ export default function AdminPayoutTabs({
 
       <TabsPanel value="bonuses">
         <AdminBonusesTab config={bonusConfig} candidates={bonusCandidates} />
+      </TabsPanel>
+
+      <TabsPanel value="incentives">
+        <AdminIncentivesTab config={incentiveConfig} awards={incentiveAwards} />
       </TabsPanel>
 
       <TabsPanel value="ppt-eligibility">

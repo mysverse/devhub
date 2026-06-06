@@ -108,6 +108,10 @@ export function IncentiveProgressSkeleton() {
           <Skeleton height={20} width={180} />
           <Skeleton height={18} width={90} />
         </Group>
+        <Stack gap={8}>
+          <Skeleton height={10} width={80} />
+          <Skeleton height={14} width={220} />
+        </Stack>
         <Skeleton height={6} radius="xl" />
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
           {[...Array(3)].map((_, i) => (

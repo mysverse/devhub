@@ -48,6 +48,14 @@ function getTransactionTitle(tx: Transaction) {
   return "Manual Payout";
 }
 
+function getSourceMeta(
+  source: Transaction["source"],
+): { label: string; color: string } | null {
+  if (source === "INCENTIVE") return { label: "Incentive", color: "blue" };
+  if (source === "BONUS") return { label: "Bonus", color: "grape" };
+  return null;
+}
+
 function getStatusMeta(status: Transaction["status"]): {
   color: string;
   amountColor: string;
@@ -137,6 +145,7 @@ export default function RecentTransactions({ transactions }: Props) {
                 const statusMeta = getStatusMeta(tx.status);
                 const title = getTransactionTitle(tx);
                 const currency = toCurrencyCode(tx.currency);
+                const sourceMeta = getSourceMeta(tx.source);
 
                 return (
                   <StaggerItem key={tx.id}>
@@ -185,6 +194,15 @@ export default function RecentTransactions({ transactions }: Props) {
                           )}
                         </Group>
                         <Group gap="xs">
+                          {sourceMeta && (
+                            <Badge
+                              variant="light"
+                              color={sourceMeta.color}
+                              size="xs"
+                            >
+                              {sourceMeta.label}
+                            </Badge>
+                          )}
                           <Badge
                             variant="light"
                             color={statusMeta.color}

@@ -16,6 +16,17 @@ import {
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
+import {
+  buildIncentiveEarningPotential,
+  buildIncentiveNextTargets,
+  buildIncentiveSuggestions,
+  type IncentiveEarningPotential,
+  type IncentiveNextTarget,
+  type IncentiveQualificationSummary,
+  type IncentiveStatusCopy,
+  type IncentiveSuggestion,
+  incentiveStatusCopy,
+} from "@/lib/incentive-copy";
 import prisma from "@/lib/prisma";
 
 export type LinearIncentiveIssueInput = {
@@ -1759,7 +1770,45 @@ export async function sendIncentiveAdminDigest() {
   return sent;
 }
 
-export async function getUserWeeklyIncentiveProgress(userId: string) {
+export type EarnedIncentiveAwardView = {
+  id: string;
+  type: IncentiveType;
+  amount: number;
+  currency: string;
+  status: IncentiveAwardStatus;
+  statusCopy: IncentiveStatusCopy;
+};
+
+export interface UserWeeklyIncentiveProgress {
+  enabled: boolean;
+  weekKey: string;
+  completedThisWeek: number;
+  threshold: number;
+  remaining: number;
+  atThreshold: boolean;
+  activeDaysThisWeek: number;
+  activeDayThreshold: number;
+  activeDayKickerEnabled: boolean;
+  currentStreakWeeks: number;
+  lifetimeCompleted: number;
+  currency: CurrencyCode;
+  rewardFlags: {
+    weeklyEnabled: boolean;
+    streakEnabled: boolean;
+    milestoneEnabled: boolean;
+    leaderboardEnabled: boolean;
+  };
+  earningPotential: IncentiveEarningPotential;
+  nextTargets: IncentiveNextTarget[];
+  qualification: IncentiveQualificationSummary;
+  suggestions: IncentiveSuggestion[];
+  earnedThisWeek: EarnedIncentiveAwardView[];
+  badges: string[];
+}
+
+export async function getUserWeeklyIncentiveProgress(
+  userId: string,
+): Promise<UserWeeklyIncentiveProgress> {
   const config = await getIncentiveConfig();
   const weekKey = getWeekKey(new Date());
   const activatedAt = config.activatedAt ?? new Date(0);
@@ -1769,22 +1818,93 @@ export async function getUserWeeklyIncentiveProgress(userId: string) {
     config,
     activatedAt,
   );
-  const [activeDaysThisWeek, currentStreakWeeks, lifetimeCompleted, awards] =
-    await Promise.all([
-      getDistinctActiveDaysForWeek(userId, weekKey),
-      getCurrentStreakWeeks(userId, weekKey, config, activatedAt),
-      getLifetimeQualifyingCount(userId, config, activatedAt),
-      prisma.incentiveAward.findMany({
-        where: {
-          userId,
-          status: { not: "CANCELLED" },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 30,
-      }),
-    ]);
+  const [
+    activeDaysThisWeek,
+    currentStreakWeeks,
+    lifetimeCompleted,
+    awards,
+    profile,
+  ] = await Promise.all([
+    getDistinctActiveDaysForWeek(userId, weekKey),
+    getCurrentStreakWeeks(userId, weekKey, config, activatedAt),
+    getLifetimeQualifyingCount(userId, config, activatedAt),
+    prisma.incentiveAward.findMany({
+      where: {
+        userId,
+        status: { not: "CANCELLED" },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+    prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { paymentMethod: true },
+    }),
+  ]);
 
-  const earnedThisWeek = awards
+  const currency = getCurrencyForPaymentMethod(
+    profile?.paymentMethod ?? "BANK_TRANSFER",
+  );
+  const completedThisWeek = issues.length;
+  const remaining = Math.max(0, config.weeklyThreshold - completedThisWeek);
+
+  // Weekly tiers / milestones drive the "next target" + earning-potential copy.
+  const tiers = parseWeeklyTiers(config);
+  const topTier = tiers.at(-1) ?? {
+    threshold: config.weeklyThreshold,
+    myr: config.weeklyMyrAmount,
+    robux: config.weeklyRobuxAmount,
+  };
+  const nextTier =
+    tiers.find((tier) => completedThisWeek < tier.threshold) ?? null;
+  const atThreshold = nextTier == null;
+
+  const kickerAmount =
+    currency === "ROBUX"
+      ? config.activeDayKickerRobux
+      : config.activeDayKickerMyr;
+  const kickerEligible =
+    config.activeDayKickerEnabled &&
+    activeDaysThisWeek >= config.activeDayThreshold;
+  const streakAmount =
+    currency === "ROBUX" ? config.streakRobuxAmount : config.streakMyrAmount;
+
+  const earningPotential = buildIncentiveEarningPotential({
+    currency,
+    topTierAmount: currencyAmount(topTier, currency),
+    thresholdReached: atThreshold,
+    kickerEnabled: config.activeDayKickerEnabled,
+    kickerEligible,
+    kickerAmount,
+  });
+
+  const milestones = parseMilestones(config);
+  const nextMilestone =
+    milestones.find((milestone) => lifetimeCompleted < milestone.count) ?? null;
+
+  const nextTargets = buildIncentiveNextTargets({
+    currency,
+    completedThisWeek,
+    weekly: {
+      enabled: config.weeklyEnabled,
+      nextThreshold: nextTier?.threshold ?? null,
+      nextAmount: nextTier ? currencyAmount(nextTier, currency) : null,
+    },
+    streak: {
+      enabled: config.streakEnabled,
+      thresholdWeeks: config.streakThresholdWeeks,
+      currentStreakWeeks,
+      amount: streakAmount,
+    },
+    milestone: {
+      enabled: config.milestoneEnabled,
+      nextCount: nextMilestone?.count ?? null,
+      amount: nextMilestone ? currencyAmount(nextMilestone, currency) : null,
+      lifetimeCompleted,
+    },
+  });
+
+  const earnedThisWeek: EarnedIncentiveAwardView[] = awards
     .filter((award) => award.period === weekKey)
     .map((award) => ({
       id: award.id,
@@ -1792,6 +1912,7 @@ export async function getUserWeeklyIncentiveProgress(userId: string) {
       amount: award.amount,
       currency: award.currency,
       status: award.status,
+      statusCopy: incentiveStatusCopy(award.status),
     }));
   const badges = [
     ...awards
@@ -1804,17 +1925,80 @@ export async function getUserWeeklyIncentiveProgress(userId: string) {
       .map(() => "Leaderboard finisher"),
   ].slice(0, 6);
 
+  const qualification: IncentiveQualificationSummary = {
+    currency,
+    weekKey,
+    windowLabel: "Monday to Sunday (UTC)",
+    minEstimateToCount: config.minEstimateToCount,
+    excludedLabels: config.excludedLabels,
+    stabilityLabel: `${config.stabilityMinutes} minute${config.stabilityMinutes === 1 ? "" : "s"}`,
+    disputeWindowLabel: `${config.disputeWindowHours} hour${config.disputeWindowHours === 1 ? "" : "s"}`,
+    tiers: tiers.map((tier) => ({
+      threshold: tier.threshold,
+      amountFormatted: formatAmount(currencyAmount(tier, currency), currency),
+    })),
+    weeklyPotentialFormatted: earningPotential.potentialAmountFormatted,
+    activeDayKickerEnabled: config.activeDayKickerEnabled,
+    activeDayThreshold: config.activeDayThreshold,
+    activeDayKickerAmountFormatted: config.activeDayKickerEnabled
+      ? formatAmount(kickerAmount, currency)
+      : null,
+    streakEnabled: config.streakEnabled,
+    streakThresholdWeeks: config.streakThresholdWeeks,
+    streakAmountFormatted: config.streakEnabled
+      ? formatAmount(streakAmount, currency)
+      : null,
+    milestoneEnabled: config.milestoneEnabled,
+    milestones: milestones.map((milestone) => ({
+      count: milestone.count,
+      amountFormatted: formatAmount(
+        currencyAmount(milestone, currency),
+        currency,
+      ),
+    })),
+  };
+
+  const suggestions = buildIncentiveSuggestions({
+    enabled: config.enabled,
+    completedThisWeek,
+    threshold: config.weeklyThreshold,
+    remainingToThreshold: remaining,
+    thresholdReached: atThreshold,
+    weeklyPotentialFormatted: earningPotential.potentialAmountFormatted,
+    streakEnabled: config.streakEnabled,
+    currentStreakWeeks,
+    activeDayKickerEnabled: config.activeDayKickerEnabled,
+    activeDayThreshold: config.activeDayThreshold,
+    activeDaysThisWeek,
+    activeDayKickerFormatted: config.activeDayKickerEnabled
+      ? formatAmount(kickerAmount, currency)
+      : null,
+    earnedStatuses: earnedThisWeek.map((award) => award.status),
+  });
+
   return {
     enabled: config.enabled,
     weekKey,
-    completedThisWeek: issues.length,
+    completedThisWeek,
     threshold: config.weeklyThreshold,
-    remaining: Math.max(0, config.weeklyThreshold - issues.length),
+    remaining,
+    atThreshold,
     activeDaysThisWeek,
     activeDayThreshold: config.activeDayThreshold,
     activeDayKickerEnabled: config.activeDayKickerEnabled,
     currentStreakWeeks,
     lifetimeCompleted,
+    currency,
+    rewardFlags: {
+      weeklyEnabled: config.weeklyEnabled,
+      streakEnabled: config.streakEnabled,
+      milestoneEnabled: config.milestoneEnabled,
+      leaderboardEnabled: config.leaderboardEnabled,
+    },
+    earningPotential,
+    nextTargets,
+    qualification,
+    suggestions,
     earnedThisWeek,
     badges,
   };

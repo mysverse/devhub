@@ -16,7 +16,7 @@ importers:
         version: 2.2.0(react@19.2.7)
       '@linear/sdk':
         specifier: ^86.0.0
-        version: 86.0.0(graphql@16.13.0)
+        version: 86.0.0(graphql@16.14.1)
       '@mantine/core':
         specifier: ^9.3.0
         version: 9.3.0(@mantine/hooks@9.3.0(react@19.2.7))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -1434,8 +1434,8 @@ packages:
     resolution: {integrity: sha512-QOSvevhslijgYwRx6Rv7zKdMF8lbRmx+uQGx2+vDc+KI/eBnsy9kit5aj23AgGu3pa4t9AgwbnXWqS+iOY+2aA==}
     engines: {node: '>= 6'}
 
-  caniuse-lite@1.0.30001797:
-    resolution: {integrity: sha512-l8xKG+gwAIExZGl9FrF7KUwuOmk6wbEPC9Xoy/RtnWv1XG0Q4LFlagaLpUv3Kiza3W/wm27zy0yWJEieYKAP6w==}
+  caniuse-lite@1.0.30001793:
+    resolution: {integrity: sha512-iwSsYWaCOoh26cV8NwNRViHlrfUvYsHDfRVcbtmw0Kg6PJIZZXwMkj1442FYLBGkeUf1juAsU3DTfxW579mrPA==}
 
   ccount@2.0.1:
     resolution: {integrity: sha512-eyrF0jiFpY+3drT6383f1qhkbGsLSifNAjA61IUjZjmLCWjItY6LB9ft9YhoDgwfmclB2zhu51Lc7+95b8NRAg==}
@@ -1920,8 +1920,8 @@ packages:
   graphmatch@1.1.1:
     resolution: {integrity: sha512-5ykVn/EXM1hF0XCaWh05VbYvEiOL2lY1kBxZtaYsyvjp7cmWOU1XsAdfQBwClraEofXDT197lFbXOEVMHpvQOg==}
 
-  graphql@16.13.0:
-    resolution: {integrity: sha512-uSisMYERbaB9bkA9M4/4dnqyktaEkf1kMHNKq/7DHyxVeWqHQ2mBmVqm5u6/FVHwF3iCNalKcg82Zfl+tffWoA==}
+  graphql@16.14.1:
+    resolution: {integrity: sha512-cQOsSMS/IrDz82PVyRDvf/Q1F/bRbBVjJlh+xYOkI1qw2bWRvWGiWc+m2O0d6l4Bt1fyY+8kzJ8JFWGJqNeDBg==}
     engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
   gray-matter@4.0.3:
@@ -3414,9 +3414,9 @@ snapshots:
 
   '@floating-ui/utils@0.2.11': {}
 
-  '@graphql-typed-document-node/core@3.2.0(graphql@16.13.0)':
+  '@graphql-typed-document-node/core@3.2.0(graphql@16.14.1)':
     dependencies:
-      graphql: 16.13.0
+      graphql: 16.14.1
 
   '@heroicons/react@2.2.0(react@19.2.7)':
     dependencies:
@@ -3551,9 +3551,9 @@ snapshots:
 
   '@kurkle/color@0.3.4': {}
 
-  '@linear/sdk@86.0.0(graphql@16.13.0)':
+  '@linear/sdk@86.0.0(graphql@16.14.1)':
     dependencies:
-      '@graphql-typed-document-node/core': 3.2.0(graphql@16.13.0)
+      '@graphql-typed-document-node/core': 3.2.0(graphql@16.14.1)
     transitivePeerDependencies:
       - graphql
 
@@ -4292,7 +4292,7 @@ snapshots:
 
   camelcase-css@2.0.1: {}
 
-  caniuse-lite@1.0.30001797: {}
+  caniuse-lite@1.0.30001793: {}
 
   ccount@2.0.1: {}
 
@@ -4786,7 +4786,7 @@ snapshots:
 
   graphmatch@1.1.1: {}
 
-  graphql@16.13.0: {}
+  graphql@16.14.1: {}
 
   gray-matter@4.0.3:
     dependencies:
@@ -5486,7 +5486,7 @@ snapshots:
       '@next/env': 16.2.7
       '@swc/helpers': 0.5.15
       baseline-browser-mapping: 2.10.34
-      caniuse-lite: 1.0.30001797
+      caniuse-lite: 1.0.30001793
       postcss: 8.4.31
       react: 19.2.7
       react-dom: 19.2.7(react@19.2.7)

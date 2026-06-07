@@ -1,5 +1,6 @@
 import { Badge, Group, Text, Title } from "@mantine/core";
 import type { Payout, Transaction, UserProfile } from "@prisma/client";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
@@ -11,6 +12,7 @@ import { getIncentiveConfig } from "@/lib/incentives";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
 import type { BonusReviewCandidate } from "./AdminBonusesTab";
@@ -24,6 +26,8 @@ import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
 import type { PptRequestData } from "./PptRequestCard";
 import type { PayoutTransaction } from "./types";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/admin");
 
 type TransactionWithUser = Transaction & {
   user: UserProfile;

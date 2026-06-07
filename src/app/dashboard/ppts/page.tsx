@@ -13,6 +13,7 @@ import {
   Title,
 } from "@mantine/core";
 import { Ticker } from "motion-plus/react";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
@@ -27,8 +28,11 @@ import {
 } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import MyPptRequests from "./MyPptRequests";
 import PptRequestButton from "./PptRequestButton";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/ppts");
 
 type EnrichedIssue = {
   issue: Issue;

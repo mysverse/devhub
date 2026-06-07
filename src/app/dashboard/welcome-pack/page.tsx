@@ -9,18 +9,24 @@ import {
   Title,
 } from "@mantine/core";
 import type { WelcomePackOrderStatus } from "@prisma/client";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { countryNameFromCode } from "@/lib/countries";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import CancelOrderButton from "./CancelOrderButton";
 import EligibilityGate from "./EligibilityGate";
 import type { OrderFormDefaults, OrderFormPack } from "./OrderForm";
 import OrderStatusTimeline from "./OrderStatusTimeline";
 import TrackingCard from "./TrackingCard";
+
+export const metadata: Metadata = buildSocialMetadata(
+  "/dashboard/welcome-pack",
+);
 
 const STATUS_COPY: Record<
   WelcomePackOrderStatus,

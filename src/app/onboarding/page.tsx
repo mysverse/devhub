@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import OnboardingFlow from "./OnboardingFlow";
+
+export const metadata: Metadata = buildSocialMetadata("/onboarding");
 
 export default async function OnboardingPage() {
   const { userId, user } = await getSession();

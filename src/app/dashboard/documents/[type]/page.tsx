@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import SigningForm from "./SigningForm";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/documents");
 
 type Params = Promise<{ type: string }>;
 

@@ -8,12 +8,16 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import RefreshBonusesButton from "./RefreshBonusesButton";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/bonuses");
 
 type BonusCandidateCardData = {
   id: string;

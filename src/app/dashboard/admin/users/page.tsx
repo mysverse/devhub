@@ -1,7 +1,11 @@
+import type { Metadata } from "next";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import UsersTable from "./UsersTable";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/users");
 
 export default async function AdminUsersPage() {
   await requireAdminPage();

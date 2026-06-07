@@ -1,9 +1,11 @@
 import { Alert, Stack } from "@mantine/core";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getSession } from "@/lib/auth-utils";
 import { getCurrencyForPaymentMethod } from "@/lib/currency";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import ActiveTasks from "./_components/ActiveTasks";
 import Hero from "./_components/Hero";
 import IncentiveProgress from "./_components/IncentiveProgress";
@@ -17,6 +19,8 @@ import {
   LeaderboardSkeleton,
 } from "./_components/Skeletons";
 import SuggestedPPTs from "./_components/SuggestedPPTs";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard");
 
 export default async function DashboardPage() {
   const { userId, user } = await getSession();

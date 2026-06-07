@@ -8,9 +8,11 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import type { Metadata } from "next";
 import { FadeIn } from "@/components/animations";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
 import OrdersTable, {
@@ -18,6 +20,10 @@ import OrdersTable, {
   type AdminOrderRow,
 } from "./OrdersTable";
 import PackConfig, { type PackConfigData } from "./PackConfig";
+
+export const metadata: Metadata = buildSocialMetadata(
+  "/dashboard/admin/welcome-pack",
+);
 
 export default async function AdminWelcomePackPage() {
   await requireAdminPage();

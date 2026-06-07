@@ -1,9 +1,15 @@
 import { Group, Stack, Text, Title } from "@mantine/core";
+import type { Metadata } from "next";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
 import { DEVELOPER_RANKS, DEVELOPER_SPECIALTIES } from "@/lib/developer-access";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import AccessManagementClient from "./AccessManagementClient";
+
+export const metadata: Metadata = buildSocialMetadata(
+  "/dashboard/admin/access",
+);
 
 export default async function AccessManagementPage() {
   await requireAdminPage();

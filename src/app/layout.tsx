@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
 import { siteConfig } from "@/lib/config";
+import { buildSocialMetadata, getSocialBaseUrl } from "@/lib/social-previews";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
@@ -16,9 +17,48 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const rootSocialMetadata = buildSocialMetadata("/");
+
 export const metadata: Metadata = {
-  title: `${siteConfig.appName} - PPT Dashboard`,
-  description: "Pay-Per-Task tracking for our developer team",
+  ...rootSocialMetadata,
+  metadataBase: new URL(getSocialBaseUrl()),
+  applicationName: siteConfig.appName,
+  title: {
+    default: `${siteConfig.name} ${siteConfig.appName}`,
+    template: `%s | ${siteConfig.appName}`,
+  },
+  category: "developer operations",
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      {
+        url: "/icons/devhub-icon-192.png",
+        type: "image/png",
+        sizes: "192x192",
+      },
+      {
+        url: "/icons/devhub-icon-512.png",
+        type: "image/png",
+        sizes: "512x512",
+      },
+    ],
+    apple: [
+      { url: "/apple-touch-icon.png", type: "image/png", sizes: "180x180" },
+    ],
+    other: [
+      {
+        rel: "mask-icon",
+        url: "/devhub-logomark.svg",
+        color: "#228be6",
+      },
+    ],
+  },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    title: siteConfig.appName,
+    statusBarStyle: "black-translucent",
+  },
 };
 
 const theme = createTheme({

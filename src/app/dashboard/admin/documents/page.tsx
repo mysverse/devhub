@@ -13,10 +13,16 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import type { Metadata } from "next";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
+
+export const metadata: Metadata = buildSocialMetadata(
+  "/dashboard/admin/documents",
+);
 
 export default async function AdminDocumentsPage() {
   await requireAdminPage();

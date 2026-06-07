@@ -1,14 +1,18 @@
 import { Box, Divider, Text, Title } from "@mantine/core";
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
 import { requiresKycForAutoPayout } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import InviteGenerator from "./InviteGenerator";
 import KycStatus from "./KycStatus";
 import LinkedAccounts from "./LinkedAccounts";
 import SettingsForm from "./SettingsForm";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/settings");
 
 export default async function SettingsPage() {
   const { userId } = await getSession();

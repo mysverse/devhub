@@ -8,11 +8,15 @@ import {
   Text,
   Title,
 } from "@mantine/core";
+import type { Metadata } from "next";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import KycReviewCard from "./KycReviewCard";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/kyc");
 
 export default async function AdminKycPage() {
   await requireAdminPage();

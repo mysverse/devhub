@@ -1,8 +1,12 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth-utils";
 import { getAllDocumentTemplates } from "@/lib/documents";
 import prisma from "@/lib/prisma";
+import { buildSocialMetadata } from "@/lib/social-previews";
 import DocumentsClient from "./DocumentsClient";
+
+export const metadata: Metadata = buildSocialMetadata("/dashboard/documents");
 
 export default async function DocumentsPage() {
   const { userId } = await getSession();

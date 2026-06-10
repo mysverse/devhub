@@ -1,4 +1,5 @@
 import { ColorSchemeScript, createTheme, MantineProvider } from "@mantine/core";
+import { MotionConfig } from "motion/react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
@@ -63,6 +64,7 @@ export const metadata: Metadata = {
 
 const theme = createTheme({
   primaryColor: "blue",
+  respectReducedMotion: true,
   fontFamily: "var(--font-geist-sans), sans-serif",
   fontFamilyMonospace: "var(--font-geist-mono), monospace",
   headings: {
@@ -85,8 +87,10 @@ export default function RootLayout({
         style={{ fontFamily: "var(--font-geist-sans)" }}
       >
         <MantineProvider theme={theme} defaultColorScheme="dark">
-          {children}
-          <Toaster theme="dark" richColors />
+          <MotionConfig reducedMotion="user">
+            {children}
+            <Toaster theme="dark" richColors position="bottom-right" />
+          </MotionConfig>
         </MantineProvider>
       </body>
     </html>

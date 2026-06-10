@@ -14,8 +14,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -48,12 +47,7 @@ function timeAgo(dateStr: string): string {
   return `${days}d ago`;
 }
 
-export default function PptRequestCard({
-  request,
-}: {
-  request: PptRequestData;
-}) {
-  const router = useRouter();
+function PptRequestCard({ request }: { request: PptRequestData }) {
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [
@@ -81,7 +75,6 @@ export default function PptRequestCard({
       toast.error(result.error);
     } else {
       toast.success("PPT request approved");
-      router.refresh();
     }
   }
 
@@ -99,7 +92,6 @@ export default function PptRequestCard({
       toast.success("PPT request rejected");
       closeRejectModal();
       setRejectReason("");
-      router.refresh();
     }
   }
 
@@ -298,3 +290,5 @@ export default function PptRequestCard({
     </>
   );
 }
+
+export default memo(PptRequestCard);

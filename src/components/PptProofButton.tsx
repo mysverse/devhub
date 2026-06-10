@@ -3,8 +3,7 @@
 import { Button, Group, Modal, Stack, Text, Textarea } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ClipboardCheck, RotateCw } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   retryPptPayoutCheck,
@@ -21,50 +20,54 @@ export default function PptProofButton({
 }) {
   const [opened, { open, close }] = useDisclosure(false);
   const [body, setBody] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [retrying, setRetrying] = useState(false);
-  const router = useRouter();
+  const [submitting, startSubmitTransition] = useTransition();
+  const [retrying, startRetryTransition] = useTransition();
 
-  async function handleSubmit() {
-    setSubmitting(true);
-    const result = await submitPptProof(issueId, body);
-    setSubmitting(false);
-
-    if ("reauth" in result && result.reauth) {
-      signIn.oauth2({
-        providerId: "linear",
-        callbackURL: "/dashboard",
-      });
-      return;
-    }
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    toast.success("PPT proof submitted");
-    setBody("");
+  function handleSubmit() {
+    const draft = body;
     close();
-    router.refresh();
+    const toastId = toast.loading("Submitting PPT proof...");
+
+    startSubmitTransition(async () => {
+      const result = await submitPptProof(issueId, draft);
+
+      if ("reauth" in result && result.reauth) {
+        signIn.oauth2({
+          providerId: "linear",
+          callbackURL: "/dashboard",
+        });
+        return;
+      }
+      if (result.error) {
+        setBody(draft);
+        open();
+        toast.error(result.error, { id: toastId });
+        return;
+      }
+      toast.success("PPT proof submitted", { id: toastId });
+      setBody("");
+    });
   }
 
-  async function handleRetry() {
-    setRetrying(true);
-    const result = await retryPptPayoutCheck(issueId);
-    setRetrying(false);
+  function handleRetry() {
+    const toastId = toast.loading("Queueing payout check...");
 
-    if ("reauth" in result && result.reauth) {
-      signIn.oauth2({
-        providerId: "linear",
-        callbackURL: "/dashboard",
-      });
-      return;
-    }
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    toast.success("PPT payout check queued");
-    router.refresh();
+    startRetryTransition(async () => {
+      const result = await retryPptPayoutCheck(issueId);
+
+      if ("reauth" in result && result.reauth) {
+        signIn.oauth2({
+          providerId: "linear",
+          callbackURL: "/dashboard",
+        });
+        return;
+      }
+      if (result.error) {
+        toast.error(result.error, { id: toastId });
+        return;
+      }
+      toast.success("PPT payout check queued", { id: toastId });
+    });
   }
 
   return (

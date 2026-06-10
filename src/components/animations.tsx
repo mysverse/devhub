@@ -62,6 +62,16 @@ export const STEP_TRANSITION: Transition = {
   ease: EASE.out,
 };
 
+export const MODAL_TRANSITION = {
+  transition: "pop" as const,
+  duration: 160,
+};
+
+export const OVERLAY_PROPS = {
+  blur: 4,
+  backgroundOpacity: 0.55,
+} as const;
+
 export function StaggerContainer({
   children,
   className,
@@ -214,6 +224,7 @@ export const MotionCard = forwardRef<HTMLDivElement, MotionCardProps>(
         ref={ref}
         className={className}
         whileHover={hoverLift ? { y: -3 } : undefined}
+        whileTap={{ scale: 0.985 }}
         transition={SPRING.snappy}
         style={{ height: "100%" }}
       >
@@ -238,5 +249,9 @@ export function AnimatedNumber({
     setDisplayed(value);
   }, [value]);
 
-  return <AnimateNumber format={format}>{displayed}</AnimateNumber>;
+  return (
+    <span style={{ fontVariantNumeric: "tabular-nums" }}>
+      <AnimateNumber format={format}>{displayed}</AnimateNumber>
+    </span>
+  );
 }

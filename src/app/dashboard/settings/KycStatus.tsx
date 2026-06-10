@@ -13,7 +13,8 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
-import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import LinkAnchor from "@/components/LinkAnchor";
 import { updateAutoPayoutSetting } from "./actions";
@@ -39,10 +40,13 @@ export default function KycStatus({
   legalName,
   autoPayoutEnabled,
 }: KycStatusProps) {
+  const router = useRouter();
+  const [_isRefreshing, startRefreshTransition] = useTransition();
   const [showForm, setShowForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [togglingAutoPayout, setTogglingAutoPayout] = useState(false);
   const [autoPayout, setAutoPayout] = useState(autoPayoutEnabled);
+  const [localStatus, setLocalStatus] = useState(kycStatus);
   const [idFile, setIdFile] = useState<File | null>(null);
   const [selfieFile, setSelfieFile] = useState<File | null>(null);
   const [fileErrors, setFileErrors] = useState<{
@@ -51,9 +55,11 @@ export default function KycStatus({
   }>({});
 
   const canSubmitKyc =
-    kycStatus === null || kycStatus === "REJECTED" || kycStatus === "EXPIRED";
-  const isApproved = kycStatus === "APPROVED";
-  const isPending = kycStatus === "PENDING";
+    localStatus === null ||
+    localStatus === "REJECTED" ||
+    localStatus === "EXPIRED";
+  const isApproved = localStatus === "APPROVED";
+  const isPending = localStatus === "PENDING";
 
   function validateFile(file: File | null, field: "id" | "selfie"): boolean {
     if (!file) {
@@ -128,9 +134,9 @@ export default function KycStatus({
       toast.success(
         "Verification submitted! We'll review your documents within 1-2 business days.",
       );
+      setLocalStatus("PENDING");
       setShowForm(false);
-      // Reload to show updated status
-      window.location.reload();
+      startRefreshTransition(() => router.refresh());
     } catch {
       toast.error("Failed to submit verification. Please try again.");
     } finally {
@@ -196,14 +202,14 @@ export default function KycStatus({
           </Alert>
         )}
 
-        {kycStatus === "REJECTED" && (
+        {localStatus === "REJECTED" && (
           <Alert color="red" title="Verification not approved">
             {kycRejectionReason || "Your verification was not approved."} You
             can resubmit your documents below.
           </Alert>
         )}
 
-        {kycStatus === "EXPIRED" && (
+        {localStatus === "EXPIRED" && (
           <Alert color="orange" title="Verification expired">
             Your verification submission has expired. Please resubmit your
             documents.
@@ -213,7 +219,7 @@ export default function KycStatus({
         {/* Start verification / resubmit button */}
         {canSubmitKyc && !showForm && (
           <Button variant="light" onClick={() => setShowForm(true)}>
-            {kycStatus === null ? "Start Verification" : "Resubmit Documents"}
+            {localStatus === null ? "Start Verification" : "Resubmit Documents"}
           </Button>
         )}
 

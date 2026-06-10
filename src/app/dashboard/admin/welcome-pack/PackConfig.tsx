@@ -136,7 +136,6 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
       return;
     }
     toast.success("Welcome pack saved");
-    router.refresh();
   }
 
   async function handleTemplateUpload(file: File | null) {

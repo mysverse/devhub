@@ -18,7 +18,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { Bell, X } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -121,11 +121,7 @@ const statusConfig: Record<string, { color: string; label: string }> = {
   ON_HOLD: { color: "orange", label: "On hold" },
 };
 
-export default function PayoutCard({
-  transaction: tx,
-}: {
-  transaction: PayoutTransaction;
-}) {
+function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const [loading, setLoading] = useState(false);
   const [billplzLoading, setBillplzLoading] = useState(false);
   const [xenditLoading, setXenditLoading] = useState(false);
@@ -721,6 +717,8 @@ export default function PayoutCard({
     </>
   );
 }
+
+export default memo(PayoutCard);
 
 function CopyField({ label, value }: { label: string; value: string }) {
   return (

@@ -21,7 +21,6 @@ import {
   Title,
 } from "@mantine/core";
 import type { ShippingRegion, WelcomePackOrderStatus } from "@prisma/client";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import {
@@ -157,7 +156,6 @@ export default function OrdersTable({ orders }: { orders: AdminOrderRow[] }) {
 }
 
 function OrderCard({ order }: { order: AdminOrderRow }) {
-  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [showReject, setShowReject] = useState(false);
   const [showShip, setShowShip] = useState(false);
@@ -177,7 +175,6 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
         return false;
       }
       toast.success("Order updated");
-      router.refresh();
       return true;
     } finally {
       setBusy(null);

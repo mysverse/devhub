@@ -3,14 +3,12 @@
 import { Button } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/ConfirmModal";
 import { cancelWelcomePackOrder } from "./actions";
 
 export default function CancelOrderButton() {
-  const router = useRouter();
   const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
 
@@ -24,7 +22,6 @@ export default function CancelOrderButton() {
     }
     toast.success("Order cancelled");
     close();
-    router.refresh();
   }
 
   return (

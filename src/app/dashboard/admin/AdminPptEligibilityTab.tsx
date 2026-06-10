@@ -16,7 +16,6 @@ import {
 } from "@mantine/core";
 import { ExternalLink, RotateCw, ShieldCheck, X } from "lucide-react";
 import { motion } from "motion/react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
@@ -92,7 +91,6 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
   const [overrideNote, setOverrideNote] = useState("");
   const [overriding, setOverriding] = useState(false);
   const [clearing, setClearing] = useState(false);
-  const router = useRouter();
   const title = state.linearIssueIdentifier
     ? `${state.linearIssueIdentifier} - ${state.linearIssueTitle || "Untitled task"}`
     : state.linearIssueTitle || "Untitled PPT task";
@@ -114,7 +112,6 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
       return;
     }
     toast.success("PPT eligibility rechecked");
-    router.refresh();
   }
 
   async function handleOverride() {
@@ -135,7 +132,6 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
     toast.success("PPT proof override applied");
     setOverrideOpen(false);
     setOverrideNote("");
-    router.refresh();
   }
 
   async function handleClearOverride() {
@@ -148,7 +144,6 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
       return;
     }
     toast.success("PPT proof override cleared");
-    router.refresh();
   }
 
   return (

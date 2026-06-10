@@ -29,7 +29,6 @@ import {
   SlidersHorizontal,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { SPRING, StepTransition } from "@/components/animations";
@@ -69,7 +68,6 @@ export default function PptRequestModal({
   opened: boolean;
   onClose: () => void;
 }) {
-  const router = useRouter();
   const [mode, setMode] = useState<"new" | "existing">("existing");
   const [step, setStep] = useState<1 | 3>(1);
 
@@ -228,7 +226,6 @@ export default function PptRequestModal({
     } else {
       toast.success("PPT request submitted successfully");
       handleClose();
-      router.refresh();
     }
   }
 

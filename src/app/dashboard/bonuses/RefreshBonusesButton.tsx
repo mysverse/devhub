@@ -2,7 +2,6 @@
 
 import { Button } from "@mantine/core";
 import { RefreshCw } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { refreshMyBonusCandidates } from "@/app/dashboard/bonuses/actions";
@@ -10,7 +9,6 @@ import { signIn } from "@/lib/auth-client";
 
 export default function RefreshBonusesButton() {
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   async function handleRefresh() {
     setLoading(true);
@@ -31,7 +29,6 @@ export default function RefreshBonusesButton() {
     }
 
     toast.success(`Checked ${result.count ?? 0} Linear tasks`);
-    router.refresh();
   }
 
   return (

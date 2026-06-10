@@ -19,7 +19,6 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { Check, RefreshCw, Save, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
@@ -113,7 +112,6 @@ export default function AdminBonusesTab({
   config: BonusConfigData;
   candidates: BonusReviewCandidate[];
 }) {
-  const router = useRouter();
   const [enabled, setEnabled] = useState(config.enabled);
   const [myrRate, setMyrRate] = useState(config.myrRatePerPoint);
   const [robuxRate, setRobuxRate] = useState(config.robuxRatePerPoint);
@@ -165,7 +163,6 @@ export default function AdminBonusesTab({
     }
 
     toast.success("Bonus scale saved");
-    router.refresh();
   }
 
   async function handleRefresh() {
@@ -179,7 +176,6 @@ export default function AdminBonusesTab({
     }
 
     toast.success(`Checked ${result.count ?? 0} Linear tasks`);
-    router.refresh();
   }
 
   async function handleApprove(group: GroupedCandidates) {
@@ -201,7 +197,6 @@ export default function AdminBonusesTab({
     }
 
     toast.success("Bonus payout queued");
-    router.refresh();
   }
 
   function requestReject(candidateId: string) {
@@ -227,7 +222,6 @@ export default function AdminBonusesTab({
     toast.success("Bonus item rejected");
     setRejectingId(null);
     closeRejectModal();
-    router.refresh();
   }
 
   return (

@@ -3,8 +3,7 @@
 import { Button, Text } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { Hand, UserCog } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useOptimistic, useTransition } from "react";
 import { toast } from "sonner";
 import { claimIssue } from "@/app/dashboard/actions";
 import { signIn } from "@/lib/auth-client";
@@ -19,31 +18,35 @@ export default function ClaimButton({
   issueId,
   assigneeName,
 }: ClaimButtonProps) {
-  const [loading, setLoading] = useState(false);
+  const [isPending, startTransition] = useTransition();
+  const [optimisticClaimed, setOptimisticClaimed] = useOptimistic(
+    false,
+    (_state, next: boolean) => next,
+  );
   const [opened, { open, close }] = useDisclosure(false);
-  const router = useRouter();
 
-  async function handleClaim() {
-    setLoading(true);
-    const result = await claimIssue(issueId);
+  function handleClaim() {
+    startTransition(async () => {
+      setOptimisticClaimed(true);
+      const result = await claimIssue(issueId);
 
-    if ("reauth" in result && result.reauth) {
-      signIn.oauth2({
-        providerId: "linear",
-        callbackURL: "/dashboard/ppts",
-      });
-      return;
-    }
+      if ("reauth" in result && result.reauth) {
+        signIn.oauth2({
+          providerId: "linear",
+          callbackURL: "/dashboard/ppts",
+        });
+        return;
+      }
 
-    if (result.error) {
-      toast.error(result.error);
-      setLoading(false);
-      return;
-    }
-    toast.success(assigneeName ? "Task reassigned to you" : "Task claimed");
-    close();
-    setLoading(false);
-    router.refresh();
+      if (result.error) {
+        setOptimisticClaimed(false);
+        toast.error(result.error);
+        return;
+      }
+
+      toast.success(assigneeName ? "Task reassigned to you" : "Task claimed");
+      close();
+    });
   }
 
   if (assigneeName) {
@@ -73,7 +76,7 @@ export default function ClaimButton({
           tone="warning"
           confirmLabel="Reassign to me"
           confirmIcon={<UserCog size={14} />}
-          loading={loading}
+          loading={isPending}
         />
       </>
     );
@@ -86,9 +89,10 @@ export default function ClaimButton({
       color="blue"
       leftSection={<Hand size={12} />}
       onClick={handleClaim}
-      loading={loading}
+      loading={isPending}
+      disabled={optimisticClaimed}
     >
-      Claim Task
+      {optimisticClaimed ? "Claimed ✓" : "Claim Task"}
     </Button>
   );
 }

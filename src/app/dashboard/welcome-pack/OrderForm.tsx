@@ -36,7 +36,6 @@ import {
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type SubmitOrderInput, submitWelcomePackOrder } from "./actions";
@@ -114,7 +113,6 @@ export default function OrderForm({
   defaults: OrderFormDefaults;
   wave: 1 | 2;
 }) {
-  const router = useRouter();
   const [active, setActive] = useState(0);
   const [submitting, setSubmitting] = useState(false);
 
@@ -235,7 +233,6 @@ export default function OrderForm({
       return;
     }
     toast.success("Welcome pack order submitted");
-    router.refresh();
   }
 
   return (

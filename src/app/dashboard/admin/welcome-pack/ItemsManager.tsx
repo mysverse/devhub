@@ -52,7 +52,6 @@ export default function ItemsManager({
   packId: string | null;
   items: AdminItemData[];
 }) {
-  const router = useRouter();
   const [opened, { open, close }] = useDisclosure(false);
   const [editing, setEditing] = useState<AdminItemData | null>(null);
   const [deleteCandidate, setDeleteCandidate] = useState<AdminItemData | null>(
@@ -85,7 +84,6 @@ export default function ItemsManager({
       toast.success("Item deleted");
     }
     setDeleteCandidate(null);
-    router.refresh();
   }
 
   if (!packId) {
@@ -200,10 +198,7 @@ export default function ItemsManager({
         onClose={close}
         packId={packId}
         item={editing}
-        onSaved={() => {
-          close();
-          router.refresh();
-        }}
+        onSaved={close}
       />
 
       <ConfirmModal
@@ -273,11 +268,6 @@ function ItemEditorModal({
       return;
     }
     toast.success(item ? "Item updated" : "Item created");
-    if (res?.itemId && !item) {
-      // After creating, need an item id to upload images. Reload so the
-      // newly-created item shows in the list with edit affordances.
-      router.refresh();
-    }
     onSaved();
   }
 

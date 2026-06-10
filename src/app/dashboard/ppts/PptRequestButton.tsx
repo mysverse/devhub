@@ -2,7 +2,11 @@
 
 import { Button } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import PptRequestModal from "./PptRequestModal";
+import dynamic from "next/dynamic";
+
+const PptRequestModal = dynamic(() => import("./PptRequestModal"), {
+  ssr: false,
+});
 
 export default function PptRequestButton() {
   const [opened, { open, close }] = useDisclosure(false);
@@ -10,7 +14,7 @@ export default function PptRequestButton() {
   return (
     <>
       <Button onClick={open}>Request PPT</Button>
-      <PptRequestModal opened={opened} onClose={close} />
+      {opened && <PptRequestModal opened={opened} onClose={close} />}
     </>
   );
 }

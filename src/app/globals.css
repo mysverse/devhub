@@ -8,3 +8,30 @@
 body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
+
+@keyframes skeleton-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.mantine-Skeleton-root {
+  animation: skeleton-appear 0.2s ease-out 0.15s backwards;
+}
+
+.mantine-Button-root:active {
+  transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mantine-Skeleton-root {
+    animation: none;
+  }
+
+  .mantine-Button-root:active {
+    transform: none;
+  }
+}

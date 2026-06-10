@@ -13,6 +13,7 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { motion } from "motion/react";
+import { memo, useState } from "react";
 import Markdown from "react-markdown";
 import { SPRING } from "@/components/animations";
 import type { CurrencyCode } from "@/lib/currency";
@@ -153,7 +154,39 @@ function HoverLift({
   );
 }
 
-export default function TaskCard({
+function TaskPreviewImage({ src, title }: { src: string; title: string }) {
+  const [loaded, setLoaded] = useState(false);
+
+  return (
+    <CardSection
+      mb="md"
+      style={{
+        overflow: "hidden",
+        height: 160,
+        background: "var(--mantine-color-dark-7)",
+      }}
+    >
+      <motion.div
+        whileHover={{ scale: 1.04 }}
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        style={{ height: "100%" }}
+      >
+        <Image
+          src={src}
+          height={160}
+          alt={title}
+          onLoad={() => setLoaded(true)}
+          style={{
+            opacity: loaded ? 1 : 0,
+            transition: "opacity 0.18s ease",
+          }}
+        />
+      </motion.div>
+    </CardSection>
+  );
+}
+
+function TaskCard({
   issueId,
   identifier,
   title,
@@ -291,16 +324,7 @@ export default function TaskCard({
         h="100%"
         style={{ display: "flex", flexDirection: "column" }}
       >
-        {imageUrl && (
-          <CardSection mb="md" style={{ overflow: "hidden" }}>
-            <motion.div
-              whileHover={{ scale: 1.04 }}
-              transition={{ duration: 0.4, ease: "easeOut" }}
-            >
-              <Image src={imageUrl} height={160} alt={title} />
-            </motion.div>
-          </CardSection>
-        )}
+        {imageUrl && <TaskPreviewImage src={imageUrl} title={title} />}
 
         <Group justify="space-between" align="flex-start" mb="xs">
           <Group gap="xs" style={{ flexWrap: "wrap" }} align="center">
@@ -371,3 +395,5 @@ export default function TaskCard({
     </HoverLift>
   );
 }
+
+export default memo(TaskCard);

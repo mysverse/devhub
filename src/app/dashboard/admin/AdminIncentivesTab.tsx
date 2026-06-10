@@ -23,7 +23,6 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { Check, Play, RefreshCw, Save, ShieldAlert, X } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
@@ -121,7 +120,6 @@ export default function AdminIncentivesTab({
   config: IncentiveConfigData;
   awards: AdminIncentiveAwardData[];
 }) {
-  const router = useRouter();
   const [form, setForm] = useState(config);
   const [excludedLabels, setExcludedLabels] = useState(
     config.excludedLabels.join(", "),
@@ -223,7 +221,6 @@ export default function AdminIncentivesTab({
     }
 
     toast.success("Incentive config saved");
-    router.refresh();
   }
 
   async function handleRunWeek() {
@@ -238,7 +235,6 @@ export default function AdminIncentivesTab({
 
     setLastRunResult(result);
     toast.success(`Evaluation complete for ${result.weekKey}`);
-    router.refresh();
   }
 
   async function handleRelease() {
@@ -249,7 +245,6 @@ export default function AdminIncentivesTab({
     toast.success(
       `Released ${result.released} award${result.released === 1 ? "" : "s"}`,
     );
-    router.refresh();
   }
 
   async function handleApproveHeld(awardId: string) {
@@ -259,7 +254,6 @@ export default function AdminIncentivesTab({
       return;
     }
     toast.success("Award approved");
-    router.refresh();
   }
 
   function requestAction(awardId: string, kind: "cancel" | "clawback") {
@@ -293,7 +287,6 @@ export default function AdminIncentivesTab({
       actionKind === "clawback" ? "Clawback queued" : "Award cancelled",
     );
     closeModal();
-    router.refresh();
   }
 
   return (

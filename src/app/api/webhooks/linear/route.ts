@@ -100,6 +100,10 @@ export async function POST(req: Request) {
       if (assigneeLinearId) {
         revalidateTag(TAGS.userIssues(assigneeLinearId), { expire: 0 });
       }
+      const previousAssigneeId = payload.updatedFrom?.assigneeId;
+      if (previousAssigneeId && previousAssigneeId !== assigneeLinearId) {
+        revalidateTag(TAGS.userIssues(previousAssigneeId), { expire: 0 });
+      }
       if (issueCompletion?.userId) {
         revalidateTag(TAGS.incentiveProgress(issueCompletion.userId), {
           expire: 0,

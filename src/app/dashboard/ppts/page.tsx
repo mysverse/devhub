@@ -28,8 +28,8 @@ import {
 import { LinearReauthRequiredError } from "@/lib/linear";
 import { getPptBoardIssuesForUser } from "@/lib/linear-data";
 import type { PptBoardIssueDTO } from "@/lib/linear-queries";
-import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
+import { ensureUserProfile } from "@/lib/user-profile";
 import MyPptRequests from "./MyPptRequests";
 import PptRequestButton from "./PptRequestButton";
 
@@ -500,12 +500,13 @@ export default function PPTsPage() {
 }
 
 async function PPTsPageContent() {
-  const { userId } = await getSession();
+  const { userId, user } = await getSession();
   if (!userId) redirect("/");
 
-  const userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    select: { paymentMethod: true, linearId: true },
+  const userProfile = await ensureUserProfile({
+    userId,
+    name: user?.name,
+    email: user?.email,
   });
   const userCurrency = getCurrencyForPaymentMethod(
     userProfile?.paymentMethod ?? "PAYPAL",

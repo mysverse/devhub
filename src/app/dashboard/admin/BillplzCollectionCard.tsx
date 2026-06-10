@@ -14,6 +14,7 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { createBillplzCollection } from "./actions";
 
 export default function BillplzCollectionCard({
@@ -76,6 +77,8 @@ export default function BillplzCollectionCard({
         onClose={close}
         title="Create Billplz Collection"
         centered
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
       >
         <Stack gap="md">
           <TextInput

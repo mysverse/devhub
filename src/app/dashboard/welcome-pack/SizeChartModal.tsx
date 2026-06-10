@@ -3,6 +3,7 @@
 import { Box, Modal, Stack, Text, ThemeIcon } from "@mantine/core";
 import { Ruler } from "lucide-react";
 import { motion } from "motion/react";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 
 export default function SizeChartModal({
   opened,
@@ -32,7 +33,8 @@ export default function SizeChartModal({
       size="lg"
       centered
       radius="md"
-      overlayProps={{ blur: 4 }}
+      transitionProps={MODAL_TRANSITION}
+      overlayProps={{ ...OVERLAY_PROPS }}
     >
       {imageUrl ? (
         <motion.div

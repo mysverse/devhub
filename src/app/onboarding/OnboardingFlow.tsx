@@ -43,7 +43,12 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
-import { SPRING, StepTransition } from "@/components/animations";
+import {
+  MODAL_TRANSITION,
+  OVERLAY_PROPS,
+  SPRING,
+  StepTransition,
+} from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 import {
@@ -796,7 +801,13 @@ function OnboardingCoiEntries({
         </Stack>
       )}
 
-      <Modal opened={opened} onClose={close} title="Add Competing Commitment">
+      <Modal
+        opened={opened}
+        onClose={close}
+        title="Add Competing Commitment"
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
+      >
         <Stack gap="md">
           <TextInput
             label="Organization Name"

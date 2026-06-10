@@ -21,6 +21,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Check, RefreshCw, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   approveMonthlyBonus,
@@ -444,6 +445,8 @@ export default function AdminBonusesTab({
         onClose={closeRejectModal}
         title="Reject bonus item"
         centered
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
       >
         <Stack>
           <Textarea

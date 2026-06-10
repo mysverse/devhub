@@ -20,7 +20,11 @@ import { Bell, X } from "lucide-react";
 import { motion } from "motion/react";
 import { memo, useState } from "react";
 import { toast } from "sonner";
-import { SPRING } from "@/components/animations";
+import {
+  MODAL_TRANSITION,
+  OVERLAY_PROPS,
+  SPRING,
+} from "@/components/animations";
 import ConfirmModal from "@/components/ConfirmModal";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
@@ -652,7 +656,8 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
         title="Notify Payment Issue"
         centered
         radius="md"
-        overlayProps={{ blur: 4 }}
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={{ ...OVERLAY_PROPS }}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">

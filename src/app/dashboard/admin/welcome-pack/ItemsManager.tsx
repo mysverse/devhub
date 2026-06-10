@@ -24,6 +24,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import ConfirmModal from "@/components/ConfirmModal";
 import {
   deleteWelcomePackItem,
@@ -325,6 +326,8 @@ function ItemEditorModal({
       title={item ? `Edit ${item.name}` : "New item"}
       size="lg"
       centered
+      transitionProps={MODAL_TRANSITION}
+      overlayProps={OVERLAY_PROPS}
     >
       <Stack gap="md">
         <TextInput

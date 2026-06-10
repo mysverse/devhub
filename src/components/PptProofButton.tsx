@@ -9,6 +9,7 @@ import {
   retryPptPayoutCheck,
   submitPptProof,
 } from "@/app/dashboard/ppts/actions";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
 
 export default function PptProofButton({
@@ -100,7 +101,8 @@ export default function PptProofButton({
         title="Submit PPT proof"
         centered
         radius="md"
-        overlayProps={{ blur: 4 }}
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={{ ...OVERLAY_PROPS }}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">

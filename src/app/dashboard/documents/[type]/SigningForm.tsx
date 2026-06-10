@@ -23,6 +23,7 @@ import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { signDocument } from "../actions";
 
 type CoiDraft = {
@@ -275,7 +276,13 @@ function CoiEntriesEditor({
         )}
       </Stack>
 
-      <Modal opened={opened} onClose={close} title="Add Competing Commitment">
+      <Modal
+        opened={opened}
+        onClose={close}
+        title="Add Competing Commitment"
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
+      >
         <Stack gap="md">
           <TextInput
             label="Organization Name"

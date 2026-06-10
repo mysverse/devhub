@@ -18,7 +18,11 @@ import { ExternalLink, RotateCw, ShieldCheck, X } from "lucide-react";
 import { motion } from "motion/react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { SPRING } from "@/components/animations";
+import {
+  MODAL_TRANSITION,
+  OVERLAY_PROPS,
+  SPRING,
+} from "@/components/animations";
 import {
   clearPptProofOverrideAsAdmin,
   overridePptProofAsAdmin,
@@ -323,6 +327,8 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
         onClose={() => setOverrideOpen(false)}
         title="Approve PPT without assignee proof"
         centered
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
       >
         <Stack gap="md">
           <Text size="sm" c="dimmed">

@@ -18,6 +18,7 @@ import { useDisclosure } from "@mantine/hooks";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { addCoiEntry, removeCoiEntry, updateCoiEntry } from "./actions";
 
 type CoiEntryData = {
@@ -238,6 +239,8 @@ function CoiEntriesSection({ entries }: { entries: CoiEntryData[] }) {
         opened={opened}
         onClose={close}
         title={editingEntry ? "Edit Entry" : "Add Competing Commitment"}
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
       >
         <Stack gap="md">
           <TextInput

@@ -12,6 +12,7 @@ import {
 } from "@mantine/core";
 import { TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 
 type ConfirmTone = "danger" | "warning" | "neutral";
 
@@ -79,7 +80,8 @@ export default function ConfirmModal({
       title={title}
       centered
       radius="md"
-      overlayProps={{ blur: 4 }}
+      transitionProps={MODAL_TRANSITION}
+      overlayProps={{ ...OVERLAY_PROPS }}
     >
       <Stack gap="md">
         <Group align="flex-start" wrap="nowrap" gap="sm">

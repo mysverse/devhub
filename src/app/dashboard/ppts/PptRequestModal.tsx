@@ -31,7 +31,12 @@ import {
 import { motion } from "motion/react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { SPRING, StepTransition } from "@/components/animations";
+import {
+  MODAL_TRANSITION,
+  OVERLAY_PROPS,
+  SPRING,
+  StepTransition,
+} from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import {
@@ -241,7 +246,8 @@ export default function PptRequestModal({
       centered
       size="lg"
       radius="md"
-      overlayProps={{ blur: 4 }}
+      transitionProps={MODAL_TRANSITION}
+      overlayProps={{ ...OVERLAY_PROPS }}
     >
       <Stack gap="md">
         <Stepper

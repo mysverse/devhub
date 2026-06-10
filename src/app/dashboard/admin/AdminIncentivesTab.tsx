@@ -25,6 +25,7 @@ import { useDisclosure } from "@mantine/hooks";
 import { Check, Play, RefreshCw, Save, ShieldAlert, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   buildAdminIncentiveSummary,
@@ -1091,6 +1092,8 @@ export default function AdminIncentivesTab({
         title={actionKind === "clawback" ? "Request clawback" : "Cancel award"}
         centered
         radius="md"
+        transitionProps={MODAL_TRANSITION}
+        overlayProps={OVERLAY_PROPS}
       >
         <Stack gap="md">
           {actionAward && actionKind && (

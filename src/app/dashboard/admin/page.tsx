@@ -6,8 +6,7 @@ import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
-import { getUserWeeklyUsage } from "@/lib/credit-limit";
-import type { CurrencyCode } from "@/lib/currency";
+import { getWeeklyUsageForUsers } from "@/lib/credit-limit";
 import { getIncentiveConfig } from "@/lib/incentives";
 import {
   getLinearClient,
@@ -172,6 +171,7 @@ export default async function AdminPage() {
         },
       },
       orderBy: { createdAt: "asc" },
+      take: 100,
     }),
     prisma.transaction.findMany({
       where: { status: "PAID" },
@@ -217,6 +217,7 @@ export default async function AdminPage() {
         },
       },
       orderBy: { createdAt: "asc" },
+      take: 100,
     }),
     getBonusConfig(),
     getIncentiveConfig(),
@@ -247,6 +248,7 @@ export default async function AdminPage() {
         },
       },
       orderBy: [{ period: "asc" }, { completedAt: "asc" }],
+      take: 100,
     }),
     prisma.kycVerification.count({
       where: { status: "PENDING" },
@@ -308,25 +310,13 @@ export default async function AdminPage() {
   const callbackUrl = `${getBaseUrl()}/api/webhooks/billplz`;
 
   // Compute credit limit usage per unique userId+currency for pending transactions
-  const creditUsageMap = new Map<
-    string,
-    { used: number; limit: number; remaining: number }
-  >();
-  const uniqueUserCurrencies = new Set(
+  const creditUsageMap = await getWeeklyUsageForUsers(
     pendingTransactions
       .filter((tx) => tx.source === "PPT")
-      .map((tx) => `${tx.userId}:${tx.currency}`),
-  );
-  await Promise.all(
-    [...uniqueUserCurrencies].map(async (key) => {
-      const [uid, curr] = key.split(":");
-      try {
-        const usage = await getUserWeeklyUsage(uid, curr as CurrencyCode);
-        creditUsageMap.set(key, usage);
-      } catch {
-        // Credit limit data is non-critical
-      }
-    }),
+      .map((tx) => ({
+        userId: tx.userId,
+        currency: tx.currency === "ROBUX" ? "ROBUX" : "MYR",
+      })),
   );
 
   const missingLinearTitleIssueIds = [

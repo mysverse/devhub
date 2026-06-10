@@ -64,17 +64,35 @@ export const getAssignedActiveIssuesForUser = cache(
     getAssignedActiveIssuesCached(userId, linearId),
 );
 
+let warnedNoServiceClient = false;
+function serviceClientOrWarn() {
+  const client = getLinearServiceClient();
+  if (!client && !warnedNoServiceClient) {
+    warnedNoServiceClient = true;
+    console.warn(
+      "[linear-data] LINEAR_SERVICE_API_KEY is not set — workspace PPT data is NOT cached; falling back to per-user live Linear fetches.",
+    );
+  }
+  return client;
+}
+
+// Note: the userId React-cache key only matters for the fallback path;
+// the service path is workspace-scoped by design.
 export const getLeaderboardIssuesForUser = cache(async (userId: string) => {
-  if (getLinearServiceClient()) return getLeaderboardIssuesCached();
+  if (serviceClientOrWarn()) return getLeaderboardIssuesCached();
   return withLinearFallback(userId, fetchLeaderboardIssues);
 });
 
+// Note: the userId React-cache key only matters for the fallback path;
+// the service path is workspace-scoped by design.
 export const getSuggestedPptsForUser = cache(async (userId: string) => {
-  if (getLinearServiceClient()) return getSuggestedPptsCached();
+  if (serviceClientOrWarn()) return getSuggestedPptsCached();
   return withLinearFallback(userId, fetchSuggestedPpts);
 });
 
+// Note: the userId React-cache key only matters for the fallback path;
+// the service path is workspace-scoped by design.
 export const getPptBoardIssuesForUser = cache(async (userId: string) => {
-  if (getLinearServiceClient()) return getPptBoardIssuesCached();
+  if (serviceClientOrWarn()) return getPptBoardIssuesCached();
   return withLinearFallback(userId, fetchPptBoardIssues);
 });

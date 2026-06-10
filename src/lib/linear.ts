@@ -162,6 +162,27 @@ export async function withLinearFallback<T>(
       throw error;
     }
     if (isAuthError(error)) {
+      // One in-place recovery attempt: the React-cached client may hold a stale
+      // token. Try refreshing before giving up — this restores the old per-call
+      // recovery behaviour where a fresh token was read each time.
+      const account = await prisma.account.findFirst({
+        where: { userId, providerId: "linear" },
+        select: { id: true, refreshToken: true },
+      });
+      if (account?.refreshToken) {
+        const newToken = await refreshLinearToken(
+          account.id,
+          account.refreshToken,
+        );
+        if (newToken) {
+          try {
+            return await fn(new LinearClient({ accessToken: newToken }));
+          } catch (retryError) {
+            if (!isAuthError(retryError)) throw retryError;
+            // Fall through to null-and-throw
+          }
+        }
+      }
       // Invalidate the stored token so reauth is triggered
       await prisma.account.updateMany({
         where: { userId, providerId: "linear" },

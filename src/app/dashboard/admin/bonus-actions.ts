@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { requireAdmin } from "@/lib/authz";
 import {
   DEFAULT_BONUS_EXCLUDED_LABELS,
@@ -8,6 +8,7 @@ import {
   getBonusConfig,
   syncBonusCandidateFromLinearSdkIssue,
 } from "@/lib/bonus";
+import { TAGS } from "@/lib/cache-tags";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
@@ -70,6 +71,7 @@ export async function updateBonusConfig(data: {
   });
 
   revalidateBonusPaths();
+  updateTag(TAGS.bonusConfig);
   return { success: true };
 }
 

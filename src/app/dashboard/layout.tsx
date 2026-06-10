@@ -4,21 +4,23 @@ import { hasAdminAccess } from "@/lib/authz";
 import { getUserProfile } from "@/lib/user-profile";
 import DashboardLayoutClient from "./DashboardLayoutClient";
 
-export default async function DashboardLayout({
+async function getDashboardAdminStatus() {
+  const { userId } = await getSession();
+  if (!userId) return false;
+
+  const userProfile = await getUserProfile(userId);
+  if (!userProfile) redirect("/onboarding");
+  return hasAdminAccess(userProfile);
+}
+
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { userId } = await getSession();
-  let isAdmin = false;
-
-  if (userId) {
-    const userProfile = await getUserProfile(userId);
-    if (!userProfile) redirect("/onboarding");
-    isAdmin = hasAdminAccess(userProfile);
-  }
-
   return (
-    <DashboardLayoutClient isAdmin={isAdmin}>{children}</DashboardLayoutClient>
+    <DashboardLayoutClient adminPromise={getDashboardAdminStatus()}>
+      {children}
+    </DashboardLayoutClient>
   );
 }

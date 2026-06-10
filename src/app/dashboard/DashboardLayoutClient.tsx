@@ -21,12 +21,11 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { LogOut } from "lucide-react";
 import { motion } from "motion/react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import BonusNotificationPoller from "@/components/BonusNotificationPoller";
-import IncentiveNotificationPoller from "@/components/IncentiveNotificationPoller";
+import { Suspense, use } from "react";
 import { Logo } from "@/components/Logo";
-import PptNotificationPoller from "@/components/PptNotificationPoller";
+import NotificationPoller from "@/components/NotificationPoller";
 import { signOut, useSession } from "@/lib/auth-client";
 
 type NavLink = { href: string; label: string };
@@ -52,6 +51,7 @@ function DesktopNavLink({ link, active }: { link: NavLink; active: boolean }) {
     <UnstyledButton
       component={Link}
       href={link.href}
+      prefetch
       style={{
         position: "relative",
         padding: "6px 12px",
@@ -72,14 +72,7 @@ function DesktopNavLink({ link, active }: { link: NavLink; active: boolean }) {
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
       )}
-      <Text
-        size="sm"
-        fw={500}
-        c={active ? "blue.4" : undefined}
-        style={{ position: "relative", zIndex: 1 }}
-      >
-        {link.label}
-      </Text>
+      <NavLinkLabel label={link.label} active={active} />
     </UnstyledButton>
   );
 }
@@ -97,6 +90,7 @@ function MobileNavLink({
     <UnstyledButton
       component={Link}
       href={link.href}
+      prefetch
       onClick={onNavigate}
       py="xs"
       px="sm"
@@ -119,31 +113,110 @@ function MobileNavLink({
           transition={{ type: "spring", stiffness: 380, damping: 30 }}
         />
       )}
-      <Text
-        size="sm"
-        fw={500}
-        c={active ? "blue.4" : undefined}
-        style={{ position: "relative", zIndex: 1 }}
-      >
-        {link.label}
-      </Text>
+      <NavLinkLabel label={link.label} active={active} />
     </UnstyledButton>
+  );
+}
+
+function NavLinkLabel({ label, active }: { label: string; active: boolean }) {
+  const { pending } = useLinkStatus();
+
+  return (
+    <Text
+      size="sm"
+      fw={500}
+      c={active ? "blue.4" : undefined}
+      style={{
+        position: "relative",
+        zIndex: 1,
+        opacity: pending ? 0.55 : 1,
+        transition: "opacity 0.18s ease",
+        transitionDelay: pending ? "150ms" : "0ms",
+      }}
+    >
+      {label}
+    </Text>
+  );
+}
+
+function DesktopNavLinks({ links }: { links: NavLink[] }) {
+  const pathname = usePathname();
+
+  return (
+    <>
+      {links.map((link) => (
+        <DesktopNavLink
+          key={link.href}
+          link={link}
+          active={isActive(pathname, link.href)}
+        />
+      ))}
+    </>
+  );
+}
+
+function DesktopNavLinksWithAdmin({
+  adminPromise,
+}: {
+  adminPromise: Promise<boolean>;
+}) {
+  const isAdmin = use(adminPromise);
+  return (
+    <DesktopNavLinks
+      links={isAdmin ? [...BASE_LINKS, ADMIN_LINK] : BASE_LINKS}
+    />
+  );
+}
+
+function MobileNavLinks({
+  links,
+  onNavigate,
+}: {
+  links: NavLink[];
+  onNavigate: () => void;
+}) {
+  const pathname = usePathname();
+
+  return (
+    <>
+      {links.map((link) => (
+        <MobileNavLink
+          key={link.href}
+          link={link}
+          active={isActive(pathname, link.href)}
+          onNavigate={onNavigate}
+        />
+      ))}
+    </>
+  );
+}
+
+function MobileNavLinksWithAdmin({
+  adminPromise,
+  onNavigate,
+}: {
+  adminPromise: Promise<boolean>;
+  onNavigate: () => void;
+}) {
+  const isAdmin = use(adminPromise);
+  return (
+    <MobileNavLinks
+      links={isAdmin ? [...BASE_LINKS, ADMIN_LINK] : BASE_LINKS}
+      onNavigate={onNavigate}
+    />
   );
 }
 
 export default function DashboardLayoutClient({
   children,
-  isAdmin,
+  adminPromise,
 }: {
   children: React.ReactNode;
-  isAdmin: boolean;
+  adminPromise: Promise<boolean>;
 }) {
   const [opened, { toggle, close }] = useDisclosure();
   const { data: session } = useSession();
   const router = useRouter();
-  const pathname = usePathname();
-
-  const links: NavLink[] = isAdmin ? [...BASE_LINKS, ADMIN_LINK] : BASE_LINKS;
 
   return (
     <AppShell
@@ -180,13 +253,9 @@ export default function DashboardLayoutClient({
             </Group>
 
             <Group gap={4} visibleFrom="sm">
-              {links.map((link) => (
-                <DesktopNavLink
-                  key={link.href}
-                  link={link}
-                  active={isActive(pathname, link.href)}
-                />
-              ))}
+              <Suspense fallback={<DesktopNavLinks links={BASE_LINKS} />}>
+                <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
+              </Suspense>
             </Group>
 
             <Menu shadow="md" width={200} transitionProps={{ duration: 160 }}>
@@ -221,14 +290,14 @@ export default function DashboardLayoutClient({
 
       <AppShellNavbar p="md">
         <Stack gap={4}>
-          {links.map((link) => (
-            <MobileNavLink
-              key={link.href}
-              link={link}
-              active={isActive(pathname, link.href)}
+          <Suspense
+            fallback={<MobileNavLinks links={BASE_LINKS} onNavigate={close} />}
+          >
+            <MobileNavLinksWithAdmin
+              adminPromise={adminPromise}
               onNavigate={close}
             />
-          ))}
+          </Suspense>
         </Stack>
       </AppShellNavbar>
 
@@ -237,9 +306,7 @@ export default function DashboardLayoutClient({
           {children}
         </Container>
       </AppShellMain>
-      <BonusNotificationPoller />
-      <IncentiveNotificationPoller />
-      <PptNotificationPoller />
+      <NotificationPoller />
     </AppShell>
   );
 }

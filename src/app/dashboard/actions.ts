@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/auth-utils";
+import { TAGS } from "@/lib/cache-tags";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 
 export async function claimIssue(issueId: string) {
@@ -18,6 +19,8 @@ export async function claimIssue(issueId: string) {
 
     revalidatePath("/dashboard/ppts");
     revalidatePath("/dashboard");
+    updateTag(TAGS.workspacePpts);
+    updateTag(TAGS.userIssues(viewer.id));
 
     return { success: true };
   } catch (e) {

@@ -1,6 +1,8 @@
 import type { Issue } from "@linear/sdk";
 import type { BonusCandidate, BonusConfig } from "@prisma/client";
+import { cacheLife, cacheTag } from "next/cache";
 import { cache } from "react";
+import { TAGS } from "@/lib/cache-tags";
 import { type CurrencyCode, getCurrencyForPaymentMethod } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 
@@ -58,7 +60,12 @@ export function formatBonusPeriod(period: string | null | undefined) {
   });
 }
 
-export const getBonusConfig = cache(async (): Promise<BonusConfig> => {
+async function getBonusConfigCached(): Promise<BonusConfig> {
+  "use cache";
+
+  cacheTag(TAGS.bonusConfig);
+  cacheLife({ revalidate: 3600, expire: 86_400 });
+
   const existing = await prisma.bonusConfig.findUnique({
     where: { id: "default" },
   });
@@ -74,7 +81,9 @@ export const getBonusConfig = cache(async (): Promise<BonusConfig> => {
       excludedLabels: DEFAULT_BONUS_EXCLUDED_LABELS,
     },
   });
-});
+}
+
+export const getBonusConfig = cache(getBonusConfigCached);
 
 export function getEffectiveExcludedLabels(
   config: Pick<BonusConfig, "excludedLabels">,

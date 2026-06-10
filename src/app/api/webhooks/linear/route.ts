@@ -1,6 +1,8 @@
 import crypto from "node:crypto";
+import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { syncBonusCandidateFromLinearIssue } from "@/lib/bonus";
+import { TAGS } from "@/lib/cache-tags";
 import { recordIssueCompletionFromLinear } from "@/lib/incentives";
 import {
   evaluatePptIssueFromWebhook,
@@ -31,6 +33,7 @@ export async function POST(req: Request) {
     payload.type === "Issue"
   ) {
     const issueData = payload.data;
+    const labels = Array.isArray(issueData.labels) ? issueData.labels : [];
 
     await evaluatePptIssueFromWebhook(issueData);
 
@@ -55,10 +58,10 @@ export async function POST(req: Request) {
             displayName: issueData.assignee.displayName ?? null,
           }
         : null,
-      labels: Array.isArray(issueData.labels) ? issueData.labels : [],
+      labels,
     });
 
-    await recordIssueCompletionFromLinear({
+    const issueCompletion = await recordIssueCompletionFromLinear({
       id: issueData.id,
       identifier: issueData.identifier || null,
       title: issueData.title || null,
@@ -82,8 +85,29 @@ export async function POST(req: Request) {
             displayName: issueData.assignee.displayName ?? null,
           }
         : null,
-      labels: Array.isArray(issueData.labels) ? issueData.labels : [],
+      labels,
     });
+
+    try {
+      const hasPptLabel = labels.some(
+        (label: { name?: string | null }) =>
+          label.name?.trim().toUpperCase() === "PPT",
+      );
+      if (hasPptLabel) {
+        revalidateTag(TAGS.workspacePpts, { expire: 0 });
+      }
+      const assigneeLinearId = issueData.assignee?.id;
+      if (assigneeLinearId) {
+        revalidateTag(TAGS.userIssues(assigneeLinearId), { expire: 0 });
+      }
+      if (issueCompletion?.userId) {
+        revalidateTag(TAGS.incentiveProgress(issueCompletion.userId), {
+          expire: 0,
+        });
+      }
+    } catch (error) {
+      console.error("[linear-webhook] Failed to revalidate cache tags:", error);
+    }
   }
 
   if (

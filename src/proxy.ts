@@ -1,5 +1,5 @@
+import { getSessionCookie } from "better-auth/cookies";
 import { type NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
 import { normalizeSocialPath } from "@/lib/social-previews";
 
 const protectedPaths = ["/dashboard", "/settings", "/onboarding"];
@@ -44,11 +44,7 @@ export default async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  const session = await auth.api.getSession({
-    headers: req.headers,
-  });
-
-  if (!session) {
+  if (!getSessionCookie(req)) {
     return NextResponse.redirect(new URL("/sign-in", req.url));
   }
 

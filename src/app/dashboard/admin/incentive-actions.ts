@@ -1,7 +1,8 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { requireAdmin } from "@/lib/authz";
+import { TAGS } from "@/lib/cache-tags";
 import {
   evaluateWeeklyIncentives,
   getIncentiveConfig,
@@ -139,6 +140,7 @@ export async function updateIncentiveConfig(input: IncentiveConfigInput) {
     }
 
     revalidateIncentivePaths();
+    updateTag(TAGS.incentiveConfig);
     return { success: true };
   } catch (error) {
     return {

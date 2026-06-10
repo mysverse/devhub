@@ -3,9 +3,6 @@ import { ImageResponse } from "next/og";
 import { siteConfig } from "@/lib/config";
 import { getSocialPreview, normalizeSocialPath } from "@/lib/social-previews";
 
-export const runtime = "nodejs";
-export const revalidate = 86400;
-
 const fontFiles = [
   { file: "Geist-Regular.ttf", weight: 400 },
   { file: "Geist-SemiBold.ttf", weight: 600 },

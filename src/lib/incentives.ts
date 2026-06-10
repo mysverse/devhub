@@ -6,10 +6,12 @@ import type {
   IncentiveType,
   Prisma,
 } from "@prisma/client";
+import { cacheLife, cacheTag } from "next/cache";
 import { cache, createElement } from "react";
 import IncentiveAdminDigest from "@/emails/IncentiveAdminDigest";
 import IncentiveEarned from "@/emails/IncentiveEarned";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
+import { TAGS } from "@/lib/cache-tags";
 import {
   type CurrencyCode,
   formatAmount,
@@ -457,7 +459,12 @@ export function formatAwardType(type: IncentiveType | string) {
   return type;
 }
 
-export const getIncentiveConfig = cache(async (): Promise<IncentiveConfig> => {
+async function getIncentiveConfigCached(): Promise<IncentiveConfig> {
+  "use cache";
+
+  cacheTag(TAGS.incentiveConfig);
+  cacheLife({ revalidate: 3600, expire: 86_400 });
+
   const existing = await prisma.incentiveConfig.findUnique({
     where: { id: "default" },
   });
@@ -466,7 +473,9 @@ export const getIncentiveConfig = cache(async (): Promise<IncentiveConfig> => {
   return prisma.incentiveConfig.create({
     data: { id: "default" },
   });
-});
+}
+
+export const getIncentiveConfig = cache(getIncentiveConfigCached);
 
 export async function recordIssueCompletionFromLinear(
   input: LinearIncentiveIssueInput,
@@ -1809,6 +1818,11 @@ export interface UserWeeklyIncentiveProgress {
 export async function getUserWeeklyIncentiveProgress(
   userId: string,
 ): Promise<UserWeeklyIncentiveProgress> {
+  "use cache";
+
+  cacheTag(TAGS.incentiveProgress(userId));
+  cacheLife({ revalidate: 300, expire: 3600 });
+
   const config = await getIncentiveConfig();
   const weekKey = getWeekKey(new Date());
   const activatedAt = config.activatedAt ?? new Date(0);

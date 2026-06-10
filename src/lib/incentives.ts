@@ -465,13 +465,10 @@ async function getIncentiveConfigCached(): Promise<IncentiveConfig> {
   cacheTag(TAGS.incentiveConfig);
   cacheLife({ revalidate: 3600, expire: 86_400 });
 
-  const existing = await prisma.incentiveConfig.findUnique({
+  return prisma.incentiveConfig.upsert({
     where: { id: "default" },
-  });
-  if (existing) return existing;
-
-  return prisma.incentiveConfig.create({
-    data: { id: "default" },
+    update: {},
+    create: { id: "default" },
   });
 }
 

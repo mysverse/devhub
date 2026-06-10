@@ -66,14 +66,10 @@ async function getBonusConfigCached(): Promise<BonusConfig> {
   cacheTag(TAGS.bonusConfig);
   cacheLife({ revalidate: 3600, expire: 86_400 });
 
-  const existing = await prisma.bonusConfig.findUnique({
+  return prisma.bonusConfig.upsert({
     where: { id: "default" },
-  });
-
-  if (existing) return existing;
-
-  return prisma.bonusConfig.create({
-    data: {
+    update: {},
+    create: {
       id: "default",
       enabled: true,
       myrRatePerPoint: 20,

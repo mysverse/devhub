@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { createElement } from "react";
 import PptRequestApproved from "@/emails/PptRequestApproved";
 import PptRequestRejected from "@/emails/PptRequestRejected";
 import { requireAdmin } from "@/lib/authz";
+import { TAGS } from "@/lib/cache-tags";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
@@ -138,6 +139,10 @@ export async function approvePptRequest(
 
       revalidatePath("/dashboard/admin");
       revalidatePath("/dashboard/ppts");
+      updateTag(TAGS.workspacePpts);
+      if (options.assignRequester && request.requester.linearId) {
+        updateTag(TAGS.userIssues(request.requester.linearId));
+      }
 
       return { success: true };
     });

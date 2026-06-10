@@ -200,7 +200,7 @@ export async function fetchAssignedActiveIssues(
   >(
     client,
     `
-      query DevHubAssignedActiveIssues($linearId: String!) {
+      query DevHubAssignedActiveIssues($linearId: ID!) {
         issues(
           first: 50
           filter: {
@@ -283,7 +283,7 @@ export async function fetchIssuesByIds(client: LinearClient, ids: string[]) {
   >(
     client,
     `
-      query DevHubIssuesByIds($ids: [String!]!, $first: Int!) {
+      query DevHubIssuesByIds($ids: [ID!]!, $first: Int!) {
         issues(first: $first, filter: { id: { in: $ids } }) {
           nodes { ${ISSUE_FIELDS} }
         }

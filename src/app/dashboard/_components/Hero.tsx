@@ -115,7 +115,6 @@ export default async function Hero({
 }: Props) {
   const [
     { amount: activePptPendingAmount, count },
-    approvedBonusBalance,
     transactionTotals,
     creditUsage,
   ] = await Promise.all([
@@ -123,15 +122,6 @@ export default async function Hero({
       userId,
       linearId: userProfile.linearId,
       currency,
-    }),
-    prisma.transaction.aggregate({
-      where: {
-        userId,
-        currency,
-        source: "BONUS",
-        status: "PENDING",
-      },
-      _sum: { amount: true },
     }),
     prisma.transaction.groupBy({
       by: ["status", "source"],
@@ -151,6 +141,10 @@ export default async function Hero({
   const totalEarned = transactionTotals
     .filter((tx) => tx.status === "PAID")
     .reduce((sum, tx) => sum + (tx._sum.amount ?? 0), 0);
+  const approvedBonusBalance =
+    transactionTotals.find(
+      (t) => t.status === "PENDING" && t.source === "BONUS",
+    )?._sum.amount ?? 0;
   const { weekEnd } = getWeekBounds();
   const firstName = user.name?.split(" ")[0] ?? "there";
   const todayLabel = new Date().toLocaleDateString("en-US", {
@@ -172,7 +166,7 @@ export default async function Hero({
       pendingAmount={pendingAmount}
       activeTaskCount={count}
       totalEarned={totalEarned}
-      approvedBonusBalance={approvedBonusBalance._sum.amount ?? 0}
+      approvedBonusBalance={approvedBonusBalance}
       weeklyUsed={creditUsage.used}
       weeklyLimit={creditUsage.limit}
       weeklyResetLabel={weeklyResetLabel}

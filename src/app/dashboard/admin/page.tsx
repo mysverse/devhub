@@ -9,7 +9,12 @@ import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getUserWeeklyUsage } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getIncentiveConfig } from "@/lib/incentives";
-import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
+import {
+  getLinearClient,
+  getLinearServiceClient,
+  LinearReauthRequiredError,
+} from "@/lib/linear";
+import { fetchIssuesByIds } from "@/lib/linear-queries";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -302,16 +307,6 @@ export default async function AdminPage() {
       : "none";
   const callbackUrl = `${getBaseUrl()}/api/webhooks/billplz`;
 
-  let linearClient: Awaited<ReturnType<typeof getLinearClient>>;
-  try {
-    linearClient = await getLinearClient(userId);
-  } catch (e) {
-    if (e instanceof LinearReauthRequiredError) {
-      redirect("/auth/reauth-linear?returnTo=/dashboard/admin");
-    }
-    throw e;
-  }
-
   // Compute credit limit usage per unique userId+currency for pending transactions
   const creditUsageMap = new Map<
     string,
@@ -334,6 +329,39 @@ export default async function AdminPage() {
     }),
   );
 
+  const missingLinearTitleIssueIds = [
+    ...new Set(
+      pendingTransactions
+        .filter(
+          (tx) =>
+            tx.source === "PPT" &&
+            tx.linearIssueId &&
+            !tx.linearIssueId.includes(" ") &&
+            !tx.linearIssueTitle,
+        )
+        .map((tx) => tx.linearIssueId as string),
+    ),
+  ];
+  const linearIssueTitles = new Map<string, string>();
+  if (missingLinearTitleIssueIds.length > 0) {
+    try {
+      const linearClient =
+        getLinearServiceClient() ?? (await getLinearClient(userId));
+      const issues = await fetchIssuesByIds(
+        linearClient,
+        missingLinearTitleIssueIds,
+      );
+      for (const issue of issues) {
+        linearIssueTitles.set(issue.id, `${issue.identifier} - ${issue.title}`);
+      }
+    } catch (e) {
+      if (e instanceof LinearReauthRequiredError) {
+        redirect("/auth/reauth-linear?returnTo=/dashboard/admin");
+      }
+      console.error("Failed to fetch Linear issue titles for admin:", e);
+    }
+  }
+
   // Enrich pending transactions with Linear issue details
   const pending: PayoutTransaction[] = await Promise.all(
     pendingTransactions.map(async (tx: TransactionWithUser) => {
@@ -345,12 +373,7 @@ export default async function AdminPage() {
         !tx.linearIssueId.includes(" ") &&
         !tx.linearIssueTitle
       ) {
-        try {
-          const issue = await linearClient.issue(tx.linearIssueId);
-          taskTitle = `${issue.identifier} - ${issue.title}`;
-        } catch {
-          console.error("Failed to fetch issue details for", tx.linearIssueId);
-        }
+        taskTitle = linearIssueTitles.get(tx.linearIssueId) ?? taskTitle;
       }
 
       const creditUsage = creditUsageMap.get(`${tx.userId}:${tx.currency}`);

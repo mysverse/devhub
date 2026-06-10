@@ -23,10 +23,11 @@ import LinkAnchor from "@/components/LinkAnchor";
 import { formatBonusPeriod } from "@/lib/bonus";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
+import prisma from "@/lib/prisma";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 import styles from "./RecentTransactions.module.css";
 
-type Props = { transactions: Transaction[] };
+type Props = { userId: string };
 
 function toCurrencyCode(currency: string): CurrencyCode {
   return currency === "ROBUX" ? "ROBUX" : "MYR";
@@ -118,10 +119,12 @@ function EmptyTransactions() {
   );
 }
 
-export default function RecentTransactions({ transactions }: Props) {
-  const rows = [...transactions]
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, 10);
+export default async function RecentTransactions({ userId }: Props) {
+  const rows = await prisma.transaction.findMany({
+    where: { userId },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  });
 
   return (
     <FadeIn>

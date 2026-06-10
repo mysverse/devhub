@@ -1,4 +1,3 @@
-import type { Issue } from "@linear/sdk";
 import {
   Alert,
   Badge,
@@ -26,7 +25,9 @@ import {
   formatEstimate,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError } from "@/lib/linear";
+import { getPptBoardIssuesForUser } from "@/lib/linear-data";
+import type { PptBoardIssueDTO } from "@/lib/linear-queries";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import MyPptRequests from "./MyPptRequests";
@@ -35,7 +36,7 @@ import PptRequestButton from "./PptRequestButton";
 export const metadata: Metadata = buildSocialMetadata("/dashboard/ppts");
 
 type EnrichedIssue = {
-  issue: Issue;
+  issue: PptBoardIssueDTO;
   projectId: string | null;
   projectName: string | null;
   teamName: string | null;
@@ -281,32 +282,16 @@ function ProjectSection({
 
 async function PPTList({
   userId,
+  currentLinearId,
   currency,
 }: {
   userId: string;
+  currentLinearId: string | null;
   currency: CurrencyCode;
 }) {
-  let issues: Issue[] = [];
-  let viewerId: string | null = null;
+  let issues: PptBoardIssueDTO[] = [];
   try {
-    const result = await withLinearFallback(userId, async (client) => {
-      const viewer = await client.viewer;
-      const response = await client.issues({
-        first: 50,
-        filter: {
-          state: { type: { in: ["unstarted", "started"] } },
-          labels: { name: { eq: "PPT" } },
-        },
-      });
-      return {
-        viewerId: viewer.id,
-        issues: response.nodes.sort(
-          (a, b) => (b.estimate || 0) - (a.estimate || 0),
-        ),
-      };
-    });
-    viewerId = result.viewerId;
-    issues = result.issues;
+    issues = await getPptBoardIssuesForUser(userId);
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {
       redirect("/auth/reauth-linear?returnTo=/dashboard/ppts");
@@ -335,20 +320,17 @@ async function PPTList({
 
   const enriched: EnrichedIssue[] = await Promise.all(
     issues.map(async (issue) => {
-      const [project, team, assignee, children] = await Promise.all([
-        issue.project,
-        issue.team,
-        issue.assignee,
-        issue.children(),
-      ]);
+      const project = issue.project;
+      const team = issue.team;
+      const assignee = issue.assignee;
 
       if (project && !projectMap.has(project.id)) {
         projectMap.set(project.id, {
           name: project.name,
-          startDate: (project.startDate as string) ?? null,
-          targetDate: (project.targetDate as string) ?? null,
+          startDate: project.startDate,
+          targetDate: project.targetDate,
           progress: project.progress,
-          health: (project.health as string) ?? null,
+          health: project.health,
         });
       }
 
@@ -360,8 +342,8 @@ async function PPTList({
         teamKey: team?.key ?? "other",
         assigneeName: assignee ? assignee.displayName || assignee.name : null,
         assigneeAvatarUrl: assignee?.avatarUrl ?? null,
-        isAssignedToViewer: assignee?.id === viewerId,
-        subIssueCount: children?.nodes?.length ?? 0,
+        isAssignedToViewer: assignee?.id === currentLinearId,
+        subIssueCount: issue.subIssueCount,
       };
     }),
   );
@@ -515,7 +497,7 @@ export default async function PPTsPage() {
 
   const userProfile = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: { paymentMethod: true },
+    select: { paymentMethod: true, linearId: true },
   });
   const userCurrency = getCurrencyForPaymentMethod(
     userProfile?.paymentMethod ?? "PAYPAL",
@@ -535,7 +517,11 @@ export default async function PPTsPage() {
       </Group>
 
       <Suspense fallback={<PPTSkeleton />}>
-        <PPTList userId={userId} currency={userCurrency} />
+        <PPTList
+          userId={userId}
+          currentLinearId={userProfile?.linearId ?? null}
+          currency={userCurrency}
+        />
       </Suspense>
 
       <div style={{ marginTop: "2rem" }}>

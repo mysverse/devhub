@@ -1,11 +1,12 @@
-import type { Issue } from "@linear/sdk";
 import { Sparkles } from "lucide-react";
 import { Carousel } from "motion-plus/react";
 import { redirect } from "next/navigation";
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import type { CurrencyCode } from "@/lib/currency";
-import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError } from "@/lib/linear";
+import { getSuggestedPptsForUser } from "@/lib/linear-data";
+import type { IssueDTO } from "@/lib/linear-queries";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 
 type Props = {
@@ -14,23 +15,10 @@ type Props = {
 };
 
 export default async function SuggestedPPTs({ userId, currency }: Props) {
-  let issues: Issue[] = [];
+  let issues: IssueDTO[] = [];
 
   try {
-    issues = await withLinearFallback(userId, async (client) => {
-      const response = await client.issues({
-        first: 10,
-        filter: {
-          assignee: { null: true },
-          state: { type: { eq: "unstarted" } },
-          labels: { name: { eq: "PPT" } },
-        },
-      });
-
-      return response.nodes.sort(
-        (a, b) => (b.estimate || 0) - (a.estimate || 0),
-      );
-    });
+    issues = await getSuggestedPptsForUser(userId);
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {
       redirect("/auth/reauth-linear?returnTo=/dashboard");

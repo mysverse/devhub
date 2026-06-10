@@ -12,7 +12,8 @@ import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError } from "@/lib/linear";
+import { getLeaderboardIssuesForUser } from "@/lib/linear-data";
 import AnimatedProgressBar from "./AnimatedProgressBar";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 
@@ -157,40 +158,19 @@ export default async function Leaderboard({
   currency,
 }: Props) {
   try {
-    const { enriched: enrichedData } = await withLinearFallback(
-      userId,
-      async (client) => {
-        const response = await client.issues({
-          first: 100,
-          filter: {
-            labels: { name: { eq: "PPT" } },
-            assignee: { null: false },
-          },
-        });
-
-        const enriched = await Promise.all(
-          response.nodes.map(async (issue) => {
-            const [assignee, state] = await Promise.all([
-              issue.assignee,
-              issue.state,
-            ]);
-            return { issue, assignee, stateType: state?.type ?? "unknown" };
-          }),
-        );
-
-        return { enriched };
-      },
-    );
+    const issues = await getLeaderboardIssuesForUser(userId);
 
     const byAssignee = new Map<string, LeaderboardEntry>();
-    for (const { issue, assignee, stateType } of enrichedData) {
+    for (const issue of issues) {
+      const assignee = issue.assignee;
       if (!assignee) continue;
 
       const amount = issue.estimate
         ? estimateToAmount(issue.estimate, currency)
         : 0;
-      const isCompleted = stateType === "completed";
-      const isActive = stateType === "started" || stateType === "unstarted";
+      const isCompleted = issue.stateType === "completed";
+      const isActive =
+        issue.stateType === "started" || issue.stateType === "unstarted";
       const existing = byAssignee.get(assignee.id);
 
       if (existing) {

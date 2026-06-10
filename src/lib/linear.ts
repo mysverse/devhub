@@ -1,4 +1,5 @@
 import { LinearClient } from "@linear/sdk";
+import { cache } from "react";
 import prisma from "./prisma";
 
 export class LinearReauthRequiredError extends Error {
@@ -55,51 +56,59 @@ async function refreshLinearToken(
   }
 }
 
-async function getValidLinearToken(userId: string): Promise<string | null> {
-  const account = await prisma.account.findFirst({
-    where: { userId, providerId: "linear" },
-    select: {
-      id: true,
-      accessToken: true,
-      refreshToken: true,
-      accessTokenExpiresAt: true,
-    },
-  });
+const getValidLinearToken = cache(
+  async (userId: string): Promise<string | null> => {
+    const account = await prisma.account.findFirst({
+      where: { userId, providerId: "linear" },
+      select: {
+        id: true,
+        accessToken: true,
+        refreshToken: true,
+        accessTokenExpiresAt: true,
+      },
+    });
 
-  // No Linear account linked at all
-  if (!account) return null;
+    // No Linear account linked at all
+    if (!account) return null;
 
-  // Account exists but token is missing — needs reauth
-  if (!account.accessToken) {
-    if (!account.refreshToken) {
-      throw new LinearReauthRequiredError();
+    // Account exists but token is missing — needs reauth
+    if (!account.accessToken) {
+      if (!account.refreshToken) {
+        throw new LinearReauthRequiredError();
+      }
+      // Try refreshing
+      const newToken = await refreshLinearToken(
+        account.id,
+        account.refreshToken,
+      );
+      if (!newToken) {
+        throw new LinearReauthRequiredError();
+      }
+      return newToken;
     }
-    // Try refreshing
-    const newToken = await refreshLinearToken(account.id, account.refreshToken);
-    if (!newToken) {
-      throw new LinearReauthRequiredError();
-    }
-    return newToken;
-  }
 
-  // Check if token is expired (with 5-minute buffer)
-  const isExpired =
-    account.accessTokenExpiresAt &&
-    account.accessTokenExpiresAt.getTime() < Date.now() + 5 * 60 * 1000;
+    // Check if token is expired (with 5-minute buffer)
+    const isExpired =
+      account.accessTokenExpiresAt &&
+      account.accessTokenExpiresAt.getTime() < Date.now() + 5 * 60 * 1000;
 
-  if (isExpired) {
-    if (!account.refreshToken) {
-      throw new LinearReauthRequiredError();
+    if (isExpired) {
+      if (!account.refreshToken) {
+        throw new LinearReauthRequiredError();
+      }
+      const newToken = await refreshLinearToken(
+        account.id,
+        account.refreshToken,
+      );
+      if (!newToken) {
+        throw new LinearReauthRequiredError();
+      }
+      return newToken;
     }
-    const newToken = await refreshLinearToken(account.id, account.refreshToken);
-    if (!newToken) {
-      throw new LinearReauthRequiredError();
-    }
-    return newToken;
-  }
 
-  return account.accessToken;
-}
+    return account.accessToken;
+  },
+);
 
 function isAuthError(error: unknown): boolean {
   if (error instanceof Error) {
@@ -114,11 +123,11 @@ function isAuthError(error: unknown): boolean {
   return false;
 }
 
-export async function getLinearToken(userId: string): Promise<string | null> {
-  return getValidLinearToken(userId);
-}
+export const getLinearToken = cache(async (userId: string) =>
+  getValidLinearToken(userId),
+);
 
-export async function getLinearClient(userId: string) {
+export const getLinearClient = cache(async (userId: string) => {
   const token = await getValidLinearToken(userId);
 
   if (token) {
@@ -127,7 +136,7 @@ export async function getLinearClient(userId: string) {
 
   // No Linear account linked — user needs to authenticate
   throw new LinearReauthRequiredError();
-}
+});
 
 export function getLinearServiceClient(): LinearClient | null {
   const apiKey = process.env.LINEAR_SERVICE_API_KEY;

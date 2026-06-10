@@ -6,7 +6,7 @@ import type {
   IncentiveType,
   Prisma,
 } from "@prisma/client";
-import { createElement } from "react";
+import { cache, createElement } from "react";
 import IncentiveAdminDigest from "@/emails/IncentiveAdminDigest";
 import IncentiveEarned from "@/emails/IncentiveEarned";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
@@ -457,7 +457,7 @@ export function formatAwardType(type: IncentiveType | string) {
   return type;
 }
 
-export async function getIncentiveConfig(): Promise<IncentiveConfig> {
+export const getIncentiveConfig = cache(async (): Promise<IncentiveConfig> => {
   const existing = await prisma.incentiveConfig.findUnique({
     where: { id: "default" },
   });
@@ -466,7 +466,7 @@ export async function getIncentiveConfig(): Promise<IncentiveConfig> {
   return prisma.incentiveConfig.create({
     data: { id: "default" },
   });
-}
+});
 
 export async function recordIssueCompletionFromLinear(
   input: LinearIncentiveIssueInput,

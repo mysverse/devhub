@@ -4,8 +4,8 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { getSession } from "@/lib/auth-utils";
 import { getCurrencyForPaymentMethod } from "@/lib/currency";
-import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
+import { ensureUserProfile } from "@/lib/user-profile";
 import ActiveTasks from "./_components/ActiveTasks";
 import Hero from "./_components/Hero";
 import IncentiveProgress from "./_components/IncentiveProgress";
@@ -26,39 +26,11 @@ export default async function DashboardPage() {
   const { userId, user } = await getSession();
   if (!userId) redirect("/");
 
-  let userProfile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    include: { transactions: true },
+  const userProfile = await ensureUserProfile({
+    userId,
+    name: user?.name,
+    email: user?.email,
   });
-
-  if (!userProfile) {
-    userProfile = await prisma.userProfile.create({
-      data: {
-        id: userId,
-        legalName: user?.name ?? null,
-      },
-      include: { transactions: true },
-    });
-  }
-
-  if (!userProfile.linearId) {
-    const linearAccount = await prisma.account.findFirst({
-      where: { userId, providerId: "linear" },
-      select: { accountId: true },
-    });
-
-    if (linearAccount) {
-      userProfile = await prisma.userProfile.update({
-        where: { id: userId },
-        data: {
-          linearId: linearAccount.accountId,
-          linearEmail: user?.email ?? null,
-        },
-        include: { transactions: true },
-      });
-    }
-  }
-
   const userCurrency = getCurrencyForPaymentMethod(userProfile.paymentMethod);
 
   return (
@@ -107,7 +79,9 @@ export default async function DashboardPage() {
           />
         </Suspense>
 
-        <RecentTransactions transactions={userProfile.transactions} />
+        <Suspense fallback={null}>
+          <RecentTransactions userId={userId} />
+        </Suspense>
       </Stack>
     </>
   );

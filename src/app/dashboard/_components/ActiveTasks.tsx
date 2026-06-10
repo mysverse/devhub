@@ -1,4 +1,3 @@
-import type { Issue } from "@linear/sdk";
 import { Alert, Badge, SimpleGrid } from "@mantine/core";
 import { Zap } from "lucide-react";
 import { redirect } from "next/navigation";
@@ -7,7 +6,9 @@ import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError } from "@/lib/linear";
+import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
+import type { IssueDTO } from "@/lib/linear-queries";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import ActiveTasksEmptyState from "./ActiveTasksEmptyState";
@@ -24,39 +25,13 @@ export default async function ActiveTasks({
   userId,
   currency,
 }: Props) {
-  let assignedIssues: { issue: Issue; labelNames: string[] }[] = [];
+  let assignedIssues: IssueDTO[] = [];
   let linearError: string | null = null;
 
   try {
-    assignedIssues = await withLinearFallback(userId, async (client) => {
-      const response = await client.issues({
-        first: 10,
-        filter: {
-          assignee: { id: { eq: linearId } },
-        },
-      });
-
-      const issuesWithState = await Promise.all(
-        response.nodes.map(async (issue) => {
-          const [state, labels] = await Promise.all([
-            issue.state,
-            issue.labels(),
-          ]);
-          return {
-            issue,
-            state,
-            labelNames: labels.nodes.map((label) => label.name),
-          };
-        }),
-      );
-
-      return issuesWithState
-        .filter(
-          ({ state }) =>
-            state?.type !== "completed" && state?.type !== "canceled",
-        )
-        .map(({ issue, labelNames }) => ({ issue, labelNames }));
-    });
+    assignedIssues = (
+      await getAssignedActiveIssuesForUser(userId, linearId)
+    ).slice(0, 10);
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {
       redirect("/auth/reauth-linear?returnTo=/dashboard");
@@ -107,7 +82,7 @@ export default async function ActiveTasks({
     where: {
       userId,
       linearIssueId: {
-        in: assignedIssues.map(({ issue }) => issue.id),
+        in: assignedIssues.map((issue) => issue.id),
       },
       status: { in: ["ELIGIBLE", "READY_FOR_REVIEW"] },
     },
@@ -123,7 +98,7 @@ export default async function ActiveTasks({
   const pptStates = await prisma.pptPayoutState.findMany({
     where: {
       linearIssueId: {
-        in: assignedIssues.map(({ issue }) => issue.id),
+        in: assignedIssues.map((issue) => issue.id),
       },
     },
     select: {
@@ -141,8 +116,8 @@ export default async function ActiveTasks({
       {header}
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          {assignedIssues.map(({ issue, labelNames }) => {
-            const hasPptLabel = labelNames.some(
+          {assignedIssues.map((issue) => {
+            const hasPptLabel = issue.labelNames.some(
               (label) => label.toUpperCase() === "PPT",
             );
             const bonus = bonusByIssueId.get(issue.id);

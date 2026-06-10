@@ -1,9 +1,10 @@
-import type { Transaction, UserProfile } from "@prisma/client";
+import type { UserProfile } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getUserWeeklyUsage, getWeekBounds } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
-import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { LinearReauthRequiredError } from "@/lib/linear";
+import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import {
   getBankDisplayName,
   getPaymentMethodLabel,
@@ -12,7 +13,7 @@ import prisma from "@/lib/prisma";
 import HeroPrimary from "./HeroPrimary";
 
 type Props = {
-  userProfile: UserProfile & { transactions: Transaction[] };
+  userProfile: UserProfile;
   userId: string;
   currency: CurrencyCode;
   user: { name?: string | null; email?: string | null };
@@ -80,47 +81,23 @@ async function getActivePptPending({
   if (!linearId) return { amount: 0, count: 0 };
 
   try {
-    return await withLinearFallback(userId, async (client) => {
-      const response = await client.issues({
-        first: 50,
-        filter: {
-          assignee: { id: { eq: linearId } },
-        },
-      });
+    const assignedIssues = await getAssignedActiveIssuesForUser(
+      userId,
+      linearId,
+    );
+    const activePptIssues = assignedIssues.filter((issue) =>
+      issue.labelNames.some((label) => label.toUpperCase() === "PPT"),
+    );
 
-      const issuesWithState = await Promise.all(
-        response.nodes.map(async (issue) => {
-          const [state, labels] = await Promise.all([
-            issue.state,
-            issue.labels(),
-          ]);
-          return {
-            issue,
-            state,
-            hasPptLabel: labels.nodes.some(
-              (label) => label.name.toUpperCase() === "PPT",
-            ),
-          };
-        }),
-      );
-
-      const activePptIssues = issuesWithState.filter(
-        ({ state, hasPptLabel }) =>
-          hasPptLabel &&
-          state?.type !== "completed" &&
-          state?.type !== "canceled",
-      );
-
-      return {
-        amount: activePptIssues.reduce((sum, { issue }) => {
-          return (
-            sum +
-            (issue.estimate ? estimateToAmount(issue.estimate, currency) : 0)
-          );
-        }, 0),
-        count: activePptIssues.length,
-      };
-    });
+    return {
+      amount: activePptIssues.reduce((sum, issue) => {
+        return (
+          sum +
+          (issue.estimate ? estimateToAmount(issue.estimate, currency) : 0)
+        );
+      }, 0),
+      count: activePptIssues.length,
+    };
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {
       redirect("/auth/reauth-linear?returnTo=/dashboard");
@@ -136,37 +113,44 @@ export default async function Hero({
   currency,
   user,
 }: Props) {
-  const [{ amount: activePptPendingAmount, count }, approvedBonusBalance] =
-    await Promise.all([
-      getActivePptPending({
+  const [
+    { amount: activePptPendingAmount, count },
+    approvedBonusBalance,
+    transactionTotals,
+    creditUsage,
+  ] = await Promise.all([
+    getActivePptPending({
+      userId,
+      linearId: userProfile.linearId,
+      currency,
+    }),
+    prisma.transaction.aggregate({
+      where: {
         userId,
-        linearId: userProfile.linearId,
         currency,
-      }),
-      prisma.transaction.aggregate({
-        where: {
-          userId,
-          currency,
-          source: "BONUS",
-          status: "PENDING",
-        },
-        _sum: { amount: true },
-      }),
-    ]);
+        source: "BONUS",
+        status: "PENDING",
+      },
+      _sum: { amount: true },
+    }),
+    prisma.transaction.groupBy({
+      by: ["status", "source"],
+      where: {
+        userId,
+        currency,
+      },
+      _sum: { amount: true },
+    }),
+    getUserWeeklyUsage(userId, currency),
+  ]);
 
-  const databasePendingBalance = userProfile.transactions
-    .filter(
-      (tx) =>
-        tx.status === "PENDING" &&
-        tx.source === "PPT" &&
-        tx.currency === currency,
-    )
-    .reduce((sum: number, tx) => sum + tx.amount, 0);
+  const databasePendingBalance = transactionTotals
+    .filter((tx) => tx.status === "PENDING" && tx.source === "PPT")
+    .reduce((sum, tx) => sum + (tx._sum.amount ?? 0), 0);
   const pendingAmount = databasePendingBalance + activePptPendingAmount;
-  const totalEarned = userProfile.transactions
-    .filter((tx) => tx.status === "PAID" && tx.currency === currency)
-    .reduce((sum: number, tx) => sum + tx.amount, 0);
-  const creditUsage = await getUserWeeklyUsage(userId, currency);
+  const totalEarned = transactionTotals
+    .filter((tx) => tx.status === "PAID")
+    .reduce((sum, tx) => sum + (tx._sum.amount ?? 0), 0);
   const { weekEnd } = getWeekBounds();
   const firstName = user.name?.split(" ")[0] ?? "there";
   const todayLabel = new Date().toLocaleDateString("en-US", {

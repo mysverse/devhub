@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
-import prisma from "@/lib/prisma";
+import { getUserProfile } from "@/lib/user-profile";
 import DashboardLayoutClient from "./DashboardLayoutClient";
 
 export default async function DashboardLayout({
@@ -13,10 +13,7 @@ export default async function DashboardLayout({
   let isAdmin = false;
 
   if (userId) {
-    const userProfile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { role: true, developerRank: true },
-    });
+    const userProfile = await getUserProfile(userId);
     if (!userProfile) redirect("/onboarding");
     isAdmin = hasAdminAccess(userProfile);
   }

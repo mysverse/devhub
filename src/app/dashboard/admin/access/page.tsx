@@ -2,6 +2,7 @@ import { Group, Stack, Text, Title } from "@mantine/core";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
+import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { DEVELOPER_RANKS, DEVELOPER_SPECIALTIES } from "@/lib/developer-access";
 import prisma from "@/lib/prisma";
@@ -14,7 +15,7 @@ export const metadata: Metadata = buildSocialMetadata(
 
 export default function AccessManagementPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <AccessManagementContent />
     </Suspense>
   );

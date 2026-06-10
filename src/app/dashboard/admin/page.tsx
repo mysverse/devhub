@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
+import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getWeeklyUsageForUsers } from "@/lib/credit-limit";
@@ -143,7 +144,7 @@ function getStoredTaskTitle(tx: TransactionWithUser) {
 
 export default function AdminPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton cards={4} />}>
       <AdminPageContent />
     </Suspense>
   );

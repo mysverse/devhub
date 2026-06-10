@@ -11,6 +11,7 @@ import {
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { FadeIn } from "@/components/animations";
+import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -28,7 +29,7 @@ export const metadata: Metadata = buildSocialMetadata(
 
 export default function AdminWelcomePackPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <AdminWelcomePackContent />
     </Suspense>
   );

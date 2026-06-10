@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
 import { requiresKycForAutoPayout } from "@/lib/kyc";
@@ -17,7 +18,7 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/settings");
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <SettingsContent />
     </Suspense>
   );

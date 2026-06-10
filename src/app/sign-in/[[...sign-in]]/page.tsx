@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import PageSkeleton from "@/components/PageSkeleton";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import SignInClient from "./SignInClient";
 
@@ -9,7 +10,7 @@ type Params = Promise<Record<string, string[] | undefined>>;
 
 export default function SignInPage({ params }: { params: Params }) {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton cards={1} />}>
       <SignInContent params={params} />
     </Suspense>
   );

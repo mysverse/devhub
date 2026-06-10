@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { getAllDocumentTemplates } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -11,7 +12,7 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/documents");
 
 export default function DocumentsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <DocumentsContent />
     </Suspense>
   );

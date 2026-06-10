@@ -12,6 +12,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
@@ -183,7 +184,7 @@ function CandidateGrid({
 
 export default function BonusesPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <BonusesContent />
     </Suspense>
   );

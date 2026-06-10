@@ -12,6 +12,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
+import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -21,7 +22,7 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/kyc");
 
 export default function AdminKycPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <AdminKycContent />
     </Suspense>
   );

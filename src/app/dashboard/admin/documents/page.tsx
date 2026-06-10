@@ -16,6 +16,7 @@ import {
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
+import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -27,7 +28,7 @@ export const metadata: Metadata = buildSocialMetadata(
 
 export default function AdminDocumentsPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <AdminDocumentsContent />
     </Suspense>
   );

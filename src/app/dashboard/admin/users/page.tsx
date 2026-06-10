@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -10,7 +11,7 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/users");
 
 export default function AdminUsersPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<PageSkeleton />}>
       <AdminUsersContent />
     </Suspense>
   );

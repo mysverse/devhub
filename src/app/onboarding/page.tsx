@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -8,7 +9,15 @@ import OnboardingFlow from "./OnboardingFlow";
 
 export const metadata: Metadata = buildSocialMetadata("/onboarding");
 
-export default async function OnboardingPage() {
+export default function OnboardingPage() {
+  return (
+    <Suspense fallback={null}>
+      <OnboardingContent />
+    </Suspense>
+  );
+}
+
+async function OnboardingContent() {
   const { userId, user } = await getSession();
   if (!userId) redirect("/sign-in");
 

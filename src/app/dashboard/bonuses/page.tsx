@@ -10,6 +10,7 @@ import {
 } from "@mantine/core";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { formatAmount } from "@/lib/currency";
@@ -180,7 +181,15 @@ function CandidateGrid({
   );
 }
 
-export default async function BonusesPage() {
+export default function BonusesPage() {
+  return (
+    <Suspense fallback={null}>
+      <BonusesContent />
+    </Suspense>
+  );
+}
+
+async function BonusesContent() {
   const { userId } = await getSession();
   if (!userId) redirect("/");
 

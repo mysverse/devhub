@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -7,7 +8,15 @@ import UsersTable from "./UsersTable";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/users");
 
-export default async function AdminUsersPage() {
+export default function AdminUsersPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminUsersContent />
+    </Suspense>
+  );
+}
+
+async function AdminUsersContent() {
   await requireAdminPage();
 
   const users = await prisma.userProfile.findMany({

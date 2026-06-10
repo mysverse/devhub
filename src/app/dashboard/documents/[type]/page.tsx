@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -10,7 +11,15 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/documents");
 
 type Params = Promise<{ type: string }>;
 
-export default async function DocumentViewPage({ params }: { params: Params }) {
+export default function DocumentViewPage({ params }: { params: Params }) {
+  return (
+    <Suspense fallback={null}>
+      <DocumentViewContent params={params} />
+    </Suspense>
+  );
+}
+
+async function DocumentViewContent({ params }: { params: Params }) {
   const { type } = await params;
   const { userId } = await getSession();
   if (!userId) redirect("/sign-in");

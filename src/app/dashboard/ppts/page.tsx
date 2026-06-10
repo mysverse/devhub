@@ -491,7 +491,15 @@ async function PPTList({
   );
 }
 
-export default async function PPTsPage() {
+export default function PPTsPage() {
+  return (
+    <Suspense fallback={<PPTSkeleton />}>
+      <PPTsPageContent />
+    </Suspense>
+  );
+}
+
+async function PPTsPageContent() {
   const { userId } = await getSession();
   if (!userId) redirect("/");
 

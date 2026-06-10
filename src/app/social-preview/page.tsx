@@ -1,5 +1,6 @@
 import { Badge, Center, Stack, Text, Title } from "@mantine/core";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Logo } from "@/components/Logo";
 import {
   buildSocialMetadata,
@@ -24,7 +25,19 @@ export async function generateMetadata({
   return buildSocialMetadata(targetPath, { noIndex: true });
 }
 
-export default async function SocialPreviewPage({
+export default function SocialPreviewPage({
+  searchParams,
+}: {
+  searchParams?: SearchParams;
+}) {
+  return (
+    <Suspense fallback={null}>
+      <SocialPreviewContent searchParams={searchParams} />
+    </Suspense>
+  );
+}
+
+async function SocialPreviewContent({
   searchParams,
 }: {
   searchParams?: SearchParams;

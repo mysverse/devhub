@@ -2,6 +2,7 @@ import { Badge, Group, Text, Title } from "@mantine/core";
 import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
@@ -140,7 +141,15 @@ function getStoredTaskTitle(tx: TransactionWithUser) {
     : tx.linearIssueIdentifier || "Manual Payout";
 }
 
-export default async function AdminPage() {
+export default function AdminPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminPageContent />
+    </Suspense>
+  );
+}
+
+async function AdminPageContent() {
   const userId = await requireAdminPage();
 
   const [

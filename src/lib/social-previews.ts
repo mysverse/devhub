@@ -207,6 +207,11 @@ export function getSocialImageUrl(path: string) {
   return url.toString();
 }
 
+function getRelativeSocialImageUrl(path: string) {
+  const params = new URLSearchParams({ path: normalizeSocialPath(path) });
+  return `/api/social-image?${params.toString()}`;
+}
+
 export function getSocialPreview(path: string | null | undefined) {
   const normalizedPath = normalizeSocialPath(path);
   const exactPreview = previewsByPath.get(normalizedPath);
@@ -233,8 +238,8 @@ export function buildSocialMetadata(
   const preview = getSocialPreview(normalizedPath);
   const title = options.title ?? preview.title;
   const description = options.description ?? preview.description;
-  const canonicalUrl = getAbsoluteSocialUrl(normalizedPath);
-  const imageUrl = getSocialImageUrl(normalizedPath);
+  const canonicalUrl = normalizedPath;
+  const imageUrl = getRelativeSocialImageUrl(normalizedPath);
   const imageAlt = `${title} - ${siteConfig.appName}`;
 
   return {

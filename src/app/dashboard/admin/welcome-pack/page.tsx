@@ -9,6 +9,7 @@ import {
   Title,
 } from "@mantine/core";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { FadeIn } from "@/components/animations";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
@@ -25,7 +26,15 @@ export const metadata: Metadata = buildSocialMetadata(
   "/dashboard/admin/welcome-pack",
 );
 
-export default async function AdminWelcomePackPage() {
+export default function AdminWelcomePackPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminWelcomePackContent />
+    </Suspense>
+  );
+}
+
+async function AdminWelcomePackContent() {
   await requireAdminPage();
 
   const pack = await prisma.welcomePack.findFirst({

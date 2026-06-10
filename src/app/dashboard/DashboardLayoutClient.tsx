@@ -155,6 +155,16 @@ function DesktopNavLinks({ links }: { links: NavLink[] }) {
   );
 }
 
+function DesktopNavLinksFallback() {
+  return (
+    <>
+      {BASE_LINKS.map((link) => (
+        <DesktopNavLink key={link.href} link={link} active={false} />
+      ))}
+    </>
+  );
+}
+
 function DesktopNavLinksWithAdmin({
   adminPromise,
 }: {
@@ -184,6 +194,21 @@ function MobileNavLinks({
           key={link.href}
           link={link}
           active={isActive(pathname, link.href)}
+          onNavigate={onNavigate}
+        />
+      ))}
+    </>
+  );
+}
+
+function MobileNavLinksFallback({ onNavigate }: { onNavigate: () => void }) {
+  return (
+    <>
+      {BASE_LINKS.map((link) => (
+        <MobileNavLink
+          key={link.href}
+          link={link}
+          active={false}
           onNavigate={onNavigate}
         />
       ))}
@@ -253,7 +278,7 @@ export default function DashboardLayoutClient({
             </Group>
 
             <Group gap={4} visibleFrom="sm">
-              <Suspense fallback={<DesktopNavLinks links={BASE_LINKS} />}>
+              <Suspense fallback={<DesktopNavLinksFallback />}>
                 <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
               </Suspense>
             </Group>
@@ -290,9 +315,7 @@ export default function DashboardLayoutClient({
 
       <AppShellNavbar p="md">
         <Stack gap={4}>
-          <Suspense
-            fallback={<MobileNavLinks links={BASE_LINKS} onNavigate={close} />}
-          >
+          <Suspense fallback={<MobileNavLinksFallback onNavigate={close} />}>
             <MobileNavLinksWithAdmin
               adminPromise={adminPromise}
               onNavigate={close}

@@ -1,6 +1,7 @@
 import { Box, Divider, Text, Title } from "@mantine/core";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
@@ -14,7 +15,15 @@ import SettingsForm from "./SettingsForm";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/settings");
 
-export default async function SettingsPage() {
+export default function SettingsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
+async function SettingsContent() {
   const { userId } = await getSession();
 
   if (!userId) {

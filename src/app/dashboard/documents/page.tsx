@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import { getSession } from "@/lib/auth-utils";
 import { getAllDocumentTemplates } from "@/lib/documents";
 import prisma from "@/lib/prisma";
@@ -8,7 +9,15 @@ import DocumentsClient from "./DocumentsClient";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/documents");
 
-export default async function DocumentsPage() {
+export default function DocumentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <DocumentsContent />
+    </Suspense>
+  );
+}
+
+async function DocumentsContent() {
   const { userId } = await getSession();
   if (!userId) redirect("/sign-in");
 

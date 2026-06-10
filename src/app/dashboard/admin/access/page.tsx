@@ -1,5 +1,6 @@
 import { Group, Stack, Text, Title } from "@mantine/core";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
 import { DEVELOPER_RANKS, DEVELOPER_SPECIALTIES } from "@/lib/developer-access";
@@ -11,7 +12,15 @@ export const metadata: Metadata = buildSocialMetadata(
   "/dashboard/admin/access",
 );
 
-export default async function AccessManagementPage() {
+export default function AccessManagementPage() {
+  return (
+    <Suspense fallback={null}>
+      <AccessManagementContent />
+    </Suspense>
+  );
+}
+
+async function AccessManagementContent() {
   await requireAdminPage();
 
   const [config, rankMappings, specialtyMappings, projects, users] =

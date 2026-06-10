@@ -9,6 +9,7 @@ import {
   Title,
 } from "@mantine/core";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
@@ -18,7 +19,15 @@ import KycReviewCard from "./KycReviewCard";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/kyc");
 
-export default async function AdminKycPage() {
+export default function AdminKycPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminKycContent />
+    </Suspense>
+  );
+}
+
+async function AdminKycContent() {
   await requireAdminPage();
 
   const [pendingVerifications, recentVerifications] = await Promise.all([

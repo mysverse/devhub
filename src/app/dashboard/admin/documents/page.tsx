@@ -14,6 +14,7 @@ import {
   Title,
 } from "@mantine/core";
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
@@ -24,7 +25,15 @@ export const metadata: Metadata = buildSocialMetadata(
   "/dashboard/admin/documents",
 );
 
-export default async function AdminDocumentsPage() {
+export default function AdminDocumentsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminDocumentsContent />
+    </Suspense>
+  );
+}
+
+async function AdminDocumentsContent() {
   await requireAdminPage();
 
   const users = await prisma.userProfile.findMany({

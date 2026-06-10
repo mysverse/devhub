@@ -74,7 +74,15 @@ function EligibilitySkeleton() {
   );
 }
 
-export default async function WelcomePackPage() {
+export default function WelcomePackPage() {
+  return (
+    <Suspense fallback={<EligibilitySkeleton />}>
+      <WelcomePackContent />
+    </Suspense>
+  );
+}
+
+async function WelcomePackContent() {
   const { userId } = await getSession();
   if (!userId) redirect("/");
 

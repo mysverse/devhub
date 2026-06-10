@@ -17,18 +17,14 @@ export const ensureUserProfile = cache(
     name?: string | null;
     email?: string | null;
   }) => {
-    let userProfile = await prisma.userProfile.findUnique({
+    let userProfile = await prisma.userProfile.upsert({
       where: { id: userId },
+      update: {},
+      create: {
+        id: userId,
+        legalName: name ?? null,
+      },
     });
-
-    if (!userProfile) {
-      userProfile = await prisma.userProfile.create({
-        data: {
-          id: userId,
-          legalName: name ?? null,
-        },
-      });
-    }
 
     if (!userProfile.linearId) {
       const linearAccount = await prisma.account.findFirst({

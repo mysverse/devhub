@@ -7,6 +7,9 @@ export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
+    // Dev-mode only: refuses to run unless launched with .env.mock loaded
+    // (use `pnpm dev:mock:seed`).
+    seed: "tsx prisma/seed.ts",
   },
   datasource: {
     url: process.env.DIRECT_DATABASE_URL ?? process.env.DATABASE_URL,

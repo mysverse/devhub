@@ -2,12 +2,18 @@ import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { genericOAuth } from "better-auth/plugins";
 import { syncUserAccess } from "./access-sync";
+import { isDevMode } from "./dev-mode";
 import prisma from "./prisma";
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  // Dev mode only: lets the seed script create persona users and the
+  // /api/dev/login route sign them in without OAuth. Disabled in real envs.
+  emailAndPassword: {
+    enabled: isDevMode(),
+  },
   databaseHooks: {
     account: {
       create: {

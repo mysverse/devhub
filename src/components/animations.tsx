@@ -16,6 +16,18 @@ import { forwardRef, useEffect, useState } from "react";
  *
  * Plain-CSS transitions use the mirrored tokens in src/app/globals.css
  * (--duration-fast/base/slow, --ease-out/in-out) — keep the two in sync.
+ *
+ * Which preset when:
+ * - Page/section entrance      → FadeIn, or StaggerContainer + StaggerItem
+ * - Hover lift / press on card → MotionCard (or whileHover/whileTap + SPRING.snappy)
+ * - Button press feedback      → global `:active` rule in globals.css; never per-button
+ * - CSS-only hovers            → `var(--duration-fast) var(--ease-out)`
+ * - Numeric value changes      → AnimatedNumber
+ * - Wizard / step content      → StepTransition
+ * - Modals / drawers           → MODAL_TRANSITION / "slide-left" + OVERLAY_PROPS
+ * - Conditional content        → AnimatedCollapse (no layout pop)
+ * - Client list add/remove     → <AnimatePresence mode="popLayout" initial={false}>
+ *                                + AnimatedListItem
  */
 export const EASE = {
   /** Material-ish exit-to-rest. Good default for transform-only motion. */
@@ -238,6 +250,67 @@ export const MotionCard = forwardRef<HTMLDivElement, MotionCardProps>(
     );
   },
 );
+
+/**
+ * Animates conditional content open/closed instead of letting it pop in and
+ * shift the layout. Children stay mounted while visible; when `opened` flips
+ * the height/opacity animate.
+ *
+ *   <AnimatedCollapse opened={expanded}>{details}</AnimatedCollapse>
+ *
+ * Cannot wrap a TableTr (table rows can't height-animate) — for tables, put
+ * the AnimatedCollapse around the CONTENT of a cell inside a borderless row.
+ */
+export function AnimatedCollapse({
+  opened,
+  children,
+  className,
+}: {
+  opened: boolean;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      initial={false}
+      animate={
+        opened ? { height: "auto", opacity: 1 } : { height: 0, opacity: 0 }
+      }
+      transition={{ duration: DURATION.fast, ease: EASE.out }}
+      style={{ overflow: "hidden" }}
+      className={className}
+      aria-hidden={!opened}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/**
+ * List item with enter/exit/reorder animation. Use inside
+ * `<AnimatePresence mode="popLayout" initial={false}>`; siblings glide into
+ * place via the layout animation when items are added or removed.
+ */
+export function AnimatedListItem({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.97 }}
+      transition={SPRING.snappy}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
 
 export function AnimatedNumber({
   value,

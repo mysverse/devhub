@@ -2,7 +2,8 @@
  * Dev-mode outbound HTTP interception.
  *
  * Installed once per server process by src/instrumentation.ts when
- * DEV_MODE=true. Patches globalThis.fetch so that:
+ * DEV_MODE=true. Installs a getter/setter on globalThis.fetch (so Next's own
+ * later fetch patching cannot displace it) such that:
  *   - localhost/loopback requests pass through untouched (Next internals,
  *     the local prisma-dev DB is raw TCP and never hits fetch anyway, and
  *     the mock blob route on localhost:3000),
@@ -109,9 +110,11 @@ export function installDevFetchInterceptor(): void {
   if (g[INSTALLED]) return;
   g[INSTALLED] = true;
 
-  const realFetch = globalThis.fetch.bind(globalThis);
+  // Whatever fetch exists right now (raw undici, or Next's patched fetch if
+  // it got here first) handles passthrough traffic.
+  let downstream: typeof fetch = globalThis.fetch.bind(globalThis);
 
-  globalThis.fetch = async (
+  const interceptingFetch = async (
     input: RequestInfo | URL,
     init?: RequestInit,
   ): Promise<Response> => {
@@ -123,7 +126,7 @@ export function installDevFetchInterceptor(): void {
       url.protocol === "blob:" ||
       PASSTHROUGH_HOSTS.has(url.hostname)
     ) {
-      return realFetch(input, init);
+      return downstream(input, init);
     }
 
     const route = ROUTES.find((r) => r.match(url));
@@ -138,6 +141,27 @@ export function installDevFetchInterceptor(): void {
     );
     return res;
   };
+
+  // Next.js re-patches globalThis.fetch after instrumentation has run, and
+  // its patched fetcher closes over the fetch it captured BEFORE this
+  // interceptor installed (globalThis._nextOriginalFetch). With a plain
+  // `globalThis.fetch = ...` assignment the interceptor is silently dropped
+  // on that re-patch and external HTTP leaks to the real network. A
+  // getter/setter keeps the interceptor permanently on top: any later
+  // assignment to globalThis.fetch (Next's patchFetch) just swaps the
+  // downstream used for passthrough traffic.
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return interceptingFetch;
+    },
+    set(next: unknown) {
+      if (typeof next === "function") {
+        downstream = next as typeof fetch;
+      }
+    },
+  });
 
   console.log(
     "[dev-mode] Outbound fetch interceptor installed — external HTTP is mocked",

@@ -20,7 +20,10 @@ function isAccelerateUrl(url: string) {
 function createPgPool(connectionString: string) {
   return new Pool({
     connectionString,
-    max: 10,
+    // PG_POOL_MAX is only set in dev mode (.env.mock): the embedded prisma-dev
+    // Postgres mishandles concurrent extended-protocol sessions, so the mock
+    // environment caps the pool at 1.
+    max: Number(process.env.PG_POOL_MAX ?? "10"),
     idleTimeoutMillis: 60_000,
     connectionTimeoutMillis: 10_000,
   });

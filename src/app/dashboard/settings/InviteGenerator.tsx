@@ -3,18 +3,17 @@
 import {
   ActionIcon,
   Button,
-  Card,
   CopyButton,
   Group,
   Stack,
   Text,
   TextInput,
-  Title,
   Tooltip,
 } from "@mantine/core";
 import { Check, Copy } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import FormSection from "@/components/FormSection";
 import { generateInviteLink } from "./invite-actions";
 
 export default function InviteGenerator() {
@@ -42,15 +41,11 @@ export default function InviteGenerator() {
   }
 
   return (
-    <Card withBorder radius="md" padding="xl" style={{ maxWidth: "42rem" }}>
-      <Title order={3} mb="xs">
-        Team Onboarding
-      </Title>
-      <Text size="sm" c="dimmed" mb="lg">
-        Generate an invite link for a new developer. Share the link with them to
-        join the team.
-      </Text>
-
+    <FormSection
+      title="Team Onboarding"
+      description="Generate an invite link for a new developer. Share the link with them to join the team."
+      style={{ maxWidth: "42rem" }}
+    >
       {!inviteUrl ? (
         <form onSubmit={handleGenerate}>
           <Group align="flex-end">
@@ -113,6 +108,6 @@ export default function InviteGenerator() {
           </Button>
         </Stack>
       )}
-    </Card>
+    </FormSection>
   );
 }

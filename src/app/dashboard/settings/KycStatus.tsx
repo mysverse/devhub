@@ -3,7 +3,6 @@
 import {
   Alert,
   Button,
-  Card,
   FileInput,
   Group,
   Select,
@@ -11,11 +10,11 @@ import {
   Switch,
   Text,
   TextInput,
-  Title,
 } from "@mantine/core";
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import FormSection from "@/components/FormSection";
 import LinkAnchor from "@/components/LinkAnchor";
 import { updateAutoPayoutSetting } from "./actions";
 
@@ -163,11 +162,7 @@ export default function KycStatus({
   }
 
   return (
-    <Card withBorder radius="md" padding="xl" mt="md">
-      <Title order={4} mb="md">
-        Automatic Payouts
-      </Title>
-
+    <FormSection title="Automatic Payouts" mt="md">
       <Stack gap="md">
         <Group justify="space-between" align="flex-start">
           <div style={{ flex: 1 }}>
@@ -300,6 +295,6 @@ export default function KycStatus({
           </form>
         )}
       </Stack>
-    </Card>
+    </FormSection>
   );
 }

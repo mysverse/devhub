@@ -1,8 +1,9 @@
 "use client";
 
-import { Badge, Button, Card, Group, Stack, Text, Title } from "@mantine/core";
+import { Badge, Button, Group, Text } from "@mantine/core";
 import { useState } from "react";
 import { toast } from "sonner";
+import FormSection from "@/components/FormSection";
 import { signIn } from "@/lib/auth-client";
 import { unlinkAccount } from "./account-actions";
 
@@ -51,70 +52,63 @@ export default function LinkedAccounts({
   }
 
   return (
-    <Card withBorder radius="md" padding="xl">
-      <Title order={3} mb="md">
-        Linked Accounts
-      </Title>
-      <Stack gap="md">
-        {PROVIDERS.map((provider) => {
-          const account = getAccount(provider.id);
-          const isLinear = provider.id === "linear";
+    <FormSection title="Linked Accounts">
+      {PROVIDERS.map((provider) => {
+        const account = getAccount(provider.id);
+        const isLinear = provider.id === "linear";
 
-          return (
-            <Group key={provider.id} justify="space-between" wrap="nowrap">
-              <Group gap="sm">
-                <Text fw={600} size="sm">
-                  {provider.label}
-                </Text>
-                {account ? (
-                  <Badge color={provider.color} variant="light" size="sm">
-                    {isLinear && linearEmail
-                      ? linearEmail
-                      : `ID: ${account.accountId}`}
-                  </Badge>
-                ) : (
-                  <Badge color="gray" variant="light" size="sm">
-                    Not linked
-                  </Badge>
-                )}
-              </Group>
-
-              {isLinear ? (
-                account && (
-                  <Text size="xs" c="dimmed">
-                    Primary auth
-                  </Text>
-                )
-              ) : account ? (
-                <Button
-                  size="xs"
-                  variant="subtle"
-                  color="red"
-                  loading={loading === provider.id}
-                  disabled={
-                    provider.id === "roblox" && paymentMethod === "ROBUX"
-                  }
-                  onClick={() =>
-                    handleUnlink(provider.id as "discord" | "roblox")
-                  }
-                >
-                  Disconnect
-                </Button>
+        return (
+          <Group key={provider.id} justify="space-between" wrap="nowrap">
+            <Group gap="sm">
+              <Text fw={600} size="sm">
+                {provider.label}
+              </Text>
+              {account ? (
+                <Badge color={provider.color} variant="light" size="sm">
+                  {isLinear && linearEmail
+                    ? linearEmail
+                    : `ID: ${account.accountId}`}
+                </Badge>
               ) : (
-                <Button
-                  size="xs"
-                  variant="light"
-                  color={provider.color}
-                  loading={loading === provider.id}
-                  onClick={() => handleLink(provider.id)}
-                >
-                  Link {provider.label}
-                </Button>
+                <Badge color="gray" variant="light" size="sm">
+                  Not linked
+                </Badge>
               )}
             </Group>
-          );
-        })}
-      </Stack>
-    </Card>
+
+            {isLinear ? (
+              account && (
+                <Text size="xs" c="dimmed">
+                  Primary auth
+                </Text>
+              )
+            ) : account ? (
+              <Button
+                size="xs"
+                variant="subtle"
+                color="red"
+                loading={loading === provider.id}
+                disabled={provider.id === "roblox" && paymentMethod === "ROBUX"}
+                onClick={() =>
+                  handleUnlink(provider.id as "discord" | "roblox")
+                }
+              >
+                Disconnect
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="light"
+                color={provider.color}
+                loading={loading === provider.id}
+                onClick={() => handleLink(provider.id)}
+              >
+                Link {provider.label}
+              </Button>
+            )}
+          </Group>
+        );
+      })}
+    </FormSection>
   );
 }

@@ -1,8 +1,10 @@
-import { Box, Divider, Text, Title } from "@mantine/core";
+import { Divider, Stack } from "@mantine/core";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
@@ -18,9 +20,15 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/settings");
 
 export default function SettingsPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <SettingsContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="HR Settings"
+        subtitle="Manage your personal information and payment preferences to receive your payouts."
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <SettingsContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -52,15 +60,7 @@ async function SettingsContent() {
 
   return (
     <StaggerContainer>
-      <Box style={{ display: "flex", flexDirection: "column", gap: "2rem" }}>
-        <StaggerItem>
-          <Title order={1}>HR Settings</Title>
-          <Text c="dimmed" mt="xs">
-            Manage your personal information and payment preferences to receive
-            your payouts.
-          </Text>
-        </StaggerItem>
-
+      <Stack gap="xl">
         <StaggerItem>
           <LinkedAccounts
             linkedAccounts={linkedAccounts}
@@ -95,7 +95,7 @@ async function SettingsContent() {
             </StaggerItem>
           </>
         )}
-      </Box>
+      </Stack>
     </StaggerContainer>
   );
 }

@@ -192,8 +192,13 @@ function IncentiveToast({
   );
 }
 
+/** Minimum gap between polls — guards against rapid focus events (e.g. window
+ *  managers or automation focusing the page in a loop) hammering the API. */
+const MIN_POLL_GAP_MS = 5_000;
+
 export default function NotificationPoller() {
   const inFlight = useRef(false);
+  const lastPolledAt = useRef(0);
 
   useEffect(() => {
     let active = true;
@@ -201,6 +206,8 @@ export default function NotificationPoller() {
 
     async function poll() {
       if (document.hidden || inFlight.current) return;
+      if (Date.now() - lastPolledAt.current < MIN_POLL_GAP_MS) return;
+      lastPolledAt.current = Date.now();
       inFlight.current = true;
 
       try {

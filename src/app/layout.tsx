@@ -1,4 +1,4 @@
-import { ColorSchemeScript, createTheme, MantineProvider } from "@mantine/core";
+import { ColorSchemeScript, MantineProvider } from "@mantine/core";
 import { MotionConfig } from "motion/react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
@@ -6,6 +6,7 @@ import { Toaster } from "sonner";
 import DevModeBanner from "@/components/DevModeBanner";
 import { siteConfig } from "@/lib/config";
 import { buildSocialMetadata, getSocialBaseUrl } from "@/lib/social-previews";
+import { theme } from "./theme";
 import "@mantine/core/styles.css";
 import "./globals.css";
 
@@ -62,16 +63,6 @@ export const metadata: Metadata = {
     statusBarStyle: "black-translucent",
   },
 };
-
-const theme = createTheme({
-  primaryColor: "blue",
-  respectReducedMotion: true,
-  fontFamily: "var(--font-geist-sans), sans-serif",
-  fontFamilyMonospace: "var(--font-geist-mono), monospace",
-  headings: {
-    fontFamily: "var(--font-geist-sans), sans-serif",
-  },
-});
 
 export default function RootLayout({
   children,

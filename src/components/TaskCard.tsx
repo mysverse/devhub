@@ -178,7 +178,7 @@ function TaskPreviewImage({ src, title }: { src: string; title: string }) {
           onLoad={() => setLoaded(true)}
           style={{
             opacity: loaded ? 1 : 0,
-            transition: "opacity 0.18s ease",
+            transition: "opacity var(--duration-fast) var(--ease-out)",
           }}
         />
       </motion.div>

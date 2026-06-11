@@ -13,6 +13,9 @@ import { forwardRef, useEffect, useState } from "react";
 /**
  * Shared motion language for the app. Importing from here ensures every page
  * fades, slides, lifts, and springs with the same character.
+ *
+ * Plain-CSS transitions use the mirrored tokens in src/app/globals.css
+ * (--duration-fast/base/slow, --ease-out/in-out) — keep the two in sync.
  */
 export const EASE = {
   /** Material-ish exit-to-rest. Good default for transform-only motion. */

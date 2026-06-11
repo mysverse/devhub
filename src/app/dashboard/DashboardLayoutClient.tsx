@@ -56,7 +56,7 @@ function DesktopNavLink({ link, active }: { link: NavLink; active: boolean }) {
         position: "relative",
         padding: "6px 12px",
         borderRadius: "var(--mantine-radius-md)",
-        transition: "color 0.18s ease",
+        transition: "color var(--duration-fast) var(--ease-out)",
       }}
     >
       {active && (
@@ -97,7 +97,7 @@ function MobileNavLink({
       style={{
         position: "relative",
         borderRadius: "var(--mantine-radius-md)",
-        transition: "color 0.18s ease",
+        transition: "color var(--duration-fast) var(--ease-out)",
       }}
     >
       {active && (
@@ -130,7 +130,7 @@ function NavLinkLabel({ label, active }: { label: string; active: boolean }) {
         position: "relative",
         zIndex: 1,
         opacity: pending ? 0.55 : 1,
-        transition: "opacity 0.18s ease",
+        transition: "opacity var(--duration-fast) var(--ease-out)",
         transitionDelay: pending ? "150ms" : "0ms",
       }}
     >

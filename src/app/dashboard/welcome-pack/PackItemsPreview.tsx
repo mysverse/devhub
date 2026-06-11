@@ -51,7 +51,8 @@ export default function PackItemsPreview({
               h="100%"
               style={{
                 overflow: "hidden",
-                transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                transition:
+                  "border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out)",
               }}
             >
               <Stack gap="xs" h="100%">

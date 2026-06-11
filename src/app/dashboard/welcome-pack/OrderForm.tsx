@@ -635,7 +635,7 @@ function PackItemRow({
           borderColor: ready
             ? "var(--mantine-color-teal-7)"
             : "var(--mantine-color-dark-5)",
-          transition: "border-color 0.25s ease",
+          transition: "border-color var(--duration-fast) var(--ease-out)",
         }}
       >
         <Flex

@@ -1,16 +1,9 @@
-import {
-  Group,
-  Stack,
-  Tabs,
-  TabsList,
-  TabsPanel,
-  TabsTab,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Stack, Tabs, TabsList, TabsPanel, TabsTab } from "@mantine/core";
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { FadeIn } from "@/components/animations";
+import LinkButton from "@/components/LinkButton";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
@@ -29,9 +22,20 @@ export const metadata: Metadata = buildSocialMetadata(
 
 export default function AdminWelcomePackPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <AdminWelcomePackContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="Welcome Pack"
+        subtitle="Configure the pack, manage items, and review developer orders."
+        action={
+          <LinkButton href="/dashboard/admin" variant="subtle">
+            Back to Admin
+          </LinkButton>
+        }
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <AdminWelcomePackContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -152,42 +156,31 @@ async function AdminWelcomePackContent() {
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
 
   return (
-    <FadeIn>
-      <Group justify="space-between" mb="xl">
-        <div>
-          <Title order={1}>Welcome Pack</Title>
-          <Text c="dimmed" mt="xs">
-            Configure the pack, manage items, and review developer orders.
-          </Text>
-        </div>
-      </Group>
+    <Tabs defaultValue="config">
+      <TabsList>
+        <TabsTab value="config">Pack config</TabsTab>
+        <TabsTab value="items">Items ({items.length})</TabsTab>
+        <TabsTab value="orders">
+          Orders{" "}
+          {pendingCount > 0
+            ? `(${pendingCount} pending)`
+            : `(${orders.length})`}
+        </TabsTab>
+      </TabsList>
 
-      <Tabs defaultValue="config">
-        <TabsList>
-          <TabsTab value="config">Pack config</TabsTab>
-          <TabsTab value="items">Items ({items.length})</TabsTab>
-          <TabsTab value="orders">
-            Orders{" "}
-            {pendingCount > 0
-              ? `(${pendingCount} pending)`
-              : `(${orders.length})`}
-          </TabsTab>
-        </TabsList>
+      <TabsPanel value="config" pt="md">
+        <PackConfig pack={packConfig} />
+      </TabsPanel>
 
-        <TabsPanel value="config" pt="md">
-          <PackConfig pack={packConfig} />
-        </TabsPanel>
+      <TabsPanel value="items" pt="md">
+        <Stack>
+          <ItemsManager packId={packConfig.id} items={items} />
+        </Stack>
+      </TabsPanel>
 
-        <TabsPanel value="items" pt="md">
-          <Stack>
-            <ItemsManager packId={packConfig.id} items={items} />
-          </Stack>
-        </TabsPanel>
-
-        <TabsPanel value="orders" pt="md">
-          <OrdersTable orders={orders} />
-        </TabsPanel>
-      </Tabs>
-    </FadeIn>
+      <TabsPanel value="orders" pt="md">
+        <OrdersTable orders={orders} />
+      </TabsPanel>
+    </Tabs>
   );
 }

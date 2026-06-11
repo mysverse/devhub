@@ -22,6 +22,7 @@ import { Check, RefreshCw, Save, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   approveMonthlyBonus,
@@ -297,11 +298,7 @@ export default function AdminBonusesTab({
         </Group>
 
         {groups.length === 0 ? (
-          <Card withBorder radius="md" padding="xl" ta="center">
-            <Text c="dimmed">
-              No completed bonus candidates for this month.
-            </Text>
-          </Card>
+          <EmptyState description="No completed bonus candidates for this month." />
         ) : (
           <Stack gap="lg">
             {groups.map((group) => {

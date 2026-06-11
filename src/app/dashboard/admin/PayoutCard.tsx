@@ -34,6 +34,7 @@ import {
   isXenditSupported,
   requiresKycForAutoPayout,
 } from "@/lib/payment-validation";
+import { statusCopy, TRANSACTION_STATUS } from "@/lib/status-copy";
 import {
   markTransactionAsPaid,
   payViaBillplz,
@@ -117,14 +118,6 @@ function renderPaymentDetails(tx: PayoutTransaction) {
   return null;
 }
 
-const statusConfig: Record<string, { color: string; label: string }> = {
-  PENDING: { color: "yellow", label: "Pending" },
-  PAID: { color: "green", label: "Paid" },
-  REJECTED: { color: "red", label: "Rejected" },
-  CANCELLED: { color: "gray", label: "Cancelled" },
-  ON_HOLD: { color: "orange", label: "On hold" },
-};
-
 function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const [loading, setLoading] = useState(false);
   const [billplzLoading, setBillplzLoading] = useState(false);
@@ -149,10 +142,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const isRejected = tx.status === "REJECTED";
   const isBonus = tx.source === "BONUS";
   const isIncentive = tx.source === "INCENTIVE";
-  const { color, label } = statusConfig[tx.status] ?? {
-    color: "gray",
-    label: tx.status,
-  };
+  const { color, label } = statusCopy(TRANSACTION_STATUS, tx.status);
 
   // Billplz eligibility: MYR + DuitNow with Billplz-supported bank + bank details present + no active payout
   const billplzEligible =

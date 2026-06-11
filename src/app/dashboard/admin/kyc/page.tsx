@@ -1,17 +1,9 @@
-import {
-  Group,
-  Stack,
-  Tabs,
-  TabsList,
-  TabsPanel,
-  TabsTab,
-  Text,
-  Title,
-} from "@mantine/core";
+import { Stack, Tabs, TabsList, TabsPanel, TabsTab, Text } from "@mantine/core";
 import type { Metadata } from "next";
 import { Suspense } from "react";
-import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
@@ -22,9 +14,20 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/kyc");
 
 export default function AdminKycPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <AdminKycContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="KYC Review"
+        subtitle="Review identity verification submissions for eWallet automatic payouts."
+        action={
+          <LinkButton href="/dashboard/admin" variant="subtle">
+            Back to Admin
+          </LinkButton>
+        }
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <AdminKycContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -69,58 +72,41 @@ async function AdminKycContent() {
   }
 
   return (
-    <FadeIn>
-      <Stack gap="lg">
-        <Group justify="space-between" align="flex-start">
-          <div>
-            <Title order={1}>KYC Review</Title>
-            <Text c="dimmed" mt="xs">
-              Review identity verification submissions for eWallet automatic
-              payouts.
-            </Text>
-          </div>
-          <LinkButton href="/dashboard/admin" variant="subtle">
-            Back to Admin
-          </LinkButton>
-        </Group>
+    <Tabs defaultValue="pending">
+      <TabsList>
+        <TabsTab value="pending">
+          Pending Review ({pendingVerifications.length})
+        </TabsTab>
+        <TabsTab value="recent">Recent Decisions</TabsTab>
+      </TabsList>
 
-        <Tabs defaultValue="pending">
-          <TabsList>
-            <TabsTab value="pending">
-              Pending Review ({pendingVerifications.length})
-            </TabsTab>
-            <TabsTab value="recent">Recent Decisions</TabsTab>
-          </TabsList>
+      <TabsPanel value="pending" pt="md">
+        {pendingVerifications.length === 0 ? (
+          <Text c="dimmed" ta="center" py="xl">
+            No pending verifications to review.
+          </Text>
+        ) : (
+          <Stack gap="md">
+            {pendingVerifications.map((v) => (
+              <KycReviewCard key={v.id} verification={toCardProps(v)} />
+            ))}
+          </Stack>
+        )}
+      </TabsPanel>
 
-          <TabsPanel value="pending" pt="md">
-            {pendingVerifications.length === 0 ? (
-              <Text c="dimmed" ta="center" py="xl">
-                No pending verifications to review.
-              </Text>
-            ) : (
-              <Stack gap="md">
-                {pendingVerifications.map((v) => (
-                  <KycReviewCard key={v.id} verification={toCardProps(v)} />
-                ))}
-              </Stack>
-            )}
-          </TabsPanel>
-
-          <TabsPanel value="recent" pt="md">
-            {recentVerifications.length === 0 ? (
-              <Text c="dimmed" ta="center" py="xl">
-                No recent decisions.
-              </Text>
-            ) : (
-              <Stack gap="md">
-                {recentVerifications.map((v) => (
-                  <KycReviewCard key={v.id} verification={toCardProps(v)} />
-                ))}
-              </Stack>
-            )}
-          </TabsPanel>
-        </Tabs>
-      </Stack>
-    </FadeIn>
+      <TabsPanel value="recent" pt="md">
+        {recentVerifications.length === 0 ? (
+          <Text c="dimmed" ta="center" py="xl">
+            No recent decisions.
+          </Text>
+        ) : (
+          <Stack gap="md">
+            {recentVerifications.map((v) => (
+              <KycReviewCard key={v.id} verification={toCardProps(v)} />
+            ))}
+          </Stack>
+        )}
+      </TabsPanel>
+    </Tabs>
   );
 }

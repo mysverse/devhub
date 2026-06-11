@@ -2,7 +2,7 @@
 
 import {
   Alert,
-  Badge,
+  Box,
   Button,
   Card,
   Group,
@@ -15,6 +15,8 @@ import {
 } from "@mantine/core";
 import { useState } from "react";
 import { toast } from "sonner";
+import StatusBadge from "@/components/StatusBadge";
+import { KYC_STATUS, statusCopy } from "@/lib/status-copy";
 import { approveKyc, rejectKyc } from "./actions";
 
 type KycReviewCardProps = {
@@ -57,17 +59,32 @@ const CHECKLIST = [
   "No signs of digital editing or tampering",
 ];
 
-function StatusBadge({ status }: { status: string }) {
-  const colorMap: Record<string, string> = {
-    PENDING: "yellow",
-    APPROVED: "green",
-    REJECTED: "red",
-    EXPIRED: "orange",
-  };
+/** Fixed-height placeholder box; the document fades in once loaded instead of
+ *  popping in. Height is reserved up front so nothing shifts. */
+function KycDocumentImage({ src, alt }: { src: string; alt: string }) {
+  const [loaded, setLoaded] = useState(false);
   return (
-    <Badge color={colorMap[status] || "gray"} variant="light">
-      {status}
-    </Badge>
+    <Box
+      h={240}
+      style={{
+        borderRadius: "var(--mantine-radius-md)",
+        background: "var(--mantine-color-dark-6)",
+        overflow: "hidden",
+      }}
+    >
+      <Image
+        src={src}
+        alt={alt}
+        fit="contain"
+        h={240}
+        onLoad={() => setLoaded(true)}
+        style={{
+          opacity: loaded ? 1 : 0,
+          transition: "opacity var(--duration-fast) var(--ease-out)",
+        }}
+        fallbackSrc="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23333' width='200' height='200'/%3E%3Ctext fill='%23666' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3EFailed to load%3C/text%3E%3C/svg%3E"
+      />
+    </Box>
   );
 }
 
@@ -118,7 +135,7 @@ export default function KycReviewCard({ verification }: KycReviewCardProps) {
           <div>
             <Group gap="xs">
               <Title order={4}>{verification.userName}</Title>
-              <StatusBadge status={verification.status} />
+              <StatusBadge copy={statusCopy(KYC_STATUS, verification.status)} />
             </Group>
             <Text size="sm" c="dimmed">
               {verification.userEmail}
@@ -167,26 +184,18 @@ export default function KycReviewCard({ verification }: KycReviewCardProps) {
               <Text size="sm" fw={500} mb="xs">
                 Government ID
               </Text>
-              <Image
+              <KycDocumentImage
                 src={`/api/kyc/document/${verification.id}/id-document`}
                 alt="Government ID"
-                radius="md"
-                fit="contain"
-                h={240}
-                fallbackSrc="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23333' width='200' height='200'/%3E%3Ctext fill='%23666' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3EFailed to load%3C/text%3E%3C/svg%3E"
               />
             </div>
             <div>
               <Text size="sm" fw={500} mb="xs">
                 Selfie with ID
               </Text>
-              <Image
+              <KycDocumentImage
                 src={`/api/kyc/document/${verification.id}/selfie`}
                 alt="Selfie with ID"
-                radius="md"
-                fit="contain"
-                h={240}
-                fallbackSrc="data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Crect fill='%23333' width='200' height='200'/%3E%3Ctext fill='%23666' x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle'%3EFailed to load%3C/text%3E%3C/svg%3E"
               />
             </div>
           </Group>

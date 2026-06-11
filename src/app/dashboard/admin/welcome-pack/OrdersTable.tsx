@@ -23,6 +23,8 @@ import {
 import type { ShippingRegion, WelcomePackOrderStatus } from "@prisma/client";
 import { useState } from "react";
 import { toast } from "sonner";
+import StatusBadge from "@/components/StatusBadge";
+import { statusCopy, WELCOME_PACK_ORDER_STATUS } from "@/lib/status-copy";
 import {
   approveWelcomePackOrder,
   fetchLiveEligibilityEvidence,
@@ -75,15 +77,6 @@ export type AdminOrderRow = {
   deliveredAt: string | null;
   selections: { itemName: string; selectedSize: string | null }[];
   eligibility: AdminEligibilitySnapshot;
-};
-
-const STATUS_COLORS: Record<WelcomePackOrderStatus, string> = {
-  PENDING: "yellow",
-  APPROVED: "blue",
-  SHIPPED: "indigo",
-  DELIVERED: "green",
-  CANCELLED: "gray",
-  REJECTED: "red",
 };
 
 const FILTERS: { value: string; label: string }[] = [
@@ -186,9 +179,9 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
       <Stack gap="md">
         <Group justify="space-between" wrap="wrap">
           <Group gap="xs">
-            <Badge color={STATUS_COLORS[order.status]} variant="light">
-              {order.status}
-            </Badge>
+            <StatusBadge
+              copy={statusCopy(WELCOME_PACK_ORDER_STATUS, order.status)}
+            />
             <Badge variant="light" color="grape">
               Wave {order.wave}
             </Badge>

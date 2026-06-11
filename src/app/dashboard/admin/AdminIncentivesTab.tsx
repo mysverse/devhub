@@ -26,6 +26,7 @@ import { Check, Play, RefreshCw, Save, ShieldAlert, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   buildAdminIncentiveSummary,
@@ -904,13 +905,11 @@ export default function AdminIncentivesTab({
             </Group>
           )}
           {awards.length === 0 ? (
-            <Card withBorder radius="md" padding="xl" ta="center">
-              <Text c="dimmed">No incentive awards yet.</Text>
-            </Card>
+            <EmptyState description="No incentive awards yet." />
           ) : filteredAwards.length === 0 ? (
-            <Card withBorder radius="md" padding="xl" ta="center">
-              <Stack gap="sm" align="center">
-                <Text c="dimmed">No awards match these filters.</Text>
+            <EmptyState
+              description="No awards match these filters."
+              action={
                 <Button
                   variant="subtle"
                   size="xs"
@@ -923,8 +922,8 @@ export default function AdminIncentivesTab({
                 >
                   Clear filters
                 </Button>
-              </Stack>
-            </Card>
+              }
+            />
           ) : (
             filteredAwards.map((award) => {
               const statusCopy = incentiveStatusCopy(award.status);

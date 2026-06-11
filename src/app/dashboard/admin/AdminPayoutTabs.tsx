@@ -1,15 +1,8 @@
 "use client";
 
-import {
-  Card,
-  SimpleGrid,
-  Tabs,
-  TabsList,
-  TabsPanel,
-  TabsTab,
-  Text,
-} from "@mantine/core";
+import { SimpleGrid, Tabs, TabsList, TabsPanel, TabsTab } from "@mantine/core";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import AdminBonusesTab, {
   type BonusConfigData,
   type BonusReviewCandidate,
@@ -34,11 +27,7 @@ function TransactionGrid({
   emptyMessage: string;
 }) {
   if (transactions.length === 0) {
-    return (
-      <Card withBorder radius="md" padding="xl" ta="center">
-        <Text c="dimmed">{emptyMessage}</Text>
-      </Card>
-    );
+    return <EmptyState description={emptyMessage} />;
   }
 
   return (

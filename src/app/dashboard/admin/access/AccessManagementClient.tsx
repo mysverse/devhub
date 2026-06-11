@@ -12,12 +12,8 @@ import {
   SimpleGrid,
   Stack,
   Switch,
-  Table,
-  TableScrollContainer,
-  TableTbody,
   TableTd,
   TableTh,
-  TableThead,
   TableTr,
   Text,
   Textarea,
@@ -27,6 +23,7 @@ import {
 import { RotateCcw, Save } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import { TableShell } from "@/components/DataTable";
 import {
   DEVELOPER_RANK_LABELS,
   DEVELOPER_RANKS,
@@ -238,143 +235,139 @@ function RoleMappings({
         Role Mappings
       </Title>
       <Stack gap="lg">
-        <TableScrollContainer minWidth={840}>
-          <Table layout="fixed">
-            <TableThead>
-              <TableTr>
-                <TableTh>Rank</TableTh>
-                <TableTh>Development role ID</TableTh>
-                <TableTh>Development legacy role ID</TableTh>
-                <TableTh>Discord role ID</TableTh>
-                <TableTh style={{ width: 110 }} />
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {rankMappings.map((mapping, index) => (
-                <TableTr key={mapping.rank}>
-                  <TableTd>
-                    <Text size="sm" fw={600}>
-                      {DEVELOPER_RANK_LABELS[mapping.rank]}
-                    </Text>
-                  </TableTd>
-                  <TableTd>
-                    <TextInput
-                      size="xs"
-                      value={mapping.robloxRoleId}
-                      onChange={(event) =>
-                        setRankMappings((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  robloxRoleId: event.currentTarget.value,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                  </TableTd>
-                  <TableTd>
-                    <TextInput
-                      size="xs"
-                      value={mapping.robloxLegacyRoleId}
-                      onChange={(event) =>
-                        setRankMappings((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  robloxLegacyRoleId: event.currentTarget.value,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                  </TableTd>
-                  <TableTd>
-                    <TextInput
-                      size="xs"
-                      value={mapping.discordRoleId}
-                      onChange={(event) =>
-                        setRankMappings((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  discordRoleId: event.currentTarget.value,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                  </TableTd>
-                  <TableTd>
-                    <Button
-                      size="xs"
-                      leftSection={<Save size={14} />}
-                      loading={loading === mapping.rank}
-                      onClick={() => saveRank(mapping)}
-                    >
-                      Save
-                    </Button>
-                  </TableTd>
-                </TableTr>
-              ))}
-            </TableTbody>
-          </Table>
-        </TableScrollContainer>
+        <TableShell
+          minWidth={840}
+          layout="fixed"
+          head={
+            <TableTr>
+              <TableTh>Rank</TableTh>
+              <TableTh>Development role ID</TableTh>
+              <TableTh>Development legacy role ID</TableTh>
+              <TableTh>Discord role ID</TableTh>
+              <TableTh style={{ width: 110 }} />
+            </TableTr>
+          }
+        >
+          {rankMappings.map((mapping, index) => (
+            <TableTr key={mapping.rank}>
+              <TableTd>
+                <Text size="sm" fw={600}>
+                  {DEVELOPER_RANK_LABELS[mapping.rank]}
+                </Text>
+              </TableTd>
+              <TableTd>
+                <TextInput
+                  size="xs"
+                  value={mapping.robloxRoleId}
+                  onChange={(event) =>
+                    setRankMappings((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? {
+                              ...item,
+                              robloxRoleId: event.currentTarget.value,
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </TableTd>
+              <TableTd>
+                <TextInput
+                  size="xs"
+                  value={mapping.robloxLegacyRoleId}
+                  onChange={(event) =>
+                    setRankMappings((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? {
+                              ...item,
+                              robloxLegacyRoleId: event.currentTarget.value,
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </TableTd>
+              <TableTd>
+                <TextInput
+                  size="xs"
+                  value={mapping.discordRoleId}
+                  onChange={(event) =>
+                    setRankMappings((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? {
+                              ...item,
+                              discordRoleId: event.currentTarget.value,
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </TableTd>
+              <TableTd>
+                <Button
+                  size="xs"
+                  leftSection={<Save size={14} />}
+                  loading={loading === mapping.rank}
+                  onClick={() => saveRank(mapping)}
+                >
+                  Save
+                </Button>
+              </TableTd>
+            </TableTr>
+          ))}
+        </TableShell>
 
-        <TableScrollContainer minWidth={560}>
-          <Table layout="fixed">
-            <TableThead>
-              <TableTr>
-                <TableTh>Specialty</TableTh>
-                <TableTh>Discord role ID</TableTh>
-                <TableTh style={{ width: 110 }} />
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {specialtyMappings.map((mapping, index) => (
-                <TableTr key={mapping.specialty}>
-                  <TableTd>
-                    {DEVELOPER_SPECIALTY_LABELS[mapping.specialty]}
-                  </TableTd>
-                  <TableTd>
-                    <TextInput
-                      size="xs"
-                      value={mapping.discordRoleId}
-                      onChange={(event) =>
-                        setSpecialtyMappings((current) =>
-                          current.map((item, itemIndex) =>
-                            itemIndex === index
-                              ? {
-                                  ...item,
-                                  discordRoleId: event.currentTarget.value,
-                                }
-                              : item,
-                          ),
-                        )
-                      }
-                    />
-                  </TableTd>
-                  <TableTd>
-                    <Button
-                      size="xs"
-                      leftSection={<Save size={14} />}
-                      loading={loading === mapping.specialty}
-                      onClick={() => saveSpecialty(mapping)}
-                    >
-                      Save
-                    </Button>
-                  </TableTd>
-                </TableTr>
-              ))}
-            </TableTbody>
-          </Table>
-        </TableScrollContainer>
+        <TableShell
+          minWidth={560}
+          layout="fixed"
+          head={
+            <TableTr>
+              <TableTh>Specialty</TableTh>
+              <TableTh>Discord role ID</TableTh>
+              <TableTh style={{ width: 110 }} />
+            </TableTr>
+          }
+        >
+          {specialtyMappings.map((mapping, index) => (
+            <TableTr key={mapping.specialty}>
+              <TableTd>{DEVELOPER_SPECIALTY_LABELS[mapping.specialty]}</TableTd>
+              <TableTd>
+                <TextInput
+                  size="xs"
+                  value={mapping.discordRoleId}
+                  onChange={(event) =>
+                    setSpecialtyMappings((current) =>
+                      current.map((item, itemIndex) =>
+                        itemIndex === index
+                          ? {
+                              ...item,
+                              discordRoleId: event.currentTarget.value,
+                            }
+                          : item,
+                      ),
+                    )
+                  }
+                />
+              </TableTd>
+              <TableTd>
+                <Button
+                  size="xs"
+                  leftSection={<Save size={14} />}
+                  loading={loading === mapping.specialty}
+                  onClick={() => saveSpecialty(mapping)}
+                >
+                  Save
+                </Button>
+              </TableTd>
+            </TableTr>
+          ))}
+        </TableShell>
       </Stack>
     </Card>
   );
@@ -923,60 +916,58 @@ function UserAccess({
             </SimpleGrid>
 
             {activeProjects.length > 0 && (
-              <TableScrollContainer minWidth={760}>
-                <Table mt="md" layout="fixed">
-                  <TableThead>
-                    <TableTr>
-                      <TableTh>Project</TableTh>
-                      <TableTh>Access</TableTh>
-                      <TableTh>Junior Roblox override</TableTh>
+              <TableShell
+                minWidth={760}
+                mt="md"
+                layout="fixed"
+                head={
+                  <TableTr>
+                    <TableTh>Project</TableTh>
+                    <TableTh>Access</TableTh>
+                    <TableTh>Junior Roblox override</TableTh>
+                  </TableTr>
+                }
+              >
+                {activeProjects.map((project) => {
+                  const membership = user.memberships.find(
+                    (item) => item.projectId === project.id,
+                  );
+                  return (
+                    <TableTr key={project.id}>
+                      <TableTd>{project.name}</TableTd>
+                      <TableTd>
+                        <Select
+                          size="xs"
+                          clearable
+                          data={accessOptions}
+                          value={membership?.accessLevel ?? null}
+                          onChange={(value) =>
+                            setProjectAccess(
+                              user,
+                              project.id as string,
+                              value as ProjectAccessLevelValue | null,
+                            )
+                          }
+                        />
+                      </TableTd>
+                      <TableTd>
+                        <Checkbox
+                          size="xs"
+                          disabled={!membership}
+                          checked={membership?.allowJuniorRobloxAccess ?? false}
+                          onChange={(event) =>
+                            setJuniorOverride(
+                              user,
+                              project.id as string,
+                              event.currentTarget.checked,
+                            )
+                          }
+                        />
+                      </TableTd>
                     </TableTr>
-                  </TableThead>
-                  <TableTbody>
-                    {activeProjects.map((project) => {
-                      const membership = user.memberships.find(
-                        (item) => item.projectId === project.id,
-                      );
-                      return (
-                        <TableTr key={project.id}>
-                          <TableTd>{project.name}</TableTd>
-                          <TableTd>
-                            <Select
-                              size="xs"
-                              clearable
-                              data={accessOptions}
-                              value={membership?.accessLevel ?? null}
-                              onChange={(value) =>
-                                setProjectAccess(
-                                  user,
-                                  project.id as string,
-                                  value as ProjectAccessLevelValue | null,
-                                )
-                              }
-                            />
-                          </TableTd>
-                          <TableTd>
-                            <Checkbox
-                              size="xs"
-                              disabled={!membership}
-                              checked={
-                                membership?.allowJuniorRobloxAccess ?? false
-                              }
-                              onChange={(event) =>
-                                setJuniorOverride(
-                                  user,
-                                  project.id as string,
-                                  event.currentTarget.checked,
-                                )
-                              }
-                            />
-                          </TableTd>
-                        </TableTr>
-                      );
-                    })}
-                  </TableTbody>
-                </Table>
-              </TableScrollContainer>
+                  );
+                })}
+              </TableShell>
             )}
 
             {user.lastSyncLogs.length > 0 && (

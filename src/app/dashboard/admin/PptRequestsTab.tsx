@@ -1,7 +1,8 @@
 "use client";
 
-import { Card, SimpleGrid, Text } from "@mantine/core";
+import { SimpleGrid } from "@mantine/core";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import PptRequestCard, { type PptRequestData } from "./PptRequestCard";
 
 export default function PptRequestsTab({
@@ -10,11 +11,7 @@ export default function PptRequestsTab({
   requests: PptRequestData[];
 }) {
   if (requests.length === 0) {
-    return (
-      <Card withBorder radius="md" padding="xl" ta="center">
-        <Text c="dimmed">No pending PPT requests.</Text>
-      </Card>
-    );
+    return <EmptyState description="No pending PPT requests." />;
   }
 
   return (

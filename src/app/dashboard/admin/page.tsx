@@ -1,10 +1,11 @@
-import { Badge, Group, Text, Title } from "@mantine/core";
+import { Badge, Group, Stack } from "@mantine/core";
 import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
@@ -144,9 +145,49 @@ function getStoredTaskTitle(tx: TransactionWithUser) {
 
 export default function AdminPage() {
   return (
-    <Suspense fallback={<PageSkeleton cards={4} />}>
-      <AdminPageContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="Admin Payouts"
+        subtitle="Review and manage developer payouts."
+        action={
+          <Group>
+            <LinkButton href="/dashboard/admin/users" variant="light">
+              Team Members
+            </LinkButton>
+            <LinkButton href="/dashboard/admin/access" variant="light">
+              Access
+            </LinkButton>
+            <LinkButton href="/dashboard/admin/documents" variant="light">
+              Document Compliance
+            </LinkButton>
+            <LinkButton href="/dashboard/admin/kyc" variant="light">
+              KYC Review
+              <Suspense fallback={null}>
+                <PendingKycBadge />
+              </Suspense>
+            </LinkButton>
+            <LinkButton href="/dashboard/admin/welcome-pack" variant="light">
+              Welcome Pack
+            </LinkButton>
+          </Group>
+        }
+      />
+      <Suspense fallback={<PageSkeleton cards={4} withHeader={false} />}>
+        <AdminPageContent />
+      </Suspense>
+    </PageContainer>
+  );
+}
+
+async function PendingKycBadge() {
+  const pendingKycCount = await prisma.kycVerification.count({
+    where: { status: "PENDING" },
+  });
+  if (pendingKycCount === 0) return null;
+  return (
+    <Badge size="sm" circle ml={4}>
+      {pendingKycCount}
+    </Badge>
   );
 }
 
@@ -162,7 +203,6 @@ async function AdminPageContent() {
     incentiveConfig,
     incentiveAwards,
     readyBonusCandidates,
-    pendingKycCount,
     pptPayoutStates,
   ] = await Promise.all([
     prisma.transaction.findMany({
@@ -259,9 +299,6 @@ async function AdminPageContent() {
       },
       orderBy: [{ period: "asc" }, { completedAt: "asc" }],
       take: 100,
-    }),
-    prisma.kycVerification.count({
-      where: { status: "PENDING" },
     }),
     prisma.pptPayoutState.findMany({
       where: {
@@ -554,38 +591,7 @@ async function AdminPageContent() {
   );
 
   return (
-    <FadeIn>
-      <Group justify="space-between" mb="xl">
-        <div>
-          <Title order={1}>Admin Payouts</Title>
-          <Text c="dimmed" mt="xs">
-            Review and manage developer payouts.
-          </Text>
-        </div>
-        <Group>
-          <LinkButton href="/dashboard/admin/users" variant="light">
-            Team Members
-          </LinkButton>
-          <LinkButton href="/dashboard/admin/access" variant="light">
-            Access
-          </LinkButton>
-          <LinkButton href="/dashboard/admin/documents" variant="light">
-            Document Compliance
-          </LinkButton>
-          <LinkButton href="/dashboard/admin/kyc" variant="light">
-            KYC Review
-            {pendingKycCount > 0 && (
-              <Badge size="sm" circle ml={4}>
-                {pendingKycCount}
-              </Badge>
-            )}
-          </LinkButton>
-          <LinkButton href="/dashboard/admin/welcome-pack" variant="light">
-            Welcome Pack
-          </LinkButton>
-        </Group>
-      </Group>
-
+    <Stack gap="xl">
       <BillplzCollectionCard
         currentCollectionId={currentCollectionId}
         source={collectionSource}
@@ -627,6 +633,6 @@ async function AdminPageContent() {
           }),
         )}
       />
-    </FadeIn>
+    </Stack>
   );
 }

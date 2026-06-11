@@ -23,6 +23,9 @@ import {
   OVERLAY_PROPS,
   SPRING,
 } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
+import StatusBadge from "@/components/StatusBadge";
+import { PPT_PAYOUT_STATUS, statusCopy } from "@/lib/status-copy";
 import {
   clearPptProofOverrideAsAdmin,
   overridePptProofAsAdmin,
@@ -57,17 +60,6 @@ export type AdminPptEligibilityState = {
     message: string | null;
     createdAt: string;
   }[];
-};
-
-const statusColors: Record<string, string> = {
-  BLOCKED: "red",
-  NEEDS_PROOF: "yellow",
-  WAITING_STABILITY: "blue",
-  READY_FOR_PAYOUT: "green",
-  TRANSACTION_PENDING: "green",
-  ON_HOLD: "orange",
-  PAID: "green",
-  FLAGGED: "red",
 };
 
 const ownerLabels = {
@@ -162,13 +154,10 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
             <Group justify="space-between" align="flex-start" wrap="nowrap">
               <Stack gap={4} style={{ minWidth: 0 }}>
                 <Group gap="xs">
-                  <Badge
+                  <StatusBadge
                     size="sm"
-                    variant="light"
-                    color={statusColors[state.status] ?? "gray"}
-                  >
-                    {state.status.replaceAll("_", " ")}
-                  </Badge>
+                    copy={statusCopy(PPT_PAYOUT_STATUS, state.status)}
+                  />
                   <Badge size="sm" variant="light" color={owner.color}>
                     {owner.label}
                   </Badge>
@@ -371,11 +360,7 @@ export default function AdminPptEligibilityTab({
   states: AdminPptEligibilityState[];
 }) {
   if (states.length === 0) {
-    return (
-      <Card withBorder radius="md" padding="xl" ta="center">
-        <Text c="dimmed">No PPT eligibility events yet.</Text>
-      </Card>
-    );
+    return <EmptyState description="No PPT eligibility events yet." />;
   }
 
   const sections = [

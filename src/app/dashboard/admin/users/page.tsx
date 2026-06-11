@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
+import LinkButton from "@/components/LinkButton";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
@@ -11,9 +14,19 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/admin/users");
 
 export default function AdminUsersPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <AdminUsersContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="Team Members"
+        action={
+          <LinkButton href="/dashboard/admin" variant="subtle">
+            Back to Admin
+          </LinkButton>
+        }
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <AdminUsersContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 

@@ -11,11 +11,12 @@ import {
   TableThead,
   TableTr,
   Text,
-  Title,
 } from "@mantine/core";
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
@@ -28,9 +29,20 @@ export const metadata: Metadata = buildSocialMetadata(
 
 export default function AdminDocumentsPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <AdminDocumentsContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="Document Compliance"
+        subtitle="Overview of all team members' document signing status."
+        action={
+          <LinkButton href="/dashboard/admin" variant="subtle">
+            Back to Admin
+          </LinkButton>
+        }
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <AdminDocumentsContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -54,16 +66,6 @@ async function AdminDocumentsContent() {
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={2}>Document Compliance</Title>
-        <LinkButton href="/dashboard/admin" variant="subtle">
-          Back to Admin
-        </LinkButton>
-      </Group>
-      <Text c="dimmed">
-        Overview of all team members&apos; document signing status.
-      </Text>
-
       <Card withBorder radius="md" padding={0}>
         <Table striped highlightOnHover>
           <TableThead>

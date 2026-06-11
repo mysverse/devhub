@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { getAllDocumentTemplates } from "@/lib/documents";
@@ -12,9 +14,15 @@ export const metadata: Metadata = buildSocialMetadata("/dashboard/documents");
 
 export default function DocumentsPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <DocumentsContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="Documents"
+        subtitle="View and manage your legal agreements. All documents must be signed during onboarding."
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <DocumentsContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 

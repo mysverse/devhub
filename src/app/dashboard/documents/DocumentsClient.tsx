@@ -15,10 +15,15 @@ import {
   Title,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
+import { AnimatePresence } from "motion/react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
-import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
+import {
+  AnimatedListItem,
+  MODAL_TRANSITION,
+  OVERLAY_PROPS,
+} from "@/components/animations";
 import { addCoiEntry, removeCoiEntry, updateCoiEntry } from "./actions";
 
 type CoiEntryData = {
@@ -44,12 +49,6 @@ export default function DocumentsClient({
 }) {
   return (
     <Stack gap="lg">
-      <Title order={2}>Documents</Title>
-      <Text c="dimmed">
-        View and manage your legal agreements. All documents must be signed
-        during onboarding.
-      </Text>
-
       <SimpleGrid cols={{ base: 1, sm: 2 }} spacing="lg">
         {documents.map((doc) => (
           <DocumentCard key={doc.type} document={doc} />
@@ -199,39 +198,47 @@ function CoiEntriesSection({ entries }: { entries: CoiEntryData[] }) {
         </Text>
       ) : (
         <Stack gap="xs">
-          {entries.map((entry) => (
-            <Card key={entry.id} withBorder radius="sm" padding="sm">
-              <Group justify="space-between" wrap="nowrap" align="flex-start">
-                <Stack gap={4}>
-                  <Text size="sm" fw={600}>
-                    {entry.organizationName}
-                  </Text>
-                  <Text size="xs" c="dimmed">
-                    {entry.natureOfInvolvement}
-                  </Text>
-                  <Text size="xs">{entry.description}</Text>
-                </Stack>
-                <Group gap={4}>
-                  <ActionIcon
-                    variant="subtle"
-                    size="sm"
-                    onClick={() => openEditModal(entry)}
+          <AnimatePresence mode="popLayout" initial={false}>
+            {entries.map((entry) => (
+              <AnimatedListItem key={entry.id}>
+                <Card withBorder radius="sm" padding="sm">
+                  <Group
+                    justify="space-between"
+                    wrap="nowrap"
+                    align="flex-start"
                   >
-                    <Text size="xs">Edit</Text>
-                  </ActionIcon>
-                  <ActionIcon
-                    variant="subtle"
-                    color="red"
-                    size="sm"
-                    onClick={() => handleRemove(entry.id)}
-                    loading={loading}
-                  >
-                    <Text size="xs">X</Text>
-                  </ActionIcon>
-                </Group>
-              </Group>
-            </Card>
-          ))}
+                    <Stack gap={4}>
+                      <Text size="sm" fw={600}>
+                        {entry.organizationName}
+                      </Text>
+                      <Text size="xs" c="dimmed">
+                        {entry.natureOfInvolvement}
+                      </Text>
+                      <Text size="xs">{entry.description}</Text>
+                    </Stack>
+                    <Group gap={4}>
+                      <ActionIcon
+                        variant="subtle"
+                        size="sm"
+                        onClick={() => openEditModal(entry)}
+                      >
+                        <Text size="xs">Edit</Text>
+                      </ActionIcon>
+                      <ActionIcon
+                        variant="subtle"
+                        color="red"
+                        size="sm"
+                        onClick={() => handleRemove(entry.id)}
+                        loading={loading}
+                      >
+                        <Text size="xs">X</Text>
+                      </ActionIcon>
+                    </Group>
+                  </Group>
+                </Card>
+              </AnimatedListItem>
+            ))}
+          </AnimatePresence>
         </Stack>
       )}
 

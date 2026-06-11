@@ -4,10 +4,17 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:mock": "tsx scripts/dev/dev-mock.ts",
+    "dev:mock:reset": "tsx scripts/dev/dev-mock.ts --reset",
+    "dev:mock:seed": "tsx scripts/dev/dev-mock.ts --seed-only",
+    "dev:mock:stop": "tsx scripts/dev/dev-mock.ts --stop",
     "build": "prisma generate && next build",
     "start": "next start",
     "lint": "biome lint --write",
-    "check": "biome check --write"
+    "check": "biome check --write",
+    "typecheck": "prisma generate && tsc --noEmit",
+    "smoke": "tsx scripts/dev/smoke.ts",
+    "simulate": "tsx scripts/dev/simulate.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",
@@ -53,6 +60,7 @@
     "dotenv": "^17.4.2",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.0",
+    "tsx": "^4.22.4",
     "typescript": "^6.0.3"
   }
 }

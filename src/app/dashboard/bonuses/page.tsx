@@ -11,12 +11,18 @@ import {
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import { StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
+import StatCard from "@/components/StatCard";
+import StatusBadge from "@/components/StatusBadge";
 import { getSession } from "@/lib/auth-utils";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
+import { BONUS_CANDIDATE_STATUS, statusCopy } from "@/lib/status-copy";
 import RefreshBonusesButton from "./RefreshBonusesButton";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/bonuses");
@@ -35,14 +41,6 @@ type BonusCandidateCardData = {
   period: string | null;
   rejectionReason: string | null;
   transaction: { status: string; paidAt: Date | null } | null;
-};
-
-const statusMeta: Record<string, { label: string; color: string }> = {
-  ELIGIBLE: { label: "Potential", color: "green" },
-  READY_FOR_REVIEW: { label: "Review", color: "yellow" },
-  APPROVED: { label: "Approved", color: "blue" },
-  REJECTED: { label: "Rejected", color: "red" },
-  INELIGIBLE: { label: "Ineligible", color: "gray" },
 };
 
 function formatCandidateAmount(candidate: BonusCandidateCardData) {
@@ -74,7 +72,7 @@ function BonusCandidateCard({
 }: {
   candidate: BonusCandidateCardData;
 }) {
-  const meta = statusMeta[candidate.status] ?? statusMeta.INELIGIBLE;
+  const meta = statusCopy(BONUS_CANDIDATE_STATUS, candidate.status);
   return (
     <Card withBorder radius="md" padding="lg" h="100%">
       <Stack gap="sm" h="100%">
@@ -85,9 +83,7 @@ function BonusCandidateCard({
                 {candidate.linearIssueIdentifier}
               </Badge>
             )}
-            <Badge variant="light" color={meta.color}>
-              {meta.label}
-            </Badge>
+            <StatusBadge copy={meta} />
           </Group>
           <Text
             fw={700}
@@ -164,9 +160,7 @@ function CandidateGrid({
         {title}
       </Title>
       {candidates.length === 0 ? (
-        <Card withBorder radius="md" padding="xl" ta="center">
-          <Text c="dimmed">{empty}</Text>
-        </Card>
+        <EmptyState description={empty} />
       ) : (
         <StaggerContainer>
           <SimpleGrid cols={{ base: 1, md: 2, lg: 3 }} spacing="lg">
@@ -184,9 +178,16 @@ function CandidateGrid({
 
 export default function BonusesPage() {
   return (
-    <Suspense fallback={<PageSkeleton />}>
-      <BonusesContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="Bonuses"
+        subtitle="Non-guaranteed monthly payouts for eligible non-PPT Linear work."
+        action={<RefreshBonusesButton />}
+      />
+      <Suspense fallback={<PageSkeleton withHeader={false} />}>
+        <BonusesContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -237,89 +238,61 @@ async function BonusesContent() {
   );
 
   return (
-    <FadeIn>
-      <Group justify="space-between" align="flex-start" mb="2rem" wrap="wrap">
-        <div>
-          <Title order={1}>Bonuses</Title>
-          <Text c="dimmed" mt="xs">
-            Non-guaranteed monthly payouts for eligible non-PPT Linear work.
-          </Text>
-        </div>
-        <RefreshBonusesButton />
-      </Group>
-
-      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg" mb="xl">
-        <Card withBorder radius="md" padding="xl">
-          <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
-            Potential
-          </Text>
-          <Text fz="xl" fw={700}>
-            {formatTotals(
-              active.map((candidate) => ({
-                currency: candidate.currency,
-                amount: candidate.maxAmount,
-              })),
-            )}
-          </Text>
-        </Card>
-        <Card withBorder radius="md" padding="xl">
-          <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
-            In Review
-          </Text>
-          <Text fz="xl" fw={700}>
-            {formatTotals(
-              ready.map((candidate) => ({
-                currency: candidate.currency,
-                amount: candidate.maxAmount,
-              })),
-            )}
-          </Text>
-        </Card>
-        <Card withBorder radius="md" padding="xl">
-          <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
-            Approved
-          </Text>
-          <Text fz="xl" fw={700}>
-            {formatTotals(
-              approvedPending.map((transaction) => ({
-                currency: transaction.currency,
-                amount: transaction.amount,
-              })),
-            )}
-          </Text>
-        </Card>
-        <Card withBorder radius="md" padding="xl">
-          <Text fz="sm" tt="uppercase" fw={700} c="dimmed">
-            Paid Bonuses
-          </Text>
-          <Text fz="xl" fw={700}>
-            {formatTotals(
-              paid.map((transaction) => ({
-                currency: transaction.currency,
-                amount: transaction.amount,
-              })),
-            )}
-          </Text>
-        </Card>
+    <Stack gap="xl">
+      <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="lg">
+        <StatCard
+          label="Potential"
+          value={formatTotals(
+            active.map((candidate) => ({
+              currency: candidate.currency,
+              amount: candidate.maxAmount,
+            })),
+          )}
+        />
+        <StatCard
+          label="In Review"
+          value={formatTotals(
+            ready.map((candidate) => ({
+              currency: candidate.currency,
+              amount: candidate.maxAmount,
+            })),
+          )}
+        />
+        <StatCard
+          label="Approved"
+          value={formatTotals(
+            approvedPending.map((transaction) => ({
+              currency: transaction.currency,
+              amount: transaction.amount,
+            })),
+          )}
+        />
+        <StatCard
+          label="Paid Bonuses"
+          value={formatTotals(
+            paid.map((transaction) => ({
+              currency: transaction.currency,
+              amount: transaction.amount,
+            })),
+          )}
+        />
       </SimpleGrid>
 
-      <Stack gap="xl">
-        <CandidateGrid
-          title="Potential"
-          candidates={active}
-          empty="No active bonus candidates right now."
-        />
-        <CandidateGrid
-          title="Ready for Review"
-          candidates={ready}
-          empty="No completed bonus work is waiting for admin review."
-        />
-        <CandidateGrid
-          title="History"
-          candidates={history}
-          empty="No reviewed bonus items yet."
-        />
-      </Stack>
-    </FadeIn>
+      <CandidateGrid
+        title="Potential"
+        candidates={active}
+        empty="No active bonus candidates right now."
+      />
+      <CandidateGrid
+        title="Ready for Review"
+        candidates={ready}
+        empty="No completed bonus work is waiting for admin review."
+      />
+      <CandidateGrid
+        title="History"
+        candidates={history}
+        empty="No reviewed bonus items yet."
+      />
+    </Stack>
   );
 }

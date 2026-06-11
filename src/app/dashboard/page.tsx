@@ -17,6 +17,7 @@ import {
   HeroSkeleton,
   IncentiveProgressSkeleton,
   LeaderboardSkeleton,
+  TransactionsSkeleton,
 } from "./_components/Skeletons";
 import SuggestedPPTs from "./_components/SuggestedPPTs";
 
@@ -36,31 +37,26 @@ const getDashboardContext = cache(async () => {
   return { userId, user, userProfile, userCurrency };
 });
 
-async function LinearLinkAlert() {
-  const { user, userProfile } = await getDashboardContext();
-
-  if (userProfile.linearId) return null;
-
-  return (
-    <Alert color="yellow" title="Linear Account Not Linked" mb={32}>
-      We couldn&apos;t automatically link your Linear account. Please ensure
-      your account email ({user?.email || "Not set"}) matches your Linear
-      workspace email, or try signing out and back in.
-    </Alert>
-  );
-}
-
 async function HeroSection() {
   const { userId, user, userProfile, userCurrency } =
     await getDashboardContext();
 
   return (
-    <Hero
-      userProfile={userProfile}
-      userId={userId}
-      currency={userCurrency}
-      user={{ name: user?.name, email: user?.email }}
-    />
+    <Stack gap="lg">
+      {!userProfile.linearId && (
+        <Alert color="yellow" title="Linear Account Not Linked">
+          We couldn&apos;t automatically link your Linear account. Please ensure
+          your account email ({user?.email || "Not set"}) matches your Linear
+          workspace email, or try signing out and back in.
+        </Alert>
+      )}
+      <Hero
+        userProfile={userProfile}
+        userId={userId}
+        currency={userCurrency}
+        user={{ name: user?.name, email: user?.email }}
+      />
+    </Stack>
   );
 }
 
@@ -107,36 +103,30 @@ async function RecentTransactionsSection() {
 
 export default function DashboardPage() {
   return (
-    <>
-      <Suspense fallback={null}>
-        <LinearLinkAlert />
+    <Stack gap={48}>
+      <Suspense fallback={<HeroSkeleton />}>
+        <HeroSection />
       </Suspense>
 
-      <Stack gap={48}>
-        <Suspense fallback={<HeroSkeleton />}>
-          <HeroSection />
-        </Suspense>
+      <Suspense fallback={<ActiveTasksSkeleton />}>
+        <ActiveTasksSection />
+      </Suspense>
 
-        <Suspense fallback={<ActiveTasksSkeleton />}>
-          <ActiveTasksSection />
-        </Suspense>
+      <Suspense fallback={<IncentiveProgressSkeleton />}>
+        <IncentiveProgressSection />
+      </Suspense>
 
-        <Suspense fallback={<IncentiveProgressSkeleton />}>
-          <IncentiveProgressSection />
-        </Suspense>
+      <Suspense fallback={<CarouselSkeleton />}>
+        <SuggestedPptsSection />
+      </Suspense>
 
-        <Suspense fallback={<CarouselSkeleton />}>
-          <SuggestedPptsSection />
-        </Suspense>
+      <Suspense fallback={<LeaderboardSkeleton />}>
+        <LeaderboardSection />
+      </Suspense>
 
-        <Suspense fallback={<LeaderboardSkeleton />}>
-          <LeaderboardSection />
-        </Suspense>
-
-        <Suspense fallback={null}>
-          <RecentTransactionsSection />
-        </Suspense>
-      </Stack>
-    </>
+      <Suspense fallback={<TransactionsSkeleton />}>
+        <RecentTransactionsSection />
+      </Suspense>
+    </Stack>
   );
 }

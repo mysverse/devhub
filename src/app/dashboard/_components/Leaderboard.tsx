@@ -1,15 +1,8 @@
-import {
-  Avatar,
-  Badge,
-  Card,
-  Group,
-  Stack,
-  Text,
-  ThemeIcon,
-} from "@mantine/core";
+import { Avatar, Badge, Card, Group, Stack, Text } from "@mantine/core";
 import { Trophy } from "lucide-react";
 import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { LinearReauthRequiredError } from "@/lib/linear";
@@ -35,22 +28,11 @@ type LeaderboardEntry = {
 
 function EmptyLeaderboard() {
   return (
-    <Card withBorder radius="md" padding="xl">
-      <Stack gap="md" align="center" py="md">
-        <ThemeIcon size={56} radius="xl" variant="light" color="blue">
-          <Trophy size={26} />
-        </ThemeIcon>
-        <Stack gap={4} align="center">
-          <Text fw={600} fz="lg">
-            No leaderboard data yet
-          </Text>
-          <Text c="dimmed" fz="sm" ta="center" maw={340}>
-            Completed and in-progress PPTs will appear here once the board gets
-            moving.
-          </Text>
-        </Stack>
-      </Stack>
-    </Card>
+    <EmptyState
+      icon={<Trophy size={26} />}
+      title="No leaderboard data yet"
+      description="Completed and in-progress PPTs will appear here once the board gets moving."
+    />
   );
 }
 

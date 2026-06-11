@@ -19,11 +19,13 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import LinkAnchor from "@/components/LinkAnchor";
 import { formatBonusPeriod } from "@/lib/bonus";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
+import { statusCopy, TRANSACTION_STATUS } from "@/lib/status-copy";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 import styles from "./RecentTransactions.module.css";
 
@@ -57,14 +59,18 @@ function getSourceMeta(
   return null;
 }
 
+// Icons and amount tinting are presentation-specific to this list; the badge
+// color itself comes from the shared TRANSACTION_STATUS map.
 function getStatusMeta(status: Transaction["status"]): {
   color: string;
   amountColor: string;
   icon: ReactNode;
 } {
+  const color = statusCopy(TRANSACTION_STATUS, status).color;
+
   if (status === "PAID") {
     return {
-      color: "green",
+      color,
       amountColor: "green.4",
       icon: <CheckCircle2 size={18} />,
     };
@@ -72,7 +78,7 @@ function getStatusMeta(status: Transaction["status"]): {
 
   if (status === "PENDING") {
     return {
-      color: "yellow",
+      color,
       amountColor: "gray.3",
       icon: <Clock size={18} />,
     };
@@ -80,7 +86,7 @@ function getStatusMeta(status: Transaction["status"]): {
 
   if (status === "ON_HOLD") {
     return {
-      color: "orange",
+      color,
       amountColor: "gray.3",
       icon: <PauseCircle size={18} />,
     };
@@ -88,14 +94,14 @@ function getStatusMeta(status: Transaction["status"]): {
 
   if (status === "REJECTED") {
     return {
-      color: "red",
+      color,
       amountColor: "gray.5",
       icon: <XCircle size={18} />,
     };
   }
 
   return {
-    color: "gray",
+    color,
     amountColor: "gray.5",
     icon: <Circle size={18} />,
   };
@@ -103,19 +109,13 @@ function getStatusMeta(status: Transaction["status"]): {
 
 function EmptyTransactions() {
   return (
-    <Stack gap="md" align="center" py={48}>
-      <ThemeIcon size={56} radius="xl" variant="light" color="gray">
-        <Receipt size={26} />
-      </ThemeIcon>
-      <Stack gap={4} align="center">
-        <Text fw={600} fz="lg">
-          No transactions yet
-        </Text>
-        <Text c="dimmed" fz="sm" maw={320} ta="center">
-          Complete a PPT and your payout will show up here.
-        </Text>
-      </Stack>
-    </Stack>
+    <EmptyState
+      variant="plain"
+      icon={<Receipt size={26} />}
+      color="gray"
+      title="No transactions yet"
+      description="Complete a PPT and your payout will show up here."
+    />
   );
 }
 
@@ -162,7 +162,8 @@ export default async function RecentTransactions({ userId }: Props) {
                           i > 0
                             ? "1px solid var(--mantine-color-default-border)"
                             : undefined,
-                        transition: "background-color 0.18s ease",
+                        transition:
+                          "background-color var(--duration-fast) var(--ease-out)",
                       }}
                     >
                       <ThemeIcon

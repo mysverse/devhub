@@ -16,6 +16,9 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
+import PageContainer from "@/components/PageContainer";
+import PageHeader from "@/components/PageHeader";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
 import type { CurrencyCode } from "@/lib/currency";
@@ -308,11 +311,7 @@ async function PPTList({
 
   if (issues.length === 0) {
     return (
-      <Card withBorder radius="md" padding="xl" ta="center">
-        <Text c="dimmed">
-          No available PPTs at the moment. Check back later!
-        </Text>
-      </Card>
+      <EmptyState description="No available PPTs at the moment. Check back later!" />
     );
   }
 
@@ -493,9 +492,16 @@ async function PPTList({
 
 export default function PPTsPage() {
   return (
-    <Suspense fallback={<PPTSkeleton />}>
-      <PPTsPageContent />
-    </Suspense>
+    <PageContainer>
+      <PageHeader
+        title="PPT Board"
+        subtitle="Find available tasks labeled as PPT (Pay Per Task). Claim a task to earn its payout."
+        action={<PptRequestButton />}
+      />
+      <Suspense fallback={<PPTSkeleton />}>
+        <PPTsPageContent />
+      </Suspense>
+    </PageContainer>
   );
 }
 
@@ -513,18 +519,7 @@ async function PPTsPageContent() {
   );
 
   return (
-    <FadeIn>
-      <Group justify="space-between" align="flex-start" mb="2rem" wrap="wrap">
-        <div>
-          <Title order={1}>PPT Board</Title>
-          <Text c="dimmed" mt="xs">
-            Find available tasks labeled as PPT (Pay Per Task). Claim a task to
-            earn its payout.
-          </Text>
-        </div>
-        <PptRequestButton />
-      </Group>
-
+    <Stack gap="xl">
       <Suspense fallback={<PPTSkeleton />}>
         <PPTList
           userId={userId}
@@ -533,11 +528,9 @@ async function PPTsPageContent() {
         />
       </Suspense>
 
-      <div style={{ marginTop: "2rem" }}>
-        <Suspense>
-          <MyPptRequests userId={userId} />
-        </Suspense>
-      </div>
-    </FadeIn>
+      <Suspense>
+        <MyPptRequests userId={userId} />
+      </Suspense>
+    </Stack>
   );
 }

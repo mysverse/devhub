@@ -14,14 +14,10 @@ import {
   Tooltip,
 } from "@mantine/core";
 import { FadeIn } from "@/components/animations";
+import StatusBadge from "@/components/StatusBadge";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
-
-const STATUS_COLORS: Record<string, string> = {
-  PENDING: "yellow",
-  APPROVED: "green",
-  REJECTED: "red",
-};
+import { PPT_REQUEST_STATUS, statusCopy } from "@/lib/status-copy";
 
 export default async function MyPptRequests({ userId }: { userId: string }) {
   const requests = await prisma.pptRequest.findMany({
@@ -89,14 +85,16 @@ export default async function MyPptRequests({ userId }: { userId: string }) {
                     <TableTd>
                       {req.status === "REJECTED" && req.rejectionReason ? (
                         <Tooltip label={req.rejectionReason}>
-                          <Badge size="sm" color={STATUS_COLORS[req.status]}>
-                            {req.status}
-                          </Badge>
+                          <StatusBadge
+                            size="sm"
+                            copy={statusCopy(PPT_REQUEST_STATUS, req.status)}
+                          />
                         </Tooltip>
                       ) : (
-                        <Badge size="sm" color={STATUS_COLORS[req.status]}>
-                          {req.status}
-                        </Badge>
+                        <StatusBadge
+                          size="sm"
+                          copy={statusCopy(PPT_REQUEST_STATUS, req.status)}
+                        />
                       )}
                     </TableTd>
                     <TableTd>

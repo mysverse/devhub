@@ -1,6 +1,7 @@
 import {
   Alert,
   Badge,
+  Box,
   Card,
   Group,
   Skeleton,
@@ -13,10 +14,12 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import PageHeader from "@/components/PageHeader";
 import { getSession } from "@/lib/auth-utils";
 import { countryNameFromCode } from "@/lib/countries";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
+import { WELCOME_PACK_ORDER_STATUS } from "@/lib/status-copy";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import CancelOrderButton from "./CancelOrderButton";
 import EligibilityGate from "./EligibilityGate";
@@ -28,37 +31,39 @@ export const metadata: Metadata = buildSocialMetadata(
   "/dashboard/welcome-pack",
 );
 
+// Long-form copy stays local; the badge color comes from the shared
+// WELCOME_PACK_ORDER_STATUS map so it cannot drift from other surfaces.
 const STATUS_COPY: Record<
   WelcomePackOrderStatus,
   { color: string; title: string; body: string }
 > = {
   PENDING: {
-    color: "yellow",
+    color: WELCOME_PACK_ORDER_STATUS.PENDING.color,
     title: "Order received",
     body: "We're reviewing your order. You'll get an email once it's approved.",
   },
   APPROVED: {
-    color: "blue",
+    color: WELCOME_PACK_ORDER_STATUS.APPROVED.color,
     title: "Approved",
     body: "Your pack is queued for fulfillment. We'll email you when it ships.",
   },
   SHIPPED: {
-    color: "indigo",
+    color: WELCOME_PACK_ORDER_STATUS.SHIPPED.color,
     title: "On the way",
     body: "Your welcome pack has shipped. Tracking details below.",
   },
   DELIVERED: {
-    color: "green",
+    color: WELCOME_PACK_ORDER_STATUS.DELIVERED.color,
     title: "Delivered",
     body: "Your welcome pack was delivered. Enjoy!",
   },
   CANCELLED: {
-    color: "gray",
+    color: WELCOME_PACK_ORDER_STATUS.CANCELLED.color,
     title: "Cancelled",
     body: "This order was cancelled.",
   },
   REJECTED: {
-    color: "red",
+    color: WELCOME_PACK_ORDER_STATUS.REJECTED.color,
     title: "Order not approved",
     body: "Reach out if you have questions.",
   },
@@ -118,17 +123,17 @@ async function WelcomePackContent() {
     const countryName = countryNameFromCode(existingOrder.country);
     return (
       <FadeIn>
-        <Group justify="space-between" mb="xl" wrap="wrap">
-          <div>
-            <Title order={1}>Welcome Pack</Title>
-            <Text c="dimmed" mt="xs">
-              {pack?.description ?? "Your DevHub welcome pack."}
-            </Text>
-          </div>
-          <Badge variant="light" color={status.color} size="lg">
-            {existingOrder.status}
-          </Badge>
-        </Group>
+        <Box mb="xl">
+          <PageHeader
+            title="Welcome Pack"
+            subtitle={pack?.description ?? "Your DevHub welcome pack."}
+            action={
+              <Badge variant="light" color={status.color} size="lg">
+                {existingOrder.status}
+              </Badge>
+            }
+          />
+        </Box>
 
         <StaggerContainer>
           <StaggerItem>
@@ -222,14 +227,12 @@ async function WelcomePackContent() {
   if (!pack) {
     return (
       <FadeIn>
-        <Group mb="xl">
-          <div>
-            <Title order={1}>Welcome Pack</Title>
-            <Text c="dimmed" mt="xs">
-              Welcome packs aren&apos;t open yet. Check back soon.
-            </Text>
-          </div>
-        </Group>
+        <Box mb="xl">
+          <PageHeader
+            title="Welcome Pack"
+            subtitle="Welcome packs aren't open yet. Check back soon."
+          />
+        </Box>
         <Alert color="blue">
           The welcome pack hasn&apos;t been configured yet. Once admins set it
           up, eligible developers will see an order form here.
@@ -284,16 +287,9 @@ async function WelcomePackContent() {
 
   return (
     <FadeIn>
-      <Group mb="xl">
-        <div>
-          <Title order={1}>{pack.name}</Title>
-          {pack.description && (
-            <Text c="dimmed" mt="xs">
-              {pack.description}
-            </Text>
-          )}
-        </div>
-      </Group>
+      <Box mb="xl">
+        <PageHeader title={pack.name} subtitle={pack.description} />
+      </Box>
 
       <Suspense fallback={<EligibilitySkeleton />}>
         <EligibilityGate

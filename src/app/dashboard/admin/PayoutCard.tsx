@@ -454,7 +454,9 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
               <Text size="sm" fw={600} mb={4}>
                 Pay via {getPaymentMethodLabel(tx.paymentMethod)}
               </Text>
-              <Text size="sm" c="dimmed" ff="monospace">
+              {/* component="div": renderPaymentDetails returns block elements,
+                  which are invalid inside the default <p>. */}
+              <Text size="sm" c="dimmed" ff="monospace" component="div">
                 {renderPaymentDetails(tx)}
               </Text>
             </Box>

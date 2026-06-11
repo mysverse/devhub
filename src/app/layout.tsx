@@ -3,6 +3,7 @@ import { MotionConfig } from "motion/react";
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { Toaster } from "sonner";
+import DevModeBanner from "@/components/DevModeBanner";
 import { siteConfig } from "@/lib/config";
 import { buildSocialMetadata, getSocialBaseUrl } from "@/lib/social-previews";
 import "@mantine/core/styles.css";
@@ -90,6 +91,7 @@ export default function RootLayout({
           <MotionConfig reducedMotion="user">
             {children}
             <Toaster theme="dark" richColors position="bottom-right" />
+            <DevModeBanner />
           </MotionConfig>
         </MantineProvider>
       </body>

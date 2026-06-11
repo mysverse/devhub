@@ -1,4 +1,5 @@
 import { Group, Text, Title } from "@mantine/core";
+import PageTitleTransition from "@/components/PageTitleTransition";
 
 type PageHeaderProps = {
   title: React.ReactNode;
@@ -24,7 +25,9 @@ export default function PageHeader({
   return (
     <Group justify="space-between" align="flex-start" wrap="wrap">
       <div>
-        <Title order={1}>{title}</Title>
+        <PageTitleTransition>
+          <Title order={1}>{title}</Title>
+        </PageTitleTransition>
         {subtitle && (
           <Text c="dimmed" mt="xs">
             {subtitle}

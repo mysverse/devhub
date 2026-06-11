@@ -34,6 +34,13 @@ body {
   transform: scale(0.97);
 }
 
+/* View Transitions (dashboard template.tsx): suppress the browser's default
+   full-root crossfade so only explicit boundaries animate — the persistent
+   AppShell header/nav must never be snapshotted. */
+:root {
+  view-transition-name: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* Zeroing the duration tokens makes every transition that uses them
      effectively instant, without fighting Mantine's own reduced-motion
@@ -42,6 +49,16 @@ body {
     --duration-fast: 0.01ms;
     --duration-base: 0.01ms;
     --duration-slow: 0.01ms;
+  }
+
+  /* View Transition pseudo-elements run outside Motion's reducedMotion
+     config and need their own guard. !important is required to beat the
+     UA-generated per-transition animations. */
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    /* biome-ignore lint/complexity/noImportantStyles: must override UA-generated view-transition animations */
+    animation-duration: 0.01ms !important;
   }
 
   .mantine-Skeleton-root {

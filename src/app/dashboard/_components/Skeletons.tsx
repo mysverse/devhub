@@ -100,6 +100,64 @@ export function LeaderboardSkeleton() {
   );
 }
 
+/** Mirrors the StatCard tile geometry (uppercase label + xl value). */
+export function StatGridSkeleton({ count = 4 }: { count?: number }) {
+  return (
+    <SimpleGrid cols={{ base: 1, sm: 2, lg: count }} spacing="lg">
+      {[...Array(count)].map((_, i) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
+        <Card key={i} withBorder>
+          <Stack gap={8}>
+            <Skeleton height={12} width={100} />
+            <Skeleton height={24} width={140} />
+          </Stack>
+        </Card>
+      ))}
+    </SimpleGrid>
+  );
+}
+
+/** Mirrors the RecentTransactions section: header + icon rows. */
+export function TransactionsSkeleton() {
+  return (
+    <Stack gap="md">
+      <Group gap="sm">
+        <Skeleton height={32} width={32} radius="md" />
+        <Stack gap={6}>
+          <Skeleton height={20} width={200} />
+          <Skeleton height={12} width={260} />
+        </Stack>
+      </Group>
+      <Card withBorder radius="md" p={0}>
+        <Stack gap={0}>
+          {[...Array(4)].map((_, i) => (
+            <Group
+              // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
+              key={i}
+              p="md"
+              style={
+                i > 0
+                  ? {
+                      borderTop:
+                        "1px solid var(--mantine-color-default-border)",
+                    }
+                  : undefined
+              }
+            >
+              <Skeleton height={40} width={40} radius="md" />
+              <Stack gap={6} style={{ flex: 1 }}>
+                <Skeleton height={14} width="40%" />
+                <Skeleton height={10} width="25%" />
+              </Stack>
+              <Skeleton height={16} width={90} />
+            </Group>
+          ))}
+        </Stack>
+      </Card>
+    </Stack>
+  );
+}
+
 export function IncentiveProgressSkeleton() {
   return (
     <Card withBorder radius="md" padding="lg">

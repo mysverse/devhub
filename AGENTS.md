@@ -5,18 +5,53 @@ This file provides guidance to coding agents when working in this repository.
 ## Commands
 
 ```bash
-pnpm dev                    # Start the Next.js dev server
+pnpm dev                    # Start the Next.js dev server (needs real env vars)
+pnpm dev:mock               # Start in dev mode: local DB + seeded data + mocked services
 pnpm build                  # Production build; runs prisma generate first
 pnpm start                  # Start the production server
 pnpm lint                   # Run Biome lint with auto-fix
 pnpm check                  # Run Biome check with auto-fix
-pnpm exec tsc --noEmit      # Type-check without writing build output
+pnpm typecheck              # prisma generate && tsc --noEmit
+pnpm smoke                  # Dev-mode route sweep (requires pnpm dev:mock running)
+pnpm simulate <...>         # Dev-mode webhook/cron simulators (see Dev Mode below)
 pnpm exec prisma validate   # Validate the Prisma schema
 pnpm exec prisma generate   # Regenerate Prisma client after schema changes
 pnpm exec prisma migrate dev # Create/apply development migrations
 ```
 
 `pnpm build` needs production-like secrets available. In local verification it may fail during page-data collection if required env vars such as KV, Better Auth, Resend, or provider credentials are missing.
+
+## Dev Mode (mock environment)
+
+`pnpm dev:mock` runs the full app with **zero real dependencies** — an
+embedded local Postgres (`prisma dev`, no Docker), seeded data, real
+better-auth sessions, and all external HTTP (Linear, Resend, Upstash,
+Discord, Roblox, FinSys, Billplz, Xendit, Vercel Blob) answered by mocks in
+`src/dev/`. Use it for visual/logic testing and browser automation. Full
+runbook: `.claude/skills/dev-mode/SKILL.md`.
+
+- Login by URL: `/api/dev/login?as=developer|admin|fresh`. Password for the
+  sign-in form: `devhub-mock-password`.
+- `pnpm dev:mock:reset` wipes and re-seeds; `pnpm simulate
+  linear|billplz|xendit|cron` fires signed webhooks/crons that exercise the
+  real verification code paths.
+- Restart `pnpm dev:mock` after editing `src/dev/**` or
+  `src/instrumentation.ts` — the fetch interceptor installs once at boot and
+  HMR does not reliably reload it.
+
+**Drift contract — when you change the codebase, keep dev mode true:**
+
+| Change | Also update |
+|---|---|
+| New Prisma model or page that needs data | `prisma/seed.ts` (typed against the real client — `pnpm typecheck` catches drift) and the route list in `scripts/dev/smoke.ts` |
+| New outbound HTTP call / external service | handler in `src/dev/handlers/` + ROUTES entry in `src/dev/intercept.ts` (unhandled hosts throw loudly in dev mode) |
+| New Linear SDK query/mutation or raw GraphQL | `src/dev/handlers/linear.ts` (unknown operations throw with the operation name) |
+| New environment variable | a fake value in `.env.mock` — it must enumerate every var so real values never leak into mock runs |
+| New DB rows derived from Linear issues | use ids from `src/dev/fixtures/linear.ts`, the single source of truth shared by the seed, the Linear mock, and the simulators |
+
+`DEV_MODE`/`NEXT_PUBLIC_DEV_MODE` live exclusively in `.env.mock` — never put
+them in `.env` or `.env.local`. Dev mode refuses to start against a non-local
+database (`assertDevModeSafety` in `src/lib/dev-mode.ts`).
 
 ## Architecture
 

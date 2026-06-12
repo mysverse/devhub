@@ -72,6 +72,17 @@ export const STEP_VARIANTS: Variants = {
   exit: { opacity: 0, x: -24 },
 };
 
+/**
+ * Direction-aware variant of STEP_VARIANTS: pass `custom={1}` for forward
+ * navigation and `custom={-1}` for backward so the slide matches the user's
+ * direction of travel.
+ */
+export const DIRECTIONAL_STEP_VARIANTS: Variants = {
+  initial: (direction: 1 | -1) => ({ opacity: 0, x: 24 * direction }),
+  animate: { opacity: 1, x: 0 },
+  exit: (direction: 1 | -1) => ({ opacity: 0, x: -24 * direction }),
+};
+
 export const STEP_TRANSITION: Transition = {
   duration: DURATION.base,
   ease: EASE.out,
@@ -187,12 +198,15 @@ export function StepTransition({
   children,
   className,
   minHeight,
+  direction = 1,
 }: {
   step: string | number;
   children: React.ReactNode;
   className?: string;
   /** Optional fixed min-height (px) to prevent layout jank during transitions. */
   minHeight?: number;
+  /** 1 = forward (slide left), -1 = backward (slide right). */
+  direction?: 1 | -1;
 }) {
   return (
     <div
@@ -202,10 +216,12 @@ export function StepTransition({
         minHeight,
       }}
     >
-      <AnimatePresence mode="wait" initial={false}>
+      {/* custom must be on AnimatePresence too — exit variants resolve from it. */}
+      <AnimatePresence mode="wait" initial={false} custom={direction}>
         <motion.div
           key={step}
-          variants={STEP_VARIANTS}
+          custom={direction}
+          variants={DIRECTIONAL_STEP_VARIANTS}
           initial="initial"
           animate="animate"
           exit="exit"

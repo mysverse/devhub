@@ -6,10 +6,10 @@ import {
   MenuDropdown,
   MenuTarget,
   Table,
+  type TableProps,
   TableScrollContainer,
   TableTbody,
   TableThead,
-  type TableProps,
 } from "@mantine/core";
 import { EllipsisVertical } from "lucide-react";
 

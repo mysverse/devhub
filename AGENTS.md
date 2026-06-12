@@ -8,6 +8,7 @@ This file provides guidance to coding agents when working in this repository.
 pnpm dev                    # Start the Next.js dev server (needs real env vars)
 pnpm dev:mock               # Start in dev mode: local DB + seeded data + mocked services
 pnpm build                  # Production build; runs prisma generate first
+pnpm build:mock             # Production build with mock env — use this to verify builds locally
 pnpm start                  # Start the production server
 pnpm lint                   # Run Biome lint with auto-fix
 pnpm check                  # Run Biome check with auto-fix
@@ -19,7 +20,45 @@ pnpm exec prisma generate   # Regenerate Prisma client after schema changes
 pnpm exec prisma migrate dev # Create/apply development migrations
 ```
 
-`pnpm build` needs production-like secrets available. In local verification it may fail during page-data collection if required env vars such as KV, Better Auth, Resend, or provider credentials are missing.
+Bare `pnpm build` needs production-like secrets (KV, Better Auth, Resend,
+provider credentials) and dies during page-data collection without them —
+use `pnpm build:mock`, which loads `.env.mock` first.
+
+## Production Builds & Prerendering (Cache Components)
+
+Hard-won rules — violating any of these produces failures that are expensive
+to diagnose:
+
+- **Run `pnpm build:mock` before pushing** anything that touches server
+  components, layouts, route structure, or `next.config.ts`. TypeScript and
+  the dev server do not exercise the static prerender pass; only a real
+  build does.
+- **Never let a non-production `NODE_ENV` reach `next build`.**
+  `next.config.ts` fails fast on this. If you see the error: some env file or
+  wrapper injected it. The underlying failure mode is the vendored
+  react-dom-server resolving its development build against production react,
+  which crashes every prerender with
+  `Cannot read properties of null (reading 'useContext')`. `.env.mock`
+  deliberately has no NODE_ENV entry — do not add one.
+- **Suspense subtrees that read uncached data (Prisma, fetch) must read
+  request data first or `await connection()`** (from `next/server`).
+  Cache Components rejects components that touch the clock or uncached IO
+  before any `cookies()`/`headers()`/`connection()` read — and Prisma
+  Accelerate samples the clock internally, so this **only fails on Vercel**,
+  never against the local pg adapter. Components that go through
+  `getSession()`/`requireAdminPage()` are already safe; a component that hits
+  Prisma directly (e.g. a badge/count in its own `<Suspense>`) needs
+  `await connection()` first. Precedents: 4af3648, `PendingKycBadge` in
+  `src/app/dashboard/admin/page.tsx`.
+- **Do not trust `next build --debug-prerender` as a green signal** — it
+  skips the strict prerender enforcement and passes builds that fail for
+  real. Use it only for better stack traces. To unmask "ignore-listed
+  frames" in prerender errors, build with `__NEXT_SHOW_IGNORE_LISTED=true`.
+- **Deploys migrate after the build succeeds**: `vercel.json` sets
+  `buildCommand` to `prisma generate && next build && prisma migrate deploy`
+  so a broken build can no longer leave production running old code against
+  a newly migrated schema. Keep that ordering; prerenders defer all DB IO,
+  so the build never needs the new schema.
 
 ## Dev Mode (mock environment)
 
@@ -73,6 +112,7 @@ DevHub is a developer payment and operations dashboard for MYSverse. It handles:
 - **Linear OAuth**: `src/lib/linear.ts` uses stored better-auth Linear OAuth tokens and refresh tokens. If auth fails, it throws `LinearReauthRequiredError` so UI can send users to `/auth/reauth-linear`.
 - **Prisma client**: `src/lib/prisma.ts` uses the Prisma `pg` adapter with a PostgreSQL pool.
 - **Animations and notifications**: use `motion`, `motion-plus`, shared helpers in `src/components/animations.tsx`, and `sonner` for toasts.
+- **Welcome pack invariants**: `WelcomePackOrder.activeUserId` equals `userId` while an order is live and is NULL once CANCELLED/REJECTED (the nullable unique replaces a `userId` unique so users can re-order after terminal states; DELIVERED keeps the slot). Admin status changes must go through `transitionOrder()` in the admin `actions.ts` — it commits the CAS update and the `WelcomePackOrderEvent` audit row atomically and keeps `activeUserId` in sync. The ordering window (`getOrderingWindowState` in `src/lib/welcome-pack-ordering.ts`) is enforced server-side in `submitWelcomePackOrder` and deliberately NOT in `updateMyWelcomePackOrder` (amendments aren't new orders). Field/selection validation shared by client and server lives in `src/lib/welcome-pack-validation.ts`.
 
 ## Payment Logic
 

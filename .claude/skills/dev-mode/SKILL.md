@@ -63,6 +63,9 @@ instant.
 ```bash
 pnpm smoke       # logs in as each persona, fetches all key routes, asserts 200
 pnpm typecheck   # prisma generate && tsc --noEmit (catches seed/fixture drift)
+pnpm build:mock  # production build with mock env — exercises the static
+                 # prerender pass that dev/typecheck never touch; run it for
+                 # any change to server components, layouts or next.config
 ```
 
 `POST /api/dev/reset` restores in-memory mock state (Linear workspace,

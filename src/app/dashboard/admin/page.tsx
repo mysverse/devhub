@@ -2,6 +2,7 @@ import { Badge, Group, Stack } from "@mantine/core";
 import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
 import PageContainer from "@/components/PageContainer";
@@ -180,6 +181,10 @@ export default function AdminPage() {
 }
 
 async function PendingKycBadge() {
+  // Cache Components: defer to request time before hitting the database —
+  // unlike AdminPageContent this subtree reads no request data of its own,
+  // so without this the build-time prerender rejects the uncached query.
+  await connection();
   const pendingKycCount = await prisma.kycVerification.count({
     where: { status: "PENDING" },
   });

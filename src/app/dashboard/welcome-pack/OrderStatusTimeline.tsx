@@ -10,7 +10,7 @@ import {
   Truck,
   X,
 } from "lucide-react";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import type { ComponentType } from "react";
 
 const ACTIVE_STEPS: {
@@ -38,6 +38,10 @@ export default function OrderStatusTimeline({
 }: {
   status: WelcomePackOrderStatus;
 }) {
+  // The infinite pulse animates opacity too, which MotionConfig's
+  // reducedMotion="user" does NOT suppress — gate it explicitly so reduced
+  // motion gets only the static halo.
+  const reducedMotion = useReducedMotion();
   const isTerminal = status === "CANCELLED" || status === "REJECTED";
 
   if (isTerminal) {
@@ -109,7 +113,7 @@ export default function OrderStatusTimeline({
                       : "none",
                   }}
                 >
-                  {isCurrent && (
+                  {isCurrent && !reducedMotion && (
                     <motion.div
                       aria-hidden
                       animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}

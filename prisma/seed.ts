@@ -1194,6 +1194,7 @@ export async function seed() {
   await prisma.welcomePackOrder.create({
     data: {
       userId: bala.userId,
+      activeUserId: bala.userId,
       packId: pack.id,
       status: "PENDING",
       wave: 1,
@@ -1205,7 +1206,7 @@ export async function seed() {
       city: "Shah Alam",
       stateProvince: "Selangor",
       postalCode: "40000",
-      country: "Malaysia",
+      country: "MY",
       eligibilitySnapshot: {
         wave: 1,
         qualifyingIssues: ["MYS-223"],
@@ -1219,11 +1220,23 @@ export async function seed() {
           { itemId: lanyardItem.id },
         ],
       },
+      events: {
+        create: [
+          {
+            actorId: bala.userId,
+            actorRole: "USER",
+            type: "SUBMITTED",
+            message: "Order submitted (wave 1)",
+            createdAt: daysAgo(1),
+          },
+        ],
+      },
     },
   });
   await prisma.welcomePackOrder.create({
     data: {
       userId: mei.userId,
+      activeUserId: mei.userId,
       packId: pack.id,
       status: "SHIPPED",
       wave: 1,
@@ -1235,7 +1248,7 @@ export async function seed() {
       city: "George Town",
       stateProvince: "Pulau Pinang",
       postalCode: "10450",
-      country: "Malaysia",
+      country: "MY",
       trackingNumber: "MYTRACK123456",
       trackingUrl: "https://tracking.devhub.mock/MYTRACK123456",
       eligibilitySnapshot: {
@@ -1250,6 +1263,29 @@ export async function seed() {
         create: [
           { itemId: shirtItem.id, selectedSize: "M" },
           { itemId: stickerItem.id },
+        ],
+      },
+      events: {
+        create: [
+          {
+            actorId: mei.userId,
+            actorRole: "USER",
+            type: "SUBMITTED",
+            message: "Order submitted (wave 1)",
+            createdAt: daysAgo(12),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "APPROVED",
+            message: "Order approved",
+            createdAt: daysAgo(10),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "SHIPPED",
+            message: "Marked shipped (tracking MYTRACK123456)",
+            createdAt: daysAgo(6),
+          },
         ],
       },
     },

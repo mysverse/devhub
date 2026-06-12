@@ -4,16 +4,20 @@ import {
   Box,
   Card,
   Group,
+  SimpleGrid,
   Skeleton,
   Stack,
   Text,
   Title,
 } from "@mantine/core";
 import type { WelcomePackOrderStatus } from "@prisma/client";
+import dayjs from "dayjs";
+import { CalendarClock, CalendarOff, PauseCircle } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import EmptyState from "@/components/EmptyState";
 import PageHeader from "@/components/PageHeader";
 import { getSession } from "@/lib/auth-utils";
 import { countryNameFromCode } from "@/lib/countries";
@@ -21,10 +25,18 @@ import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { WELCOME_PACK_ORDER_STATUS } from "@/lib/status-copy";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
+import {
+  getOrderingWindowState,
+  type OrderingWindowState,
+} from "@/lib/welcome-pack-ordering";
 import CancelOrderButton from "./CancelOrderButton";
+import EditOrderButton, { type EditableOrder } from "./EditOrderModal";
 import EligibilityGate from "./EligibilityGate";
 import type { OrderFormDefaults, OrderFormPack } from "./OrderForm";
+import OrderingWindowBanner from "./OrderingWindowBanner";
 import OrderStatusTimeline from "./OrderStatusTimeline";
+import PackItemsPreview from "./PackItemsPreview";
+import SuccessCelebration from "./SuccessCelebration";
 import TrackingCard from "./TrackingCard";
 
 export const metadata: Metadata = buildSocialMetadata(
@@ -91,23 +103,34 @@ async function WelcomePackContent() {
   const { userId } = await getSession();
   if (!userId) redirect("/");
 
-  const [profile, existingOrder, pack] = await Promise.all([
+  const [profile, activeOrder, pack] = await Promise.all([
     prisma.userProfile.findUnique({
       where: { id: userId },
       select: {
         legalName: true,
         shippingAddress: true,
-        user: { select: { email: true } },
       },
     }),
     prisma.welcomePackOrder.findUnique({
-      where: { userId },
+      where: { activeUserId: userId },
       include: {
-        selections: { include: { item: { select: { name: true } } } },
+        selections: {
+          include: {
+            item: {
+              select: {
+                id: true,
+                name: true,
+                requiresSize: true,
+                sizeOptions: true,
+              },
+            },
+          },
+        },
       },
     }),
     prisma.welcomePack.findFirst({
       where: { isActive: true },
+      orderBy: { createdAt: "desc" },
       include: {
         items: {
           where: { isActive: true },
@@ -117,10 +140,31 @@ async function WelcomePackContent() {
     }),
   ]);
 
-  // Existing order — show timeline + summary.
-  if (existingOrder) {
-    const status = STATUS_COPY[existingOrder.status];
-    const countryName = countryNameFromCode(existingOrder.country);
+  // Active (non-terminal) order — show timeline + summary.
+  if (activeOrder) {
+    const status = STATUS_COPY[activeOrder.status];
+    const countryName = countryNameFromCode(activeOrder.country);
+    const editableOrder: EditableOrder = {
+      idCardName: activeOrder.idCardName,
+      region: activeOrder.region,
+      recipientName: activeOrder.recipientName,
+      phone: activeOrder.phone,
+      addressLine1: activeOrder.addressLine1,
+      addressLine2: activeOrder.addressLine2,
+      city: activeOrder.city,
+      stateProvince: activeOrder.stateProvince,
+      postalCode: activeOrder.postalCode,
+      country: activeOrder.country,
+      notes: activeOrder.notes,
+      selections: activeOrder.selections.map((s) => ({
+        itemId: s.item.id,
+        itemName: s.item.name,
+        requiresSize: s.item.requiresSize,
+        sizeOptions: s.item.sizeOptions,
+        selectedSize: s.selectedSize,
+      })),
+    };
+
     return (
       <FadeIn>
         <Box mb="xl">
@@ -129,11 +173,13 @@ async function WelcomePackContent() {
             subtitle={pack?.description ?? "Your DevHub welcome pack."}
             action={
               <Badge variant="light" color={status.color} size="lg">
-                {existingOrder.status}
+                {activeOrder.status}
               </Badge>
             }
           />
         </Box>
+
+        <SuccessCelebration />
 
         <StaggerContainer>
           <StaggerItem>
@@ -142,86 +188,114 @@ async function WelcomePackContent() {
                 <Stack gap="xs">
                   <Title order={4}>{status.title}</Title>
                   <Text>{status.body}</Text>
+                  <Text size="sm" c="dimmed">
+                    Submitted{" "}
+                    {dayjs(activeOrder.createdAt).format("D MMM YYYY")} · Wave{" "}
+                    {activeOrder.wave}
+                  </Text>
                 </Stack>
 
-                <OrderStatusTimeline status={existingOrder.status} />
+                <OrderStatusTimeline status={activeOrder.status} />
 
-                {existingOrder.rejectionReason && (
-                  <Alert color="red" variant="light">
-                    {existingOrder.rejectionReason}
-                  </Alert>
-                )}
-
-                {existingOrder.trackingNumber && (
+                {activeOrder.trackingNumber && (
                   <TrackingCard
-                    trackingNumber={existingOrder.trackingNumber}
-                    trackingUrl={existingOrder.trackingUrl}
+                    trackingNumber={activeOrder.trackingNumber}
+                    trackingUrl={activeOrder.trackingUrl}
                   />
                 )}
 
-                {existingOrder.status === "PENDING" && <CancelOrderButton />}
+                {activeOrder.status === "PENDING" && (
+                  <Group
+                    justify="flex-end"
+                    gap="xs"
+                    pt="md"
+                    style={{
+                      borderTop: "1px solid var(--mantine-color-dark-5)",
+                    }}
+                  >
+                    <EditOrderButton order={editableOrder} />
+                    <CancelOrderButton />
+                  </Group>
+                )}
               </Stack>
             </Card>
           </StaggerItem>
 
           <StaggerItem>
-            <Card withBorder radius="md" p="lg" mb="md">
-              <Stack gap="md">
-                <Title order={5}>Order summary</Title>
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+              <Card withBorder radius="md" p="lg">
+                <Stack gap="md">
+                  <Title order={5}>Order summary</Title>
 
-                <Stack gap={4}>
-                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                    ID card name
-                  </Text>
-                  <Text>{existingOrder.idCardName}</Text>
+                  <Stack gap={4}>
+                    <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+                      ID card name
+                    </Text>
+                    <Text>{activeOrder.idCardName}</Text>
+                  </Stack>
+
+                  <Stack gap={4}>
+                    <Text size="xs" tt="uppercase" fw={600} c="dimmed">
+                      Items
+                    </Text>
+                    <Group gap="xs" wrap="wrap">
+                      {activeOrder.selections.map((s) => (
+                        <Badge
+                          key={s.id}
+                          variant="light"
+                          color="gray"
+                          size="md"
+                        >
+                          {s.item.name}
+                          {s.selectedSize ? ` · ${s.selectedSize}` : ""}
+                        </Badge>
+                      ))}
+                    </Group>
+                  </Stack>
                 </Stack>
+              </Card>
 
-                <Stack gap={4}>
-                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                    Shipping to
-                  </Text>
-                  <Text size="sm" fw={500}>
-                    {existingOrder.recipientName}
-                  </Text>
-                  <Text size="sm" c="dimmed">
-                    {existingOrder.phone}
-                  </Text>
-                  <Text size="sm" style={{ whiteSpace: "pre-line" }}>
-                    {[
-                      existingOrder.addressLine1,
-                      existingOrder.addressLine2,
-                      [existingOrder.city, existingOrder.stateProvince]
+              <Card withBorder radius="md" p="lg">
+                <Stack gap="md">
+                  <Title order={5}>Shipping to</Title>
+                  <Stack gap={4}>
+                    <Text size="sm" fw={500}>
+                      {activeOrder.recipientName}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      {activeOrder.phone}
+                    </Text>
+                    <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                      {[
+                        activeOrder.addressLine1,
+                        activeOrder.addressLine2,
+                        [activeOrder.city, activeOrder.stateProvince]
+                          .filter(Boolean)
+                          .join(", "),
+                        [activeOrder.postalCode, countryName]
+                          .filter(Boolean)
+                          .join(" "),
+                      ]
                         .filter(Boolean)
-                        .join(", "),
-                      [existingOrder.postalCode, countryName]
-                        .filter(Boolean)
-                        .join(" "),
-                    ]
-                      .filter(Boolean)
-                      .join("\n")}
-                  </Text>
+                        .join("\n")}
+                    </Text>
+                  </Stack>
                 </Stack>
-
-                <Stack gap={4}>
-                  <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-                    Items
-                  </Text>
-                  <Group gap="xs" wrap="wrap">
-                    {existingOrder.selections.map((s) => (
-                      <Badge key={s.id} variant="light" color="gray" size="md">
-                        {s.item.name}
-                        {s.selectedSize ? ` · ${s.selectedSize}` : ""}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Stack>
-              </Stack>
-            </Card>
+              </Card>
+            </SimpleGrid>
           </StaggerItem>
         </StaggerContainer>
       </FadeIn>
     );
   }
+
+  // No active order — a previous one may have ended in cancellation or
+  // rejection; surface that next to whatever comes below.
+  const lastTerminalOrder = await prisma.welcomePackOrder.findFirst({
+    where: { userId, status: { in: ["CANCELLED", "REJECTED"] } },
+    orderBy: { createdAt: "desc" },
+    select: { status: true, rejectionReason: true, createdAt: true },
+  });
 
   // No active pack configured.
   if (!pack) {
@@ -233,17 +307,76 @@ async function WelcomePackContent() {
             subtitle="Welcome packs aren't open yet. Check back soon."
           />
         </Box>
-        <Alert color="blue">
-          The welcome pack hasn&apos;t been configured yet. Once admins set it
-          up, eligible developers will see an order form here.
-        </Alert>
+        <EmptyState
+          icon={<CalendarClock size={26} />}
+          title="Not set up yet"
+          description="The welcome pack hasn't been configured yet. Once admins set it up, eligible developers will see an order form here."
+        />
       </FadeIn>
     );
   }
 
-  // Pack exists, no order yet — render header + items preview always (so the
-  // page doesn't appear empty while we wait on Linear), and gate the order
-  // form behind a Suspense boundary backed by EligibilityGate.
+  const window = getOrderingWindowState(pack);
+
+  const terminalAlert = lastTerminalOrder ? (
+    <Alert
+      color={lastTerminalOrder.status === "REJECTED" ? "red" : "gray"}
+      variant="light"
+      title={
+        lastTerminalOrder.status === "REJECTED"
+          ? "Your previous order wasn't approved"
+          : "Your previous order was cancelled"
+      }
+    >
+      {lastTerminalOrder.rejectionReason && (
+        <Text size="sm" mb={4}>
+          {lastTerminalOrder.rejectionReason}
+        </Text>
+      )}
+      <Text size="sm">
+        {window.open
+          ? "You can place a new order below."
+          : "You'll be able to place a new order when ordering reopens."}
+      </Text>
+    </Alert>
+  ) : null;
+
+  // Ordering window closed — header + explanation + pack preview, no form.
+  if (!window.open) {
+    return (
+      <FadeIn>
+        <Box mb="xl">
+          <PageHeader title={pack.name} subtitle={pack.description} />
+        </Box>
+        <Stack gap="xl">
+          {terminalAlert}
+          <ClosedWindowState window={window} />
+          {pack.items.length > 0 && (
+            <Stack gap="md">
+              <Title order={4}>What&apos;s in the pack</Title>
+              <Text c="dimmed" size="sm" mt={-6}>
+                A preview of what eligible developers get to claim.
+              </Text>
+              <PackItemsPreview
+                items={pack.items.map((item) => ({
+                  id: item.id,
+                  name: item.name,
+                  description: item.description,
+                  imageBlobUrl: item.imageBlobUrl
+                    ? welcomePackAssetUrl("item-image", item.id, item.updatedAt)
+                    : null,
+                }))}
+              />
+            </Stack>
+          )}
+        </Stack>
+      </FadeIn>
+    );
+  }
+
+  // Pack exists, ordering open, no active order — render header + the gated
+  // order form (eligibility resolves behind Suspense so the page isn't
+  // blocked on Linear).
   const formPack: OrderFormPack = {
     id: pack.id,
     name: pack.name,
@@ -282,7 +415,6 @@ async function WelcomePackContent() {
   const defaults: OrderFormDefaults = {
     legalName: profile?.legalName ?? null,
     shippingAddress: profile?.shippingAddress ?? null,
-    email: profile?.user.email ?? null,
   };
 
   return (
@@ -291,14 +423,57 @@ async function WelcomePackContent() {
         <PageHeader title={pack.name} subtitle={pack.description} />
       </Box>
 
-      <Suspense fallback={<EligibilitySkeleton />}>
-        <EligibilityGate
-          userId={userId}
-          pack={formPack}
-          defaults={defaults}
-          wave2Open={pack.wave2Open}
-        />
-      </Suspense>
+      <Stack gap="md">
+        {terminalAlert}
+        {window.closesAt && (
+          <OrderingWindowBanner closesAt={window.closesAt.toISOString()} />
+        )}
+        <Suspense fallback={<EligibilitySkeleton />}>
+          <EligibilityGate
+            userId={userId}
+            pack={formPack}
+            defaults={defaults}
+            wave2Open={pack.wave2Open}
+          />
+        </Suspense>
+      </Stack>
     </FadeIn>
+  );
+}
+
+function ClosedWindowState({
+  window,
+}: {
+  window: Extract<OrderingWindowState, { open: false }>;
+}) {
+  if (window.reason === "not-yet-open" && window.opensAt) {
+    return (
+      <EmptyState
+        icon={<CalendarClock size={26} />}
+        color="yellow"
+        title="Ordering opens soon"
+        description={`Ordering opens ${dayjs(window.opensAt).format(
+          "D MMM YYYY, HH:mm",
+        )} — ${dayjs(window.opensAt).diff(dayjs(), "day") >= 1 ? `in ${dayjs(window.opensAt).diff(dayjs(), "day")} day(s)` : "later today"}. Check back then.`}
+      />
+    );
+  }
+  if (window.reason === "closed") {
+    return (
+      <EmptyState
+        icon={<CalendarOff size={26} />}
+        color="red"
+        title="Ordering has closed"
+        description="Ordering for this welcome pack has closed. Keep an eye out for announcements about future waves."
+      />
+    );
+  }
+  return (
+    <EmptyState
+      icon={<PauseCircle size={26} />}
+      color="gray"
+      title="Ordering is paused"
+      description="Ordering is temporarily paused while admins make adjustments. Check back soon."
+    />
   );
 }

@@ -76,7 +76,6 @@ export type OrderFormPack = {
 export type OrderFormDefaults = {
   legalName: string | null;
   shippingAddress: string | null;
-  email: string | null;
 };
 
 const STEP_LABELS = ["Pack contents", "ID card", "Shipping", "Review"];

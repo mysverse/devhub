@@ -20,6 +20,12 @@ export type WelcomePackEligibility = {
   reason?: string;
   needsLinearReauth?: boolean;
   /**
+   * True when the Linear fetch errored (non-reauth) — wave-1 status is
+   * unknown rather than negative, so callers should treat a "not eligible"
+   * verdict as retryable instead of final.
+   */
+  checkFailed?: boolean;
+  /**
    * For wave-1 hits, the recent qualifying issues we saw. Empty array when
    * the user qualifies via wave 2 or doesn't qualify at all.
    */
@@ -45,6 +51,11 @@ export type EligibilitySnapshot = {
   truncated: boolean;
   /** Human-readable note on why the user qualifies. */
   note: string;
+  /**
+   * True when the Linear check errored at submission time — the wave-2
+   * verdict may understate the user's actual wave-1 status.
+   */
+  linearCheckFailed?: boolean;
 };
 
 const WAVE_1_LOOKBACK_MONTHS = 6;
@@ -84,6 +95,7 @@ export async function checkWelcomePackEligibility(
   let qualifyingIssues: QualifyingLinearIssue[] = [];
   let truncated = false;
   let needsLinearReauth = false;
+  let checkFailed = false;
 
   try {
     const sixMonthsAgo = dayjs().subtract(WAVE_1_LOOKBACK_MONTHS, "month");
@@ -117,6 +129,7 @@ export async function checkWelcomePackEligibility(
     if (error instanceof LinearReauthRequiredError) {
       needsLinearReauth = true;
     } else {
+      checkFailed = true;
       console.error("[welcome-pack] Linear eligibility check failed:", error);
     }
   }
@@ -134,7 +147,7 @@ export async function checkWelcomePackEligibility(
   }
 
   if (resolvedWave2Open) {
-    return { eligible: true, wave: 2 };
+    return { eligible: true, wave: 2, checkFailed: checkFailed || undefined };
   }
 
   if (needsLinearReauth) {
@@ -147,11 +160,23 @@ export async function checkWelcomePackEligibility(
     };
   }
 
+  // A failed fetch is "unknown", not "ineligible" — surface a retryable
+  // error instead of the not-eligible copy.
+  if (checkFailed) {
+    return {
+      eligible: false,
+      wave: null,
+      checkFailed: true,
+      reason:
+        "We couldn't reach Linear to verify your eligibility. Please try again in a minute.",
+    };
+  }
+
   return {
     eligible: false,
     wave: null,
     reason:
-      "Wave 1 is open to developers with a Linear issue completed in the last 6 months. Wave 2 will open later for everyone else.",
+      "Wave 1 is open to developers with a Linear issue completed in the last 6 months. Wave 2 isn't open right now.",
   };
 }
 
@@ -191,7 +216,10 @@ export async function assertEligibleForWelcomePack(
           lookbackMonths: WAVE_1_LOOKBACK_MONTHS,
           qualifyingIssues: [],
           truncated: false,
-          note: "Wave 2 was open at submission time.",
+          note: result.checkFailed
+            ? "Wave 2 was open at submission time. (Linear check failed — wave 1 status unknown.)"
+            : "Wave 2 was open at submission time.",
+          linearCheckFailed: result.checkFailed || undefined,
         };
 
   return { wave, snapshot };

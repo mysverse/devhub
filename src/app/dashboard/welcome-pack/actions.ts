@@ -3,12 +3,22 @@
 import { Prisma, type ShippingRegion } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { createElement } from "react";
+import WelcomePackOrderCancelled from "@/emails/WelcomePackOrderCancelled";
 import WelcomePackOrderSubmitted from "@/emails/WelcomePackOrderSubmitted";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { sendEmail } from "@/lib/email";
 import prisma from "@/lib/prisma";
 import { assertEligibleForWelcomePack } from "@/lib/welcome-pack-eligibility";
+import { diffForEvent, logOrderEvent } from "@/lib/welcome-pack-events";
+import {
+  getOrderingWindowState,
+  orderingClosedMessage,
+} from "@/lib/welcome-pack-ordering";
+import {
+  parseOrderFields,
+  validateSelections,
+} from "@/lib/welcome-pack-validation";
 
 export type SubmitOrderInput = {
   idCardName: string;
@@ -25,27 +35,56 @@ export type SubmitOrderInput = {
   selections: { itemId: string; selectedSize?: string }[];
 };
 
-const REQUIRED = (v: string | undefined, label: string) => {
-  if (!v || v.trim().length === 0) {
-    throw new Error(`${label} is required`);
+function refreshPaths() {
+  revalidatePath("/dashboard/welcome-pack");
+  revalidatePath("/dashboard/admin/welcome-pack");
+}
+
+async function notifyAdmins(input: {
+  subject: string;
+  category: string;
+  idempotencyKey: string;
+  react: React.ReactElement;
+}) {
+  const admins = await prisma.userProfile.findMany({
+    where: ADMIN_ACCESS_WHERE,
+    include: { user: { select: { email: true } } },
+  });
+  const recipients = admins
+    .map((a) => a.user.email)
+    .filter((e): e is string => Boolean(e));
+  if (recipients.length === 0) return;
+
+  // allSettled so one bad recipient doesn't hide the rest; per-recipient
+  // idempotency keys make retries safe.
+  const results = await Promise.allSettled(
+    recipients.map((to) => sendEmail({ ...input, to })),
+  );
+  for (const [i, result] of results.entries()) {
+    if (result.status === "rejected") {
+      console.error(
+        `[welcome-pack] admin notification to ${recipients[i]} failed:`,
+        result.reason,
+      );
+    }
   }
-  return v.trim();
-};
+}
 
 export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };
 
-  // Load pack and existing-order check in parallel — saves a round trip and
-  // gives us `wave2Open` to feed into the eligibility check (avoiding a
-  // duplicate `welcomePack.findFirst`).
+  // Load pack and active-order check in parallel — saves a round trip and
+  // gives us `wave2Open` to feed into the eligibility check. The orderBy
+  // keeps this deterministic if two packs are ever active simultaneously.
   const [existing, pack] = await Promise.all([
     prisma.welcomePackOrder.findUnique({
-      where: { userId },
+      where: { activeUserId: userId },
       select: { id: true },
     }),
     prisma.welcomePack.findFirst({
       where: { isActive: true },
+      orderBy: { createdAt: "desc" },
       include: {
         items: {
           where: { isActive: true },
@@ -61,10 +100,17 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   ]);
 
   if (existing) {
-    return { error: "You already have a welcome pack order on file." };
+    return { error: "You already have an active welcome pack order." };
   }
   if (!pack) {
     return { error: "Welcome pack is not configured yet." };
+  }
+
+  // Server-side ordering window enforcement — the form may have been sitting
+  // open since before the window closed. UI gating is advisory only.
+  const window = getOrderingWindowState(pack);
+  if (!window.open) {
+    return { error: orderingClosedMessage(window) };
   }
 
   // Re-check eligibility on the server, reusing the wave2Open flag we just
@@ -82,83 +128,43 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
     return { error: (e as Error).message };
   }
 
-  const itemMap = new Map(pack.items.map((i) => [i.id, i]));
+  const parsed = parseOrderFields(input);
+  if (!parsed.ok) return { error: parsed.error };
+  const fields = parsed.fields;
 
-  let idCardName: string;
-  let recipientName: string;
-  let phone: string;
-  let addressLine1: string;
-  let city: string;
-  let postalCode: string;
-  let country: string;
-  try {
-    idCardName = REQUIRED(input.idCardName, "ID card name");
-    recipientName = REQUIRED(input.recipientName, "Recipient name");
-    phone = REQUIRED(input.phone, "Phone");
-    addressLine1 = REQUIRED(input.addressLine1, "Address line 1");
-    city = REQUIRED(input.city, "City");
-    postalCode = REQUIRED(input.postalCode, "Postal code");
-    country = REQUIRED(input.country, "Country");
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
-
-  if (!["DOMESTIC", "INTERNATIONAL"].includes(input.region)) {
-    return { error: "Invalid shipping region" };
-  }
-
-  if (input.region === "DOMESTIC" && country.toUpperCase() !== "MY") {
-    return {
-      error: "Domestic shipping is for Malaysia (MY) addresses only.",
-    };
-  }
-
-  // Validate selections.
-  const selections: { itemId: string; selectedSize?: string }[] = [];
-  for (const item of pack.items) {
-    const provided = input.selections.find((s) => s.itemId === item.id);
-    if (item.requiresSize) {
-      if (!provided?.selectedSize) {
-        return { error: `Select a size for ${item.name}` };
-      }
-      if (!item.sizeOptions.includes(provided.selectedSize)) {
-        return { error: `Invalid size for ${item.name}` };
-      }
-      selections.push({
-        itemId: item.id,
-        selectedSize: provided.selectedSize,
-      });
-    } else {
-      // Always include non-sized items (curated by admin).
-      selections.push({ itemId: item.id });
-    }
-  }
-
-  // Drop any rogue selections referencing items that aren't in the pack.
-  const filteredSelections = selections.filter((s) => itemMap.has(s.itemId));
+  const validated = validateSelections(pack.items, input.selections, {
+    requireAllItems: true,
+  });
+  if (!validated.ok) return { error: validated.error };
 
   const orderData = {
     userId,
+    activeUserId: userId,
     packId: pack.id,
     wave,
-    idCardName,
-    region: input.region,
-    recipientName,
-    phone,
-    addressLine1,
-    addressLine2: input.addressLine2?.trim() || null,
-    city,
-    stateProvince: input.stateProvince?.trim() || null,
-    postalCode,
-    country: country.toUpperCase(),
-    notes: input.notes?.trim() || null,
+    idCardName: fields.idCardName,
+    region: fields.region,
+    recipientName: fields.recipientName,
+    phone: fields.phone,
+    addressLine1: fields.addressLine1,
+    addressLine2: fields.addressLine2 || null,
+    city: fields.city,
+    stateProvince: fields.stateProvince || null,
+    postalCode: fields.postalCode,
+    country: fields.country,
+    notes: fields.notes || null,
     eligibilitySnapshot:
       eligibilitySnapshot as unknown as Prisma.InputJsonValue,
     selections: {
-      create: filteredSelections.map((s) => ({
-        itemId: s.itemId,
-        selectedSize: s.selectedSize ?? null,
-      })),
+      create: validated.selections,
+    },
+    events: {
+      create: {
+        actorId: userId,
+        actorRole: "USER",
+        type: "SUBMITTED",
+        message: `Order submitted (wave ${wave})`,
+      },
     },
   };
 
@@ -175,57 +181,41 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
       include: orderInclude,
     });
   } catch (error) {
-    // P2002 = unique constraint violation. Race between the existence check
-    // and create — handled cleanly so the user sees a friendly message.
+    // P2002 = unique constraint violation on activeUserId. Race between the
+    // existence check and create — handled cleanly so the user sees a
+    // friendly message.
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      return { error: "You already have a welcome pack order on file." };
+      return { error: "You already have an active welcome pack order." };
     }
     throw error;
   }
 
-  // Notify admins.
   try {
-    const admins = await prisma.userProfile.findMany({
-      where: ADMIN_ACCESS_WHERE,
-      include: { user: { select: { email: true } } },
+    const developerName =
+      order.user.legalName ||
+      order.user.user.name ||
+      order.recipientName ||
+      "Developer";
+    await notifyAdmins({
+      subject: `New Welcome Pack order — ${developerName}`,
+      category: "welcome_pack_order_submitted",
+      idempotencyKey: `welcome-pack:submitted:${order.id}`,
+      react: createElement(WelcomePackOrderSubmitted, {
+        developerName,
+        recipientName: order.recipientName,
+        region: order.region,
+        wave: order.wave,
+        idCardName: order.idCardName,
+      }),
     });
-    const recipients = admins
-      .map((a) => a.user.email)
-      .filter((e): e is string => Boolean(e));
-
-    if (recipients.length > 0) {
-      const developerName =
-        order.user.legalName ||
-        order.user.user.name ||
-        order.recipientName ||
-        "Developer";
-      await Promise.all(
-        recipients.map((to) =>
-          sendEmail({
-            to,
-            subject: `New Welcome Pack order — ${developerName}`,
-            category: "welcome_pack_order_submitted",
-            idempotencyKey: `welcome-pack:submitted:${order.id}`,
-            react: createElement(WelcomePackOrderSubmitted, {
-              developerName,
-              recipientName: order.recipientName,
-              region: order.region,
-              wave: order.wave,
-              idCardName: order.idCardName,
-            }),
-          }),
-        ),
-      );
-    }
   } catch (error) {
     console.error("[welcome-pack] admin notification failed:", error);
   }
 
-  revalidatePath("/dashboard/welcome-pack");
-  revalidatePath("/dashboard/admin/welcome-pack");
+  refreshPaths();
   return { success: true };
 }
 
@@ -234,8 +224,18 @@ export async function cancelWelcomePackOrder() {
   if (!userId) return { error: "Unauthorized" };
 
   const order = await prisma.welcomePackOrder.findUnique({
-    where: { userId },
-    select: { id: true, status: true },
+    where: { activeUserId: userId },
+    select: {
+      id: true,
+      status: true,
+      recipientName: true,
+      user: {
+        select: {
+          legalName: true,
+          user: { select: { name: true } },
+        },
+      },
+    },
   });
   if (!order) return { error: "No order to cancel" };
   if (order.status !== "PENDING") {
@@ -244,12 +244,203 @@ export async function cancelWelcomePackOrder() {
     };
   }
 
-  await prisma.welcomePackOrder.update({
-    where: { id: order.id },
-    data: { status: "CANCELLED" },
+  // CAS inside a transaction: the status guard prevents clobbering a
+  // concurrent admin approval, and freeing activeUserId lets the user
+  // re-order later.
+  const cancelled = await prisma.$transaction(async (tx) => {
+    const result = await tx.welcomePackOrder.updateMany({
+      where: { id: order.id, status: "PENDING" },
+      data: { status: "CANCELLED", activeUserId: null },
+    });
+    if (result.count === 0) return false;
+    await logOrderEvent(tx, {
+      orderId: order.id,
+      actorId: userId,
+      actorRole: "USER",
+      type: "CANCELLED",
+      message: "Order cancelled by the developer",
+    });
+    return true;
   });
+  if (!cancelled) {
+    return {
+      error: "Order is already being processed and cannot be cancelled",
+    };
+  }
 
-  revalidatePath("/dashboard/welcome-pack");
-  revalidatePath("/dashboard/admin/welcome-pack");
+  try {
+    const developerName =
+      order.user.legalName ||
+      order.user.user.name ||
+      order.recipientName ||
+      "Developer";
+    await notifyAdmins({
+      subject: `Welcome Pack order cancelled — ${developerName}`,
+      category: "welcome_pack_order_cancelled",
+      idempotencyKey: `welcome-pack:cancelled:${order.id}`,
+      react: createElement(WelcomePackOrderCancelled, {
+        developerName,
+        recipientName: order.recipientName,
+      }),
+    });
+  } catch (error) {
+    console.error("[welcome-pack] cancel notification failed:", error);
+  }
+
+  refreshPaths();
+  return { success: true };
+}
+
+export type UpdateMyOrderInput = Omit<SubmitOrderInput, "selections"> & {
+  /** Sizes for the items already on the order; membership isn't editable. */
+  selections: { itemId: string; selectedSize?: string }[];
+};
+
+/**
+ * Lets the developer fix their own PENDING order (sizes, ID-card name,
+ * shipping, notes) instead of cancelling and re-ordering. Locked the moment
+ * an admin approves — the CAS update guarantees the edit can't land on a
+ * non-PENDING order even if approval races it.
+ *
+ * Deliberately NOT gated on the ordering window: an amendment to an existing
+ * order is not a new order, so closing the window must not strand users with
+ * uncorrectable typos. Don't add getOrderingWindowState here.
+ */
+export async function updateMyWelcomePackOrder(input: UpdateMyOrderInput) {
+  const { userId } = await getSession();
+  if (!userId) return { error: "Unauthorized" };
+
+  const order = await prisma.welcomePackOrder.findUnique({
+    where: { activeUserId: userId },
+    include: {
+      selections: {
+        include: {
+          item: {
+            select: {
+              id: true,
+              name: true,
+              requiresSize: true,
+              sizeOptions: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!order) return { error: "No active order to edit" };
+  if (order.status !== "PENDING") {
+    return { error: "Order is already being processed and can't be edited" };
+  }
+
+  const parsed = parseOrderFields(input);
+  if (!parsed.ok) return { error: parsed.error };
+  const fields = parsed.fields;
+
+  // The editable item set is exactly what's on the order — admins control
+  // membership; users only adjust sizes.
+  const orderItems = order.selections.map((s) => s.item);
+  const validated = validateSelections(orderItems, input.selections, {
+    requireAllItems: true,
+  });
+  if (!validated.ok) return { error: validated.error };
+
+  const before = {
+    idCardName: order.idCardName,
+    region: order.region,
+    recipientName: order.recipientName,
+    phone: order.phone,
+    addressLine1: order.addressLine1,
+    addressLine2: order.addressLine2,
+    city: order.city,
+    stateProvince: order.stateProvince,
+    postalCode: order.postalCode,
+    country: order.country,
+    notes: order.notes,
+    sizes: order.selections
+      .map((s) => `${s.item.name}:${s.selectedSize ?? "—"}`)
+      .sort(),
+  };
+  const after = {
+    idCardName: fields.idCardName,
+    region: fields.region,
+    recipientName: fields.recipientName,
+    phone: fields.phone,
+    addressLine1: fields.addressLine1,
+    addressLine2: fields.addressLine2 || null,
+    city: fields.city,
+    stateProvince: fields.stateProvince || null,
+    postalCode: fields.postalCode,
+    country: fields.country,
+    notes: fields.notes || null,
+    sizes: validated.selections
+      .map((s) => {
+        const item = orderItems.find((i) => i.id === s.itemId);
+        return `${item?.name ?? s.itemId}:${s.selectedSize ?? "—"}`;
+      })
+      .sort(),
+  };
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // The CAS update also takes the row lock, so a concurrent admin approve
+    // blocks until this transaction commits (or sees CANCELLED/edited data).
+    const result = await tx.welcomePackOrder.updateMany({
+      where: { id: order.id, status: "PENDING" },
+      data: {
+        idCardName: after.idCardName,
+        region: after.region,
+        recipientName: after.recipientName,
+        phone: after.phone,
+        addressLine1: after.addressLine1,
+        addressLine2: after.addressLine2,
+        city: after.city,
+        stateProvince: after.stateProvince,
+        postalCode: after.postalCode,
+        country: after.country,
+        notes: after.notes,
+      },
+    });
+    if (result.count === 0) return false;
+
+    await tx.welcomePackOrderItemSelection.deleteMany({
+      where: { orderId: order.id },
+    });
+    await tx.welcomePackOrderItemSelection.createMany({
+      data: validated.selections.map((s) => ({ ...s, orderId: order.id })),
+    });
+
+    const { sizes: _b, ...beforeFields } = before;
+    const { sizes: _a, ...afterFields } = after;
+    const diff = diffForEvent(beforeFields, afterFields, [
+      "idCardName",
+      "region",
+      "recipientName",
+      "phone",
+      "addressLine1",
+      "addressLine2",
+      "city",
+      "stateProvince",
+      "postalCode",
+      "country",
+      "notes",
+    ]);
+    if (JSON.stringify(before.sizes) !== JSON.stringify(after.sizes)) {
+      diff.before.sizes = before.sizes;
+      diff.after.sizes = after.sizes;
+    }
+    await logOrderEvent(tx, {
+      orderId: order.id,
+      actorId: userId,
+      actorRole: "USER",
+      type: "USER_UPDATED",
+      message: "Order details updated by the developer",
+      metadata: diff as unknown as Prisma.InputJsonValue,
+    });
+    return true;
+  });
+  if (!updated) {
+    return { error: "Order is already being processed and can't be edited" };
+  }
+
+  refreshPaths();
   return { success: true };
 }

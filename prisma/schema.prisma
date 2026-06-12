@@ -112,7 +112,7 @@ model UserProfile {
   pptRequestsMade         PptRequest[]            @relation("PptRequestRequester")
   pptRequestsReviewed     PptRequest[]            @relation("PptRequestReviewer")
   kycVerifications        KycVerification[]
-  welcomePackOrder        WelcomePackOrder?
+  welcomePackOrders       WelcomePackOrder[]
   projectMemberships      ProjectMembership[]     @relation("ProjectMember")
   projectAssignmentsMade  ProjectMembership[]     @relation("ProjectAssignmentActor")
   accessSyncLogs          AccessSyncLog[]         @relation("AccessSyncUser")
@@ -995,6 +995,12 @@ model WelcomePack {
   currentWave Int     @default(1)
   wave2Open   Boolean @default(false)
 
+  // Ordering window — gates order *creation* only; the pack page stays
+  // visible. Evaluated at read/submit time (no cron).
+  orderingEnabled Boolean   @default(true)
+  ordersOpenAt    DateTime?
+  ordersCloseAt   DateTime?
+
   // ID card overlay configuration
   idCardTemplateBlobUrl String?
   idCardWidth           Int?
@@ -1047,10 +1053,15 @@ model WelcomePackItem {
 
 model WelcomePackOrder {
   id     String      @id @default(cuid())
-  userId String      @unique
+  userId String
   user   UserProfile @relation(fields: [userId], references: [id])
-  packId String
-  pack   WelcomePack @relation(fields: [packId], references: [id])
+  // Equals userId while the order is active (PENDING/APPROVED/SHIPPED/
+  // DELIVERED), NULL once CANCELLED or REJECTED. Postgres allows many NULLs
+  // in a unique index, so a user can have many terminal orders but at most
+  // one active order. Every status transition MUST keep this in sync.
+  activeUserId String? @unique
+  packId       String
+  pack         WelcomePack @relation(fields: [packId], references: [id])
 
   status WelcomePackOrderStatus @default(PENDING)
   wave   Int
@@ -1078,6 +1089,7 @@ model WelcomePackOrder {
   eligibilitySnapshot Json?
 
   selections WelcomePackOrderItemSelection[]
+  events     WelcomePackOrderEvent[]
 
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
@@ -1085,6 +1097,7 @@ model WelcomePackOrder {
   shippedAt   DateTime?
   deliveredAt DateTime?
 
+  @@index([userId])
   @@index([status])
   @@index([packId])
 }
@@ -1098,4 +1111,25 @@ model WelcomePackOrderItemSelection {
   selectedSize String?
 
   @@unique([orderId, itemId])
+}
+
+model WelcomePackOrderEvent {
+  id      String           @id @default(cuid())
+  orderId String
+  order   WelcomePackOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // UserProfile id of whoever acted; null for SYSTEM. Plain string like
+  // IncentiveEvent.userId — no relation, resolved to a name at render time.
+  actorId   String?
+  actorRole String // "ADMIN" | "USER" | "SYSTEM"
+  // See WelcomePackOrderEventType in src/lib/welcome-pack-events.ts for the
+  // full set of values.
+  type     String
+  message  String?
+  metadata Json? // { before, after } diffs for edits; reason for reject/cancel
+
+  createdAt DateTime @default(now())
+
+  @@index([orderId, createdAt])
+  @@index([type, createdAt])
 }

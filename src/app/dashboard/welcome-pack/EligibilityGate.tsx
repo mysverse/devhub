@@ -83,6 +83,11 @@ export default async function EligibilityGate({
                 </LinkButton>
               </Stack>
             </Alert>
+          ) : eligibility.checkFailed ? (
+            <Alert color="yellow" mt="xs" title="Couldn't check eligibility">
+              {eligibility.reason ??
+                "We couldn't reach Linear to verify your eligibility. Please try again in a minute."}
+            </Alert>
           ) : (
             <Alert color="blue" mt="xs" title="Not yet eligible">
               {eligibility.reason ??

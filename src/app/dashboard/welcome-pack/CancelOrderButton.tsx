@@ -3,6 +3,7 @@
 import { Button } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -11,6 +12,7 @@ import { cancelWelcomePackOrder } from "./actions";
 export default function CancelOrderButton() {
   const [opened, { open, close }] = useDisclosure(false);
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
   async function handleConfirm() {
     setBusy(true);
@@ -21,6 +23,7 @@ export default function CancelOrderButton() {
       return;
     }
     toast.success("Order cancelled");
+    router.refresh();
     close();
   }
 
@@ -41,8 +44,8 @@ export default function CancelOrderButton() {
         onClose={close}
         onConfirm={handleConfirm}
         title="Cancel welcome pack order?"
-        description="This action can't be undone. Welcome packs are limited to one per developer for life — once cancelled, you won't be able to submit another order."
-        hint="Only cancel if your address or selections need correcting and admins can't help."
+        description="Your order will be withdrawn from the review queue. You can place a new order afterwards, as long as ordering is still open."
+        hint="Just need to fix a size or address? Use Edit order instead — no need to cancel."
         confirmLabel="Cancel order"
         cancelLabel="Keep order"
         confirmIcon={<X size={16} />}

@@ -1,7 +1,7 @@
 import type { z } from "zod";
 
 // Malaysian phone number with country code: +60 followed by 9-10 digits
-const MY_PHONE_REGEX = /^\+60\d{9,10}$/;
+export const MY_PHONE_REGEX = /^\+60\d{9,10}$/;
 
 // Malaysian NRIC: exactly 12 digits (YYMMDD-SS-NNNG)
 const MY_NRIC_REGEX = /^\d{12}$/;

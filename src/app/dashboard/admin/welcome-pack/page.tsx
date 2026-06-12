@@ -11,8 +11,9 @@ import { buildSocialMetadata } from "@/lib/social-previews";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
 import OrdersTable, {
-  type AdminEligibilitySnapshot,
+  type AdminOrderEvent,
   type AdminOrderRow,
+  type AdminPackItem,
 } from "./OrdersTable";
 import PackConfig, { type PackConfigData } from "./PackConfig";
 
@@ -42,22 +43,58 @@ export default function AdminWelcomePackPage() {
 async function AdminWelcomePackContent() {
   await requireAdminPage();
 
-  const pack = await prisma.welcomePack.findFirst({
-    where: { isActive: true },
-    orderBy: { createdAt: "desc" },
-    include: {
-      items: { orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }] },
-      orders: {
-        orderBy: { createdAt: "desc" },
-        include: {
-          user: {
-            include: { user: { select: { email: true, name: true } } },
-          },
-          selections: { include: { item: { select: { name: true } } } },
-        },
+  // Orders are fetched independently of the active pack so deactivating a
+  // pack never hides in-flight orders from admins. The eligibility snapshot
+  // is deliberately excluded — it dominates the payload and is fetched
+  // on-demand per order instead.
+  const [pack, orderRecords] = await Promise.all([
+    prisma.welcomePack.findFirst({
+      where: { isActive: true },
+      orderBy: { createdAt: "desc" },
+      include: {
+        items: { orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }] },
       },
-    },
-  });
+    }),
+    prisma.welcomePackOrder.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        user: {
+          include: { user: { select: { email: true, name: true } } },
+        },
+        pack: { select: { id: true, name: true, isActive: true } },
+        selections: {
+          include: { item: { select: { id: true, name: true } } },
+        },
+        events: { orderBy: { createdAt: "asc" } },
+      },
+    }),
+  ]);
+
+  // Resolve event actor ids to display names in one batched query.
+  const actorIds = [
+    ...new Set(
+      orderRecords
+        .flatMap((o) => o.events.map((e) => e.actorId))
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const actors =
+    actorIds.length > 0
+      ? await prisma.userProfile.findMany({
+          where: { id: { in: actorIds } },
+          select: {
+            id: true,
+            legalName: true,
+            user: { select: { name: true, email: true } },
+          },
+        })
+      : [];
+  const actorNames = new Map(
+    actors.map((a) => [
+      a.id,
+      a.legalName || a.user.name || a.user.email || "Unknown",
+    ]),
+  );
 
   const packConfig: PackConfigData = pack
     ? {
@@ -66,6 +103,9 @@ async function AdminWelcomePackContent() {
         description: pack.description,
         isActive: pack.isActive,
         wave2Open: pack.wave2Open,
+        orderingEnabled: pack.orderingEnabled,
+        ordersOpenAt: pack.ordersOpenAt?.toISOString() ?? null,
+        ordersCloseAt: pack.ordersCloseAt?.toISOString() ?? null,
         idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl
           ? welcomePackAssetUrl("id-card-template", pack.id, pack.updatedAt)
           : null,
@@ -90,6 +130,9 @@ async function AdminWelcomePackContent() {
         description: null,
         isActive: true,
         wave2Open: false,
+        orderingEnabled: true,
+        ordersOpenAt: null,
+        ordersCloseAt: null,
         idCardTemplateBlobUrl: null,
         idCardWidth: null,
         idCardHeight: null,
@@ -120,10 +163,21 @@ async function AdminWelcomePackContent() {
     isActive: i.isActive,
   }));
 
-  const orders: AdminOrderRow[] = (pack?.orders ?? []).map((o) => ({
+  // Item metadata for the admin selections editor (no images needed).
+  const packItems: AdminPackItem[] = (pack?.items ?? []).map((i) => ({
+    id: i.id,
+    name: i.name,
+    requiresSize: i.requiresSize,
+    sizeOptions: i.sizeOptions,
+    isActive: i.isActive,
+  }));
+
+  const orders: AdminOrderRow[] = orderRecords.map((o) => ({
     id: o.id,
     status: o.status,
     wave: o.wave,
+    packName: o.pack.name,
+    packIsActive: o.pack.isActive,
     recipientName: o.recipientName,
     developerName:
       o.user.legalName || o.user.user.name || o.recipientName || "Developer",
@@ -146,11 +200,21 @@ async function AdminWelcomePackContent() {
     shippedAt: o.shippedAt?.toISOString() ?? null,
     deliveredAt: o.deliveredAt?.toISOString() ?? null,
     selections: o.selections.map((s) => ({
+      itemId: s.item.id,
       itemName: s.item.name,
       selectedSize: s.selectedSize,
     })),
-    eligibility:
-      (o.eligibilitySnapshot as unknown as AdminEligibilitySnapshot) ?? null,
+    events: o.events.map(
+      (e): AdminOrderEvent => ({
+        id: e.id,
+        type: e.type,
+        actorRole: e.actorRole,
+        actorName: e.actorId ? (actorNames.get(e.actorId) ?? null) : null,
+        message: e.message,
+        metadata: e.metadata,
+        createdAt: e.createdAt.toISOString(),
+      }),
+    ),
   }));
 
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
@@ -179,7 +243,7 @@ async function AdminWelcomePackContent() {
       </TabsPanel>
 
       <TabsPanel value="orders" pt="md">
-        <OrdersTable orders={orders} />
+        <OrdersTable orders={orders} packItems={packItems} />
       </TabsPanel>
     </Tabs>
   );

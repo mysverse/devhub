@@ -249,8 +249,11 @@ function ItemEditorModal({
   const [saving, setSaving] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingChart, setUploadingChart] = useState(false);
+  // Set when the server blocked the save because open orders have selections
+  // this change would invalidate; the admin can confirm to force it.
+  const [forceWarning, setForceWarning] = useState<string | null>(null);
 
-  async function handleSave() {
+  async function handleSave(force = false) {
     setSaving(true);
     const input: WelcomePackItemInput = {
       itemId: item?.id,
@@ -261,13 +264,19 @@ function ItemEditorModal({
       sizeOptions,
       displayOrder,
       isActive,
+      force,
     };
     const res = await saveWelcomePackItem(input);
     setSaving(false);
     if (res?.error) {
+      if ("requiresForce" in res && res.requiresForce) {
+        setForceWarning(res.error);
+        return;
+      }
       toast.error(res.error);
       return;
     }
+    setForceWarning(null);
     toast.success(item ? "Item updated" : "Item created");
     onSaved();
   }
@@ -453,13 +462,29 @@ function ItemEditorModal({
           </Stack>
         )}
 
+        {forceWarning && (
+          <Alert color="orange" title="Open orders affected">
+            {forceWarning}
+          </Alert>
+        )}
+
         <Group justify="flex-end">
           <Button variant="subtle" onClick={onClose}>
             Cancel
           </Button>
-          <Button onClick={handleSave} loading={saving}>
-            {item ? "Save changes" : "Create item"}
-          </Button>
+          {forceWarning ? (
+            <Button
+              color="orange"
+              onClick={() => handleSave(true)}
+              loading={saving}
+            >
+              Save anyway
+            </Button>
+          ) : (
+            <Button onClick={() => handleSave()} loading={saving}>
+              {item ? "Save changes" : "Create item"}
+            </Button>
+          )}
         </Group>
       </Stack>
     </Modal>

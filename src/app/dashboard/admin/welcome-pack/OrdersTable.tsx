@@ -1,6 +1,10 @@
 "use client";
 
 import {
+  Accordion,
+  AccordionControl,
+  AccordionItem,
+  AccordionPanel,
   Anchor,
   Badge,
   Box,
@@ -21,40 +25,57 @@ import {
   Title,
 } from "@mantine/core";
 import type { ShippingRegion, WelcomePackOrderStatus } from "@prisma/client";
-import { useState } from "react";
+import dayjs from "dayjs";
+import { Download, Search } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import StatusBadge from "@/components/StatusBadge";
 import { statusCopy, WELCOME_PACK_ORDER_STATUS } from "@/lib/status-copy";
+import type { EligibilitySnapshot } from "@/lib/welcome-pack-eligibility";
 import {
   approveWelcomePackOrder,
+  cancelWelcomePackOrderAdmin,
   fetchLiveEligibilityEvidence,
+  fetchOrderEligibilitySnapshot,
   type LiveEligibilityResult,
   markWelcomePackOrderDelivered,
   markWelcomePackOrderShipped,
   rejectWelcomePackOrder,
+  reopenWelcomePackOrder,
+  resendOrderNotification,
 } from "./actions";
+import FulfillmentSummary from "./FulfillmentSummary";
+import {
+  EditSelectionsModal,
+  EditShippingModal,
+  EditTrackingModal,
+} from "./OrderEditModals";
 
-export type AdminQualifyingIssue = {
+export type AdminPackItem = {
   id: string;
-  identifier: string;
-  title: string;
-  url: string;
-  completedAt: string;
+  name: string;
+  requiresSize: boolean;
+  sizeOptions: string[];
+  isActive: boolean;
 };
 
-export type AdminEligibilitySnapshot = {
-  wave: 1 | 2;
-  capturedAt: string;
-  lookbackMonths: number;
-  qualifyingIssues: AdminQualifyingIssue[];
-  truncated: boolean;
-  note: string;
-} | null;
+export type AdminOrderEvent = {
+  id: string;
+  type: string;
+  actorRole: string;
+  actorName: string | null;
+  message: string | null;
+  metadata: unknown;
+  createdAt: string;
+};
 
 export type AdminOrderRow = {
   id: string;
   status: WelcomePackOrderStatus;
   wave: number;
+  packName: string;
+  packIsActive: boolean;
   recipientName: string;
   developerName: string;
   developerEmail: string | null;
@@ -75,8 +96,12 @@ export type AdminOrderRow = {
   approvedAt: string | null;
   shippedAt: string | null;
   deliveredAt: string | null;
-  selections: { itemName: string; selectedSize: string | null }[];
-  eligibility: AdminEligibilitySnapshot;
+  selections: {
+    itemId: string;
+    itemName: string;
+    selectedSize: string | null;
+  }[];
+  events: AdminOrderEvent[];
 };
 
 const FILTERS: { value: string; label: string }[] = [
@@ -88,6 +113,8 @@ const FILTERS: { value: string; label: string }[] = [
   { value: "CANCELLED", label: "Cancelled" },
   { value: "REJECTED", label: "Rejected" },
 ];
+
+const STALE_APPROVED_DAYS = 14;
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -109,28 +136,155 @@ function formatAddress(order: AdminOrderRow) {
     .join("\n");
 }
 
-export default function OrdersTable({ orders }: { orders: AdminOrderRow[] }) {
-  const [filter, setFilter] = useState<string>("ALL");
+// ── CSV export ──────────────────────────────────────────────────────────────
 
-  const filtered =
-    filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
+function csvEscape(value: string): string {
+  if (/[",\n]/.test(value)) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
+
+// Notes and eligibility evidence are deliberately excluded — the export is
+// for shipping labels, not a data dump.
+const CSV_COLUMNS: {
+  header: string;
+  value: (o: AdminOrderRow) => string;
+}[] = [
+  { header: "Status", value: (o) => o.status },
+  { header: "Wave", value: (o) => String(o.wave) },
+  { header: "Developer", value: (o) => o.developerName },
+  { header: "Email", value: (o) => o.developerEmail ?? "" },
+  { header: "Recipient", value: (o) => o.recipientName },
+  { header: "Phone", value: (o) => o.phone },
+  { header: "Address 1", value: (o) => o.addressLine1 },
+  { header: "Address 2", value: (o) => o.addressLine2 ?? "" },
+  { header: "City", value: (o) => o.city },
+  { header: "State", value: (o) => o.stateProvince ?? "" },
+  { header: "Postcode", value: (o) => o.postalCode },
+  { header: "Country", value: (o) => o.country },
+  { header: "Region", value: (o) => o.region },
+  { header: "ID card name", value: (o) => o.idCardName },
+  {
+    header: "Items",
+    value: (o) =>
+      o.selections
+        .map(
+          (s) => `${s.itemName}${s.selectedSize ? ` (${s.selectedSize})` : ""}`,
+        )
+        .join("; "),
+  },
+  { header: "Tracking number", value: (o) => o.trackingNumber ?? "" },
+  { header: "Tracking URL", value: (o) => o.trackingUrl ?? "" },
+  { header: "Submitted", value: (o) => o.createdAt },
+  { header: "Approved", value: (o) => o.approvedAt ?? "" },
+  { header: "Shipped", value: (o) => o.shippedAt ?? "" },
+  { header: "Delivered", value: (o) => o.deliveredAt ?? "" },
+];
+
+function downloadCsv(orders: AdminOrderRow[]) {
+  const lines = [
+    CSV_COLUMNS.map((c) => csvEscape(c.header)).join(","),
+    ...orders.map((o) =>
+      CSV_COLUMNS.map((c) => csvEscape(c.value(o))).join(","),
+    ),
+  ];
+  const blob = new Blob([lines.join("\n")], {
+    type: "text/csv;charset=utf-8",
+  });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `welcome-pack-orders-${dayjs().format("YYYY-MM-DD")}.csv`;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Table ───────────────────────────────────────────────────────────────────
+
+export default function OrdersTable({
+  orders,
+  packItems,
+}: {
+  orders: AdminOrderRow[];
+  packItems: AdminPackItem[];
+}) {
+  const [filter, setFilter] = useState<string>("ALL");
+  const [search, setSearch] = useState("");
+
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const o of orders) {
+      counts.set(o.status, (counts.get(o.status) ?? 0) + 1);
+    }
+    return counts;
+  }, [orders]);
+
+  const filtered = useMemo(() => {
+    const byStatus =
+      filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
+    const query = search.trim().toLowerCase();
+    if (!query) return byStatus;
+    return byStatus.filter((o) =>
+      [
+        o.developerName,
+        o.developerEmail ?? "",
+        o.recipientName,
+        o.trackingNumber ?? "",
+      ].some((v) => v.toLowerCase().includes(query)),
+    );
+  }, [orders, filter, search]);
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
+      <FulfillmentSummary orders={orders} packItems={packItems} />
+
+      <Group justify="space-between" align="flex-end" wrap="wrap" gap="sm">
         <div>
           <Title order={4}>Orders</Title>
-          <Text c="dimmed" size="sm">
-            Manage incoming welcome pack orders.
-          </Text>
+          <Group gap={6} mt={4} wrap="wrap">
+            {FILTERS.filter(
+              (f) => f.value !== "ALL" && statusCounts.get(f.value),
+            ).map((f) => (
+              <Badge
+                key={f.value}
+                variant="light"
+                color={
+                  WELCOME_PACK_ORDER_STATUS[f.value as WelcomePackOrderStatus]
+                    .color
+                }
+                size="sm"
+              >
+                {statusCounts.get(f.value)} {f.label.toLowerCase()}
+              </Badge>
+            ))}
+          </Group>
         </div>
-        <Select
-          label="Filter status"
-          data={FILTERS}
-          value={filter}
-          onChange={(v) => setFilter(v ?? "ALL")}
-          w={200}
-        />
+        <Group gap="xs" align="flex-end">
+          <TextInput
+            label="Search"
+            placeholder="Name, email, tracking…"
+            leftSection={<Search size={14} />}
+            value={search}
+            onChange={(e) => setSearch(e.currentTarget.value)}
+            w={220}
+          />
+          <Select
+            label="Filter status"
+            data={FILTERS}
+            value={filter}
+            onChange={(v) => setFilter(v ?? "ALL")}
+            w={160}
+          />
+          <Button
+            variant="light"
+            leftSection={<Download size={14} />}
+            onClick={() => downloadCsv(filtered)}
+            disabled={filtered.length === 0}
+          >
+            Export CSV ({filtered.length})
+          </Button>
+        </Group>
       </Group>
 
       {filtered.length === 0 ? (
@@ -140,7 +294,7 @@ export default function OrdersTable({ orders }: { orders: AdminOrderRow[] }) {
       ) : (
         <Stack gap="sm">
           {filtered.map((order) => (
-            <OrderCard key={order.id} order={order} />
+            <OrderCard key={order.id} order={order} packItems={packItems} />
           ))}
         </Stack>
       )}
@@ -148,31 +302,64 @@ export default function OrdersTable({ orders }: { orders: AdminOrderRow[] }) {
   );
 }
 
-function OrderCard({ order }: { order: AdminOrderRow }) {
+type ActionResult =
+  | { error?: string }
+  | { success: boolean; emailSent?: boolean; emailDetail?: string }
+  | undefined;
+
+function OrderCard({
+  order,
+  packItems,
+}: {
+  order: AdminOrderRow;
+  packItems: AdminPackItem[];
+}) {
+  const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [showReject, setShowReject] = useState(false);
   const [showShip, setShowShip] = useState(false);
+  const [showCancel, setShowCancel] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const [cancelReason, setCancelReason] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [trackingUrl, setTrackingUrl] = useState("");
+  const [editSelections, setEditSelections] = useState(false);
+  const [editShipping, setEditShipping] = useState(false);
+  const [editTracking, setEditTracking] = useState(false);
 
-  async function run(
-    action: string,
-    fn: () => Promise<{ error?: string } | undefined>,
-  ) {
+  async function run(action: string, fn: () => Promise<ActionResult>) {
     setBusy(action);
     try {
       const res = await fn();
-      if (res?.error) {
+      if (res && "error" in res && res.error) {
         toast.error(res.error);
         return false;
       }
-      toast.success("Order updated");
+      if (res && "emailSent" in res && res.emailSent === false) {
+        toast.warning(
+          `Order updated — notification email not sent (${res.emailDetail ?? "unknown"}). Use "Resend email" to retry.`,
+        );
+      } else {
+        toast.success("Order updated");
+      }
+      router.refresh();
       return true;
     } finally {
       setBusy(null);
     }
   }
+
+  const canAmend = order.status === "PENDING" || order.status === "APPROVED";
+  const hasNotification = [
+    "APPROVED",
+    "REJECTED",
+    "SHIPPED",
+    "DELIVERED",
+  ].includes(order.status);
+  const staleApproved =
+    order.status === "APPROVED" &&
+    order.approvedAt !== null &&
+    dayjs().diff(dayjs(order.approvedAt), "day") >= STALE_APPROVED_DAYS;
 
   return (
     <Card withBorder radius="md" p="lg">
@@ -188,6 +375,16 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
             <Badge variant="light" color="cyan">
               {order.region === "DOMESTIC" ? "Malaysia" : "International"}
             </Badge>
+            {!order.packIsActive && (
+              <Badge variant="light" color="orange">
+                Pack inactive: {order.packName}
+              </Badge>
+            )}
+            {staleApproved && (
+              <Badge variant="light" color="yellow">
+                Approved {dayjs().diff(dayjs(order.approvedAt), "day")}d ago
+              </Badge>
+            )}
             <Text size="sm" c="dimmed">
               Submitted {formatDate(order.createdAt)}
             </Text>
@@ -240,7 +437,7 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
                   </TableThead>
                   <TableTbody>
                     {order.selections.map((s) => (
-                      <TableTr key={`${order.id}-${s.itemName}`}>
+                      <TableTr key={`${order.id}-${s.itemId}`}>
                         <TableTd>{s.itemName}</TableTd>
                         <TableTd>{s.selectedSize ?? "—"}</TableTd>
                       </TableTr>
@@ -252,11 +449,7 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
           </Stack>
         </Group>
 
-        <EligibilityPanel
-          orderId={order.id}
-          eligibility={order.eligibility}
-          wave={order.wave}
-        />
+        <EligibilityPanel orderId={order.id} wave={order.wave} />
 
         {order.notes && (
           <Box
@@ -310,7 +503,7 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
         )}
 
         <Group gap="xs" wrap="wrap">
-          {order.status === "PENDING" && !showReject && (
+          {order.status === "PENDING" && !showReject && !showCancel && (
             <>
               <Button
                 color="green"
@@ -371,8 +564,20 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
             </Stack>
           )}
 
-          {order.status === "APPROVED" && !showShip && (
-            <Button onClick={() => setShowShip(true)}>Mark shipped</Button>
+          {order.status === "APPROVED" && !showShip && !showCancel && (
+            <>
+              <Button onClick={() => setShowShip(true)}>Mark shipped</Button>
+              <Button
+                variant="light"
+                color="yellow"
+                loading={busy === "reopen"}
+                onClick={() =>
+                  run("reopen", () => reopenWelcomePackOrder(order.id))
+                }
+              >
+                Un-approve
+              </Button>
+            </>
           )}
 
           {order.status === "APPROVED" && showShip && (
@@ -385,6 +590,7 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
               />
               <TextInput
                 label="Tracking URL (optional)"
+                placeholder="https://…"
                 value={trackingUrl}
                 onChange={(e) => setTrackingUrl(e.currentTarget.value)}
               />
@@ -420,20 +626,236 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
           )}
 
           {order.status === "SHIPPED" && (
+            <>
+              <Button
+                loading={busy === "deliver"}
+                onClick={() =>
+                  run("deliver", () => markWelcomePackOrderDelivered(order.id))
+                }
+              >
+                Mark delivered
+              </Button>
+              <Button variant="light" onClick={() => setEditTracking(true)}>
+                Edit tracking
+              </Button>
+            </>
+          )}
+
+          {order.status === "REJECTED" && (
             <Button
-              loading={busy === "deliver"}
+              variant="light"
+              color="yellow"
+              loading={busy === "reopen"}
               onClick={() =>
-                run("deliver", () => markWelcomePackOrderDelivered(order.id))
+                run("reopen", () => reopenWelcomePackOrder(order.id))
               }
             >
-              Mark delivered
+              Reopen
+            </Button>
+          )}
+
+          {canAmend && !showReject && !showShip && !showCancel && (
+            <>
+              <Button variant="light" onClick={() => setEditSelections(true)}>
+                Edit items/sizes
+              </Button>
+              <Button variant="light" onClick={() => setEditShipping(true)}>
+                Edit shipping
+              </Button>
+              <Button
+                variant="subtle"
+                color="red"
+                onClick={() => setShowCancel(true)}
+              >
+                Cancel order
+              </Button>
+            </>
+          )}
+
+          {canAmend && showCancel && (
+            <Stack gap="xs" w="100%">
+              <Textarea
+                placeholder="Reason for cancellation (optional, kept in history)"
+                value={cancelReason}
+                onChange={(e) => setCancelReason(e.currentTarget.value)}
+                autosize
+                minRows={2}
+                maxRows={4}
+              />
+              <Group gap="xs">
+                <Button
+                  variant="default"
+                  onClick={() => setShowCancel(false)}
+                  disabled={busy === "cancel"}
+                >
+                  Keep order
+                </Button>
+                <Button
+                  color="red"
+                  loading={busy === "cancel"}
+                  onClick={async () => {
+                    const ok = await run("cancel", () =>
+                      cancelWelcomePackOrderAdmin(
+                        order.id,
+                        cancelReason.trim() || undefined,
+                      ),
+                    );
+                    if (ok) {
+                      setShowCancel(false);
+                      setCancelReason("");
+                    }
+                  }}
+                >
+                  Confirm cancel
+                </Button>
+              </Group>
+            </Stack>
+          )}
+
+          {hasNotification && !showReject && !showShip && !showCancel && (
+            <Button
+              variant="subtle"
+              size="compact-sm"
+              loading={busy === "resend"}
+              onClick={() =>
+                run("resend", () => resendOrderNotification(order.id))
+              }
+            >
+              Resend email
             </Button>
           )}
         </Group>
+
+        {order.events.length > 0 && <OrderHistory events={order.events} />}
       </Stack>
+
+      {/* Mounted per open so stale edits don't linger after a cancel. */}
+      {editSelections && (
+        <EditSelectionsModal
+          order={order}
+          packItems={packItems}
+          opened
+          onClose={() => setEditSelections(false)}
+        />
+      )}
+      {editShipping && (
+        <EditShippingModal
+          order={order}
+          opened
+          onClose={() => setEditShipping(false)}
+        />
+      )}
+      {editTracking && (
+        <EditTrackingModal
+          order={order}
+          opened
+          onClose={() => setEditTracking(false)}
+        />
+      )}
     </Card>
   );
 }
+
+// ── History ─────────────────────────────────────────────────────────────────
+
+const EVENT_COLORS: Record<string, string> = {
+  SUBMITTED: "blue",
+  APPROVED: "green",
+  REJECTED: "red",
+  CANCELLED: "gray",
+  ADMIN_CANCELLED: "gray",
+  SHIPPED: "indigo",
+  DELIVERED: "teal",
+  REOPENED: "yellow",
+  SELECTIONS_UPDATED: "cyan",
+  SHIPPING_UPDATED: "cyan",
+  TRACKING_UPDATED: "cyan",
+  USER_UPDATED: "cyan",
+  ITEM_CONFIG_CHANGED: "orange",
+  NOTIFICATION_RESENT: "gray",
+};
+
+function eventLabel(type: string) {
+  return type.replaceAll("_", " ").toLowerCase();
+}
+
+function MetadataDiff({ metadata }: { metadata: unknown }) {
+  if (!metadata || typeof metadata !== "object") return null;
+  const meta = metadata as {
+    before?: Record<string, unknown>;
+    after?: Record<string, unknown>;
+    reason?: string;
+    from?: string;
+  };
+  return (
+    <Stack gap={2} mt={2}>
+      {meta.reason && (
+        <Text size="xs" c="dimmed">
+          Reason: {meta.reason}
+        </Text>
+      )}
+      {meta.before &&
+        meta.after &&
+        Object.keys(meta.after).map((key) => (
+          <Text size="xs" c="dimmed" key={key}>
+            {key}: {JSON.stringify(meta.before?.[key] ?? null)} →{" "}
+            {JSON.stringify(meta.after?.[key] ?? null)}
+          </Text>
+        ))}
+    </Stack>
+  );
+}
+
+function OrderHistory({ events }: { events: AdminOrderEvent[] }) {
+  return (
+    <Accordion variant="contained" chevronPosition="left">
+      <AccordionItem value="history">
+        <AccordionControl>
+          <Text size="sm" fw={500}>
+            History ({events.length})
+          </Text>
+        </AccordionControl>
+        <AccordionPanel>
+          <Stack gap="xs">
+            {events.map((event) => (
+              <Group key={event.id} gap="xs" align="flex-start" wrap="nowrap">
+                <Text
+                  size="xs"
+                  c="dimmed"
+                  style={{ flexShrink: 0, width: 130 }}
+                >
+                  {formatTimestamp(event.createdAt)}
+                </Text>
+                <Badge
+                  variant="light"
+                  color={EVENT_COLORS[event.type] ?? "gray"}
+                  size="sm"
+                  style={{ flexShrink: 0 }}
+                >
+                  {eventLabel(event.type)}
+                </Badge>
+                <Box style={{ flex: 1, minWidth: 0 }}>
+                  <Text size="sm">
+                    {event.message ?? eventLabel(event.type)}
+                    {event.actorName && (
+                      <Text component="span" size="xs" c="dimmed">
+                        {" "}
+                        — {event.actorName}
+                      </Text>
+                    )}
+                  </Text>
+                  <MetadataDiff metadata={event.metadata} />
+                </Box>
+              </Group>
+            ))}
+          </Stack>
+        </AccordionPanel>
+      </AccordionItem>
+    </Accordion>
+  );
+}
+
+// ── Eligibility ─────────────────────────────────────────────────────────────
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString("en-MY", {
@@ -444,6 +866,8 @@ function formatTimestamp(value: string) {
     minute: "2-digit",
   });
 }
+
+type AdminQualifyingIssue = EligibilitySnapshot["qualifyingIssues"][number];
 
 function IssueList({ issues }: { issues: AdminQualifyingIssue[] }) {
   if (issues.length === 0) return null;
@@ -477,23 +901,40 @@ function IssueList({ issues }: { issues: AdminQualifyingIssue[] }) {
   );
 }
 
+/**
+ * Eligibility evidence loads on demand — the persisted snapshot would
+ * otherwise dominate the orders payload.
+ */
 function EligibilityPanel({
   orderId,
-  eligibility,
   wave,
 }: {
   orderId: string;
-  eligibility: AdminEligibilitySnapshot;
   wave: number;
 }) {
+  const [snapshot, setSnapshot] = useState<EligibilitySnapshot | null>(null);
+  const [snapshotLoaded, setSnapshotLoaded] = useState(false);
+  const [loadingSnapshot, setLoadingSnapshot] = useState(false);
   const [live, setLive] = useState<LiveEligibilityResult | null>(null);
   const [loadingLive, setLoadingLive] = useState(false);
 
-  const accent = eligibility
-    ? eligibility.wave === 1
+  const accent = snapshot
+    ? snapshot.wave === 1
       ? "var(--mantine-color-green-7)"
       : "var(--mantine-color-blue-7)"
     : "var(--mantine-color-gray-6)";
+
+  async function handleLoadSnapshot() {
+    setLoadingSnapshot(true);
+    const result = await fetchOrderEligibilitySnapshot(orderId);
+    setLoadingSnapshot(false);
+    if (!result.ok) {
+      toast.error(result.message);
+      return;
+    }
+    setSnapshot(result.snapshot);
+    setSnapshotLoaded(true);
+  }
 
   async function handleRecheck() {
     setLoadingLive(true);
@@ -515,14 +956,24 @@ function EligibilityPanel({
       }}
     >
       <Group justify="space-between" align="center" mb={4} wrap="wrap" gap="xs">
-        <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
-          {eligibility ? "Eligibility at submission" : "Eligibility"}
-        </Text>
         <Group gap="xs">
-          {eligibility && (
-            <Text size="xs" c="dimmed">
-              Captured {formatTimestamp(eligibility.capturedAt)}
-            </Text>
+          <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+            Eligibility
+          </Text>
+          <Badge variant="light" color="gray" size="sm">
+            Wave {wave}
+          </Badge>
+        </Group>
+        <Group gap="xs">
+          {!snapshotLoaded && (
+            <Button
+              size="compact-xs"
+              variant="subtle"
+              loading={loadingSnapshot}
+              onClick={handleLoadSnapshot}
+            >
+              View snapshot
+            </Button>
           )}
           <Button
             size="compact-xs"
@@ -535,58 +986,52 @@ function EligibilityPanel({
         </Group>
       </Group>
 
-      {eligibility ? (
-        <>
-          <Group gap="xs" mb={6} wrap="wrap">
-            <Badge
-              variant="light"
-              color={eligibility.wave === 1 ? "green" : "blue"}
-            >
-              Wave {eligibility.wave}
-            </Badge>
-            {wave !== eligibility.wave && (
-              <Badge variant="light" color="orange">
-                Order wave: {wave}
+      {snapshotLoaded &&
+        (snapshot ? (
+          <>
+            <Group gap="xs" mb={6} wrap="wrap">
+              <Badge
+                variant="light"
+                color={snapshot.wave === 1 ? "green" : "blue"}
+              >
+                Wave {snapshot.wave} at submission
               </Badge>
-            )}
-            {eligibility.wave === 1 && (
+              {wave !== snapshot.wave && (
+                <Badge variant="light" color="orange">
+                  Order wave: {wave}
+                </Badge>
+              )}
               <Text size="xs" c="dimmed">
-                Last {eligibility.lookbackMonths} months ·{" "}
-                {eligibility.qualifyingIssues.length} issue
-                {eligibility.qualifyingIssues.length === 1 ? "" : "s"}
-                {eligibility.truncated ? "+" : ""}
+                Captured {formatTimestamp(snapshot.capturedAt)}
               </Text>
-            )}
-          </Group>
-          <Text
-            size="sm"
-            c="dimmed"
-            mb={eligibility.qualifyingIssues.length > 0 ? "xs" : 0}
-          >
-            {eligibility.note}
-          </Text>
-          <IssueList issues={eligibility.qualifyingIssues} />
-        </>
-      ) : (
-        <>
-          <Group gap="xs" mb={6} wrap="wrap">
-            <Badge variant="light" color="gray">
-              Wave {wave}
-            </Badge>
-            <Text size="xs" c="dimmed">
-              No snapshot captured
+              {snapshot.wave === 1 && (
+                <Text size="xs" c="dimmed">
+                  Last {snapshot.lookbackMonths} months ·{" "}
+                  {snapshot.qualifyingIssues.length} issue
+                  {snapshot.qualifyingIssues.length === 1 ? "" : "s"}
+                  {snapshot.truncated ? "+" : ""}
+                </Text>
+              )}
+            </Group>
+            <Text
+              size="sm"
+              c="dimmed"
+              mb={snapshot.qualifyingIssues.length > 0 ? "xs" : 0}
+            >
+              {snapshot.note}
             </Text>
-          </Group>
+            <IssueList issues={snapshot.qualifyingIssues} />
+          </>
+        ) : (
           <Text size="sm" c="dimmed">
-            This order pre-dates eligibility snapshotting. Click{" "}
+            This order pre-dates eligibility snapshotting. Use{" "}
             <strong>Verify with Linear</strong> to fetch the developer&apos;s
             current qualifying issues.
           </Text>
-        </>
-      )}
+        ))}
 
       {live && (
-        <LivePanel result={live} snapshotWave={eligibility?.wave ?? null} />
+        <LivePanel result={live} snapshotWave={snapshot?.wave ?? null} />
       )}
     </Box>
   );

@@ -17,6 +17,8 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { DateTimePicker } from "@mantine/dates";
+import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -24,6 +26,7 @@ import IdCardPreview, {
   type IdCardAlign,
   type IdCardWrapMode,
 } from "@/app/dashboard/welcome-pack/IdCardPreview";
+import { getOrderingWindowState } from "@/lib/welcome-pack-ordering";
 import { saveWelcomePackConfig, type WelcomePackConfigInput } from "./actions";
 
 export type PackConfigData = {
@@ -32,6 +35,10 @@ export type PackConfigData = {
   description: string | null;
   isActive: boolean;
   wave2Open: boolean;
+  orderingEnabled: boolean;
+  /** ISO strings (serialized across the RSC boundary). */
+  ordersOpenAt: string | null;
+  ordersCloseAt: string | null;
   idCardTemplateBlobUrl: string | null;
   idCardWidth: number | null;
   idCardHeight: number | null;
@@ -66,6 +73,13 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
   const [description, setDescription] = useState(pack.description ?? "");
   const [isActive, setIsActive] = useState(pack.isActive);
   const [wave2Open, setWave2Open] = useState(pack.wave2Open);
+  const [orderingEnabled, setOrderingEnabled] = useState(pack.orderingEnabled);
+  const [ordersOpenAt, setOrdersOpenAt] = useState<string | null>(
+    pack.ordersOpenAt,
+  );
+  const [ordersCloseAt, setOrdersCloseAt] = useState<string | null>(
+    pack.ordersCloseAt,
+  );
   const [idCardWidth, setIdCardWidth] = useState<number | "">(
     pack.idCardWidth ?? "",
   );
@@ -115,6 +129,11 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
       description,
       isActive,
       wave2Open,
+      orderingEnabled,
+      ordersOpenAt: ordersOpenAt ? new Date(ordersOpenAt).toISOString() : null,
+      ordersCloseAt: ordersCloseAt
+        ? new Date(ordersCloseAt).toISOString()
+        : null,
       idCardWidth: idCardWidth === "" ? null : Number(idCardWidth),
       idCardHeight: idCardHeight === "" ? null : Number(idCardHeight),
       idCardNameX: idCardNameX === "" ? null : Number(idCardNameX),
@@ -135,7 +154,13 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
       toast.error(res.error);
       return;
     }
-    toast.success("Welcome pack saved");
+    if ("openOrdersWarning" in res && res.openOrdersWarning) {
+      toast.warning(
+        `Pack deactivated — ${res.openOrdersWarning} open order(s) still need fulfillment. They remain visible in the Orders tab.`,
+      );
+    } else {
+      toast.success("Welcome pack saved");
+    }
   }
 
   async function handleTemplateUpload(file: File | null) {
@@ -228,6 +253,51 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
               description="Lets users without a recent Linear issue order"
               checked={wave2Open}
               onChange={(e) => setWave2Open(e.currentTarget.checked)}
+            />
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card withBorder radius="md" padding="lg">
+        <Stack gap="md">
+          <Group justify="space-between" align="flex-start">
+            <div>
+              <Title order={4}>Ordering</Title>
+              <Text c="dimmed" size="sm">
+                Controls when new orders are accepted. The pack page stays
+                visible either way; submissions are blocked server-side.
+              </Text>
+            </div>
+            <OrderingStatusBadge
+              orderingEnabled={orderingEnabled}
+              ordersOpenAt={ordersOpenAt}
+              ordersCloseAt={ordersCloseAt}
+            />
+          </Group>
+
+          <Switch
+            label="Accept orders"
+            description="Master switch — turn off to pause ordering immediately, regardless of the schedule below"
+            checked={orderingEnabled}
+            onChange={(e) => setOrderingEnabled(e.currentTarget.checked)}
+          />
+
+          <Group grow align="flex-start">
+            <DateTimePicker
+              label="Opens at"
+              description="Leave empty to open immediately"
+              placeholder="No scheduled open"
+              value={ordersOpenAt}
+              onChange={setOrdersOpenAt}
+              clearable
+            />
+            <DateTimePicker
+              label="Closes at"
+              description="Leave empty for no automatic close"
+              placeholder="No scheduled close"
+              value={ordersCloseAt}
+              onChange={setOrdersCloseAt}
+              clearable
             />
           </Group>
         </Stack>
@@ -432,6 +502,60 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
           {pack.id ? "Save changes" : "Create pack"}
         </Button>
       </Group>
+    </Stack>
+  );
+}
+
+function OrderingStatusBadge({
+  orderingEnabled,
+  ordersOpenAt,
+  ordersCloseAt,
+}: {
+  orderingEnabled: boolean;
+  ordersOpenAt: string | null;
+  ordersCloseAt: string | null;
+}) {
+  // Reflects the *unsaved* form values so admins see the effect before
+  // committing. Client time is fine here — enforcement is server-side.
+  const state = getOrderingWindowState({
+    orderingEnabled,
+    ordersOpenAt: ordersOpenAt ? new Date(ordersOpenAt) : null,
+    ordersCloseAt: ordersCloseAt ? new Date(ordersCloseAt) : null,
+  });
+
+  if (state.open) {
+    return (
+      <Stack gap={2} align="flex-end">
+        <Badge variant="light" color="green">
+          Ordering open
+        </Badge>
+        {state.closesAt && (
+          <Text size="xs" c="dimmed">
+            Closes {dayjs(state.closesAt).format("D MMM YYYY, HH:mm")}
+          </Text>
+        )}
+      </Stack>
+    );
+  }
+
+  const copy =
+    state.reason === "disabled"
+      ? "Paused by switch"
+      : state.reason === "not-yet-open"
+        ? `Opens ${dayjs(state.opensAt).format("D MMM YYYY, HH:mm")}`
+        : `Closed ${dayjs(state.closesAt).format("D MMM YYYY, HH:mm")}`;
+
+  return (
+    <Stack gap={2} align="flex-end">
+      <Badge
+        variant="light"
+        color={state.reason === "not-yet-open" ? "yellow" : "red"}
+      >
+        Ordering closed
+      </Badge>
+      <Text size="xs" c="dimmed">
+        {copy}
+      </Text>
     </Stack>
   );
 }

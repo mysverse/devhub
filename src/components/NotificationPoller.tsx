@@ -1,70 +1,69 @@
 "use client";
 
-import { Badge, Group, Stack, Text } from "@mantine/core";
+import { Anchor, Badge, Group, Stack, Text } from "@mantine/core";
 import {
   AlertTriangle,
+  Bell,
   CheckCircle2,
+  Gift,
+  Package,
   PauseCircle,
   Sparkles,
 } from "lucide-react";
 import { motion } from "motion/react";
+import type React from "react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
+import {
+  type NotificationPresentation,
+  notificationPresentation,
+} from "@/lib/notifications/copy";
 
-type PptNotification = {
+type AppNotification = {
   id: string;
-  type: "BLOCKED" | "HELD" | "READY" | "PROOF_ACCEPTED" | "PAID_REOPENED";
+  notificationId: string;
+  domain: string;
+  type: string;
   title: string;
   message: string;
-  identifier: string | null;
-};
-
-type BonusNotification = {
-  id: string;
-  title: string;
-  identifier: string | null;
-  formattedAmount: string;
-};
-
-type IncentiveNotification = {
-  id: string;
-  title: string;
-  period: string;
-  formattedAmount: string;
-  status: string;
+  href: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  payload: unknown;
+  createdAt: string;
 };
 
 type NotificationResponse = {
-  ppt?: PptNotification[];
-  bonus?: BonusNotification[];
-  incentive?: IncentiveNotification[];
+  notifications?: AppNotification[];
 };
 
-async function markRead(ids: {
-  ppt: string[];
-  bonus: string[];
-  incentive: string[];
-}) {
-  if (
-    ids.ppt.length === 0 &&
-    ids.bonus.length === 0 &&
-    ids.incentive.length === 0
-  ) {
-    return;
-  }
-
+async function markRead(ids: string[]) {
+  if (ids.length === 0) return;
   await fetch("/api/notifications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(ids),
+    body: JSON.stringify({ ids }),
   }).catch(() => undefined);
+}
+
+function iconFor(
+  notification: AppNotification,
+  copy: NotificationPresentation,
+) {
+  if (copy.tone === "positive") return CheckCircle2;
+  if (copy.tone === "warning") return PauseCircle;
+  if (copy.tone === "critical") return AlertTriangle;
+  if (notification.domain === "bonus") return Sparkles;
+  if (notification.domain === "incentive") return Gift;
+  if (notification.domain === "welcome_pack") return Package;
+  return Bell;
 }
 
 function ToastShell({
   children,
   color,
-  width = 340,
+  width = 360,
 }: {
   children: React.ReactNode;
   color: string;
@@ -89,34 +88,26 @@ function ToastShell({
   );
 }
 
-function PptToast({ notification }: { notification: PptNotification }) {
-  const positive =
-    notification.type === "READY" || notification.type === "PROOF_ACCEPTED";
-  const color = positive
-    ? "green"
-    : notification.type === "HELD"
-      ? "yellow"
-      : "red";
-  const Icon = positive
-    ? CheckCircle2
-    : notification.type === "HELD"
-      ? PauseCircle
-      : AlertTriangle;
+function NotificationToast({
+  notification,
+}: {
+  notification: AppNotification;
+}) {
+  const copy = notificationPresentation(notification.domain, notification.type);
+  const Icon = iconFor(notification, copy);
 
   return (
-    <ToastShell color={color} width={360}>
+    <ToastShell color={copy.color}>
       <Group gap="sm" align="flex-start" wrap="nowrap">
-        <Icon size={20} color={`var(--mantine-color-${color}-4)`} />
+        <Icon size={20} color={`var(--mantine-color-${copy.color}-4)`} />
         <Stack gap={4} style={{ minWidth: 0 }}>
           <Group gap="xs">
             <Text size="sm" fw={700}>
-              PPT payout update
+              {copy.heading}
             </Text>
-            {notification.identifier && (
-              <Badge size="xs" variant="light" color={color}>
-                {notification.identifier}
-              </Badge>
-            )}
+            <Badge size="xs" variant="light" color={copy.color}>
+              {notification.type.replaceAll("_", " ").toLowerCase()}
+            </Badge>
           </Group>
           <Text size="sm" fw={600} lineClamp={1}>
             {notification.title}
@@ -124,76 +115,19 @@ function PptToast({ notification }: { notification: PptNotification }) {
           <Text size="xs" c="dimmed" lineClamp={2}>
             {notification.message}
           </Text>
+          {notification.href && (
+            <Anchor href={notification.href} size="xs" fw={600}>
+              View
+            </Anchor>
+          )}
         </Stack>
       </Group>
     </ToastShell>
   );
 }
 
-function BonusToast({ notification }: { notification: BonusNotification }) {
-  return (
-    <ToastShell color="green">
-      <Group gap="sm" align="flex-start" wrap="nowrap">
-        <Sparkles size={20} color="var(--mantine-color-green-4)" />
-        <Stack gap={4} style={{ minWidth: 0 }}>
-          <Group gap="xs">
-            <Text size="sm" fw={700}>
-              Potential bonus
-            </Text>
-            {notification.identifier && (
-              <Badge size="xs" variant="light" color="green">
-                {notification.identifier}
-              </Badge>
-            )}
-          </Group>
-          <Text size="sm" fw={600} lineClamp={1}>
-            Up to {notification.formattedAmount}
-          </Text>
-          <Text size="xs" c="dimmed" lineClamp={2}>
-            {notification.title}
-          </Text>
-        </Stack>
-      </Group>
-    </ToastShell>
-  );
-}
-
-function IncentiveToast({
-  notification,
-}: {
-  notification: IncentiveNotification;
-}) {
-  const held = notification.status === "HELD";
-  const color = held ? "orange" : "blue";
-
-  return (
-    <ToastShell color={color}>
-      <Group gap="sm" align="flex-start" wrap="nowrap">
-        <Sparkles size={20} color={`var(--mantine-color-${color}-4)`} />
-        <Stack gap={4} style={{ minWidth: 0 }}>
-          <Group gap="xs">
-            <Text size="sm" fw={700}>
-              Incentive earned
-            </Text>
-            <Badge size="xs" variant="light" color={color}>
-              {notification.period}
-            </Badge>
-          </Group>
-          <Text size="sm" fw={600} lineClamp={1}>
-            {notification.formattedAmount}
-          </Text>
-          <Text size="xs" c="dimmed" lineClamp={2}>
-            {notification.title}
-            {held ? " is held for admin review." : " is pending release."}
-          </Text>
-        </Stack>
-      </Group>
-    </ToastShell>
-  );
-}
-
-/** Minimum gap between polls — guards against rapid focus events (e.g. window
- *  managers or automation focusing the page in a loop) hammering the API. */
+/** Minimum gap between polls — guards against rapid focus events hammering
+ * the API. */
 const MIN_POLL_GAP_MS = 5_000;
 
 export default function NotificationPoller() {
@@ -217,34 +151,19 @@ export default function NotificationPoller() {
         if (!response.ok || !active) return;
 
         const data = (await response.json()) as NotificationResponse;
-        const ppt = data.ppt ?? [];
-        const bonus = data.bonus ?? [];
-        const incentive = data.incentive ?? [];
-        if (ppt.length === 0 && bonus.length === 0 && incentive.length === 0) {
-          return;
+        const notifications = data.notifications ?? [];
+        if (notifications.length === 0) return;
+
+        for (const notification of notifications) {
+          toast.custom(
+            () => <NotificationToast notification={notification} />,
+            {
+              duration: 8000,
+            },
+          );
         }
 
-        for (const notification of ppt) {
-          toast.custom(() => <PptToast notification={notification} />, {
-            duration: 8000,
-          });
-        }
-        for (const notification of bonus) {
-          toast.custom(() => <BonusToast notification={notification} />, {
-            duration: 7000,
-          });
-        }
-        for (const notification of incentive) {
-          toast.custom(() => <IncentiveToast notification={notification} />, {
-            duration: 8000,
-          });
-        }
-
-        await markRead({
-          ppt: ppt.map((notification) => notification.id),
-          bonus: bonus.map((notification) => notification.id),
-          incentive: incentive.map((notification) => notification.id),
-        });
+        await markRead(notifications.map((notification) => notification.id));
       } finally {
         inFlight.current = false;
       }

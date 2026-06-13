@@ -7,8 +7,8 @@ import PptRequestRejected from "@/emails/PptRequestRejected";
 import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 
 export async function approvePptRequest(
@@ -117,22 +117,38 @@ export async function approvePptRequest(
           "MYR",
         );
 
-        if (email && issueIdentifier && issueUrl) {
-          await sendEmail({
-            to: email,
-            subject: `PPT Request Approved: ${issueIdentifier}`,
-            category: "ppt_request_approved",
-            idempotencyKey: `ppt-request:approved:${requestId}`,
-            react: createElement(PptRequestApproved, {
-              userName: name,
-              issueIdentifier,
-              issueTitle: request.linearIssueTitle,
-              issueUrl,
-              estimate: request.requestedEstimate,
-              estimatedAmount,
-            }),
-          });
-        }
+        await notify({
+          userId: request.requesterId,
+          actorId: adminUserId,
+          domain: "ppt_request",
+          type: "APPROVED",
+          title: issueIdentifier
+            ? `PPT request approved: ${issueIdentifier}`
+            : "PPT request approved",
+          message: `${request.linearIssueTitle} was approved for ${estimatedAmount}.`,
+          href: "/dashboard/ppts",
+          entityType: "ppt_request",
+          entityId: requestId,
+          dedupeKey: `ppt-request:approved:${requestId}`,
+          channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+          email:
+            email && issueIdentifier && issueUrl
+              ? {
+                  to: email,
+                  subject: `PPT Request Approved: ${issueIdentifier}`,
+                  category: "ppt_request_approved",
+                  idempotencyKey: `ppt-request:approved:${requestId}`,
+                  react: createElement(PptRequestApproved, {
+                    userName: name,
+                    issueIdentifier,
+                    issueTitle: request.linearIssueTitle,
+                    issueUrl,
+                    estimate: request.requestedEstimate,
+                    estimatedAmount,
+                  }),
+                }
+              : undefined,
+        });
       } catch (emailError) {
         console.error("Failed to send PPT approval email:", emailError);
       }
@@ -190,19 +206,32 @@ export async function rejectPptRequest(requestId: string, reason?: string) {
     const name =
       request.requester.legalName || request.requester.user.name || "Developer";
 
-    if (email) {
-      await sendEmail({
-        to: email,
-        subject: `PPT Request Rejected: ${request.linearIssueTitle}`,
-        category: "ppt_request_rejected",
-        idempotencyKey: `ppt-request:rejected:${requestId}`,
-        react: createElement(PptRequestRejected, {
-          userName: name,
-          issueTitle: request.linearIssueTitle,
-          reason: reason?.trim() || undefined,
-        }),
-      });
-    }
+    await notify({
+      userId: request.requesterId,
+      actorId: adminUserId,
+      domain: "ppt_request",
+      type: "REJECTED",
+      title: `PPT request rejected: ${request.linearIssueTitle}`,
+      message: reason?.trim() || "Your PPT request was rejected.",
+      href: "/dashboard/ppts",
+      entityType: "ppt_request",
+      entityId: requestId,
+      dedupeKey: `ppt-request:rejected:${requestId}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: email
+        ? {
+            to: email,
+            subject: `PPT Request Rejected: ${request.linearIssueTitle}`,
+            category: "ppt_request_rejected",
+            idempotencyKey: `ppt-request:rejected:${requestId}`,
+            react: createElement(PptRequestRejected, {
+              userName: name,
+              issueTitle: request.linearIssueTitle,
+              reason: reason?.trim() || undefined,
+            }),
+          }
+        : undefined,
+    });
   } catch (emailError) {
     console.error("Failed to send PPT rejection email:", emailError);
   }

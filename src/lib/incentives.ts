@@ -17,7 +17,6 @@ import {
   formatAmount,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { sendEmail } from "@/lib/email";
 import {
   buildIncentiveEarningPotential,
   buildIncentiveNextTargets,
@@ -29,6 +28,7 @@ import {
   type IncentiveSuggestion,
   incentiveStatusCopy,
 } from "@/lib/incentive-copy";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 
 export type LinearIncentiveIssueInput = {
@@ -359,13 +359,43 @@ async function createAwardNotification(
   userId: string,
   type: "NEW_INCENTIVE" | "INCENTIVE_DISPUTED" = "NEW_INCENTIVE",
 ) {
-  try {
-    await prisma.incentiveNotification.create({
-      data: { awardId, userId, type },
-    });
-  } catch (error) {
-    if (!isUniqueConstraintError(error)) throw error;
-  }
+  const award = await prisma.incentiveAward.findUnique({
+    where: { id: awardId },
+    select: {
+      type: true,
+      period: true,
+      amount: true,
+      currency: true,
+      status: true,
+      releaseAt: true,
+    },
+  });
+  if (!award) return;
+
+  await notify({
+    userId,
+    domain: "incentive",
+    type,
+    title: formatAwardType(award.type),
+    message:
+      type === "INCENTIVE_DISPUTED"
+        ? "This incentive award was updated by an admin."
+        : `${formatAmount(award.amount, award.currency as CurrencyCode)} is pending release.`,
+    href: "/dashboard",
+    entityType: "incentive_award",
+    entityId: awardId,
+    payload: {
+      awardId,
+      awardType: award.type,
+      period: award.period,
+      amount: award.amount,
+      currency: award.currency,
+      status: award.status,
+      releaseAt: award.releaseAt?.toISOString() ?? null,
+    },
+    dedupeKey: `incentive:${type}:${userId}:${awardId}`,
+    channels: [IN_APP_CHANNEL],
+  });
 }
 
 async function notifyDeveloperAward(awardId: string) {
@@ -375,26 +405,46 @@ async function notifyDeveloperAward(awardId: string) {
       user: { include: { user: { select: { email: true, name: true } } } },
     },
   });
-  if (!award?.user.user.email) return;
+  if (!award) return;
 
-  try {
-    await sendEmail({
-      to: award.user.user.email,
-      subject: "New DevHub incentive earned",
-      category: "incentive_earned",
-      idempotencyKey: `incentive:earned:${award.id}`,
-      react: createElement(IncentiveEarned, {
-        userName: award.user.legalName || award.user.user.name || "developer",
-        amount: formatAmount(award.amount, award.currency as CurrencyCode),
-        awardType: formatAwardType(award.type),
-        period: award.period,
-        held: award.status === "HELD",
-        releaseAt: award.releaseAt?.toISOString() ?? null,
-      }),
-    });
-  } catch (error) {
-    console.error("[incentives] Failed to email incentive award:", error);
-  }
+  await notify({
+    userId: award.userId,
+    domain: "incentive",
+    type: "NEW_INCENTIVE",
+    title: formatAwardType(award.type),
+    message: `${formatAmount(award.amount, award.currency as CurrencyCode)} is pending release.`,
+    href: "/dashboard",
+    entityType: "incentive_award",
+    entityId: awardId,
+    payload: {
+      awardId,
+      awardType: award.type,
+      period: award.period,
+      amount: award.amount,
+      currency: award.currency,
+      status: award.status,
+      releaseAt: award.releaseAt?.toISOString() ?? null,
+    },
+    dedupeKey: `incentive:NEW_INCENTIVE:${award.userId}:${award.id}`,
+    channels: [EMAIL_CHANNEL],
+    email: award.user.user.email
+      ? {
+          to: award.user.user.email,
+          subject: "New DevHub incentive earned",
+          category: "incentive_earned",
+          idempotencyKey: `incentive:earned:${award.id}`,
+          react: createElement(IncentiveEarned, {
+            userName:
+              award.user.legalName || award.user.user.name || "developer",
+            amount: formatAmount(award.amount, award.currency as CurrencyCode),
+            awardType: formatAwardType(award.type),
+            period: award.period,
+            held: award.status === "HELD",
+            releaseAt: award.releaseAt?.toISOString() ?? null,
+          }),
+        }
+      : undefined,
+  });
 }
 
 async function notifyAdminsForAward(awardId: string, reason: string) {
@@ -418,8 +468,19 @@ async function notifyAdminsForAward(awardId: string, reason: string) {
 
   for (const admin of admins) {
     if (!admin.user.email) continue;
-    try {
-      await sendEmail({
+    await notify({
+      userId: admin.id,
+      domain: "incentive",
+      type: "ADMIN_ALERT",
+      title: "Incentive award needs review",
+      message: `${award.user.legalName || award.user.user.name || "Developer"}: ${formatAwardType(award.type)} held for ${reason}.`,
+      href: "/dashboard/admin",
+      entityType: "incentive_award",
+      entityId: award.id,
+      payload: { awardId: award.id, reason },
+      dedupeKey: `incentive:admin-alert:${admin.id}:${award.id}:${reason}`,
+      channels: [EMAIL_CHANNEL],
+      email: {
         to: admin.user.email,
         subject: "Incentive award needs review",
         category: "incentive_admin_alert",
@@ -433,13 +494,8 @@ async function notifyAdminsForAward(awardId: string, reason: string) {
           headline: "Incentive award needs review",
           detail: `${award.user.legalName || award.user.user.name || "Developer"}: ${formatAwardType(award.type)} held for ${reason}.`,
         }),
-      });
-    } catch (error) {
-      console.error(
-        "[incentives] Failed to email incentive admin alert:",
-        error,
-      );
-    }
+      },
+    });
   }
 
   await appendIncentiveEvent({
@@ -1711,20 +1767,32 @@ export async function sendIncentiveActivationAlert(activatedAt: Date) {
   });
   for (const admin of admins) {
     if (!admin.user.email) continue;
-    await sendEmail({
-      to: admin.user.email,
-      subject: "DevHub incentives enabled",
-      category: "incentive_activation",
-      idempotencyKey: `incentive:activation:${activatedAt.toISOString()}`,
-      react: createElement(IncentiveAdminDigest, {
-        eventCount: 0,
-        pendingCount: 0,
-        heldCount: 0,
-        releasedCount: 0,
-        paidCount: 0,
-        headline: "Incentives enabled",
-        detail: `Awards will only count completions observed on or after ${activatedAt.toISOString()}.`,
-      }),
+    await notify({
+      userId: admin.id,
+      domain: "incentive",
+      type: "ACTIVATION",
+      title: "Incentives enabled",
+      message: `Awards will only count completions observed on or after ${activatedAt.toISOString()}.`,
+      href: "/dashboard/admin",
+      entityType: "incentive_activation",
+      entityId: activatedAt.toISOString(),
+      dedupeKey: `incentive:activation:${admin.id}:${activatedAt.toISOString()}`,
+      channels: [EMAIL_CHANNEL],
+      email: {
+        to: admin.user.email,
+        subject: "DevHub incentives enabled",
+        category: "incentive_activation",
+        idempotencyKey: `incentive:activation:${activatedAt.toISOString()}`,
+        react: createElement(IncentiveAdminDigest, {
+          eventCount: 0,
+          pendingCount: 0,
+          heldCount: 0,
+          releasedCount: 0,
+          paidCount: 0,
+          headline: "Incentives enabled",
+          detail: `Awards will only count completions observed on or after ${activatedAt.toISOString()}.`,
+        }),
+      },
     });
   }
   await appendIncentiveEvent({
@@ -1758,20 +1826,32 @@ export async function sendIncentiveAdminDigest() {
   const digestDay = dateOnlyUtc();
   for (const admin of admins) {
     if (!admin.user.email) continue;
-    const result = await sendEmail({
-      to: admin.user.email,
-      subject: "Daily incentive digest - MYSverse DevHub",
-      category: "incentive_admin_digest",
-      idempotencyKey: `incentive:admin-digest:${digestDay}`,
-      react: createElement(IncentiveAdminDigest, {
-        eventCount: events.length,
-        pendingCount,
-        heldCount,
-        releasedCount,
-        paidCount,
-      }),
+    await notify({
+      userId: admin.id,
+      domain: "incentive",
+      type: "ADMIN_DIGEST",
+      title: "Daily incentive digest",
+      message: `${events.length} incentive event(s) in the last 24 hours.`,
+      href: "/dashboard/admin",
+      entityType: "incentive_admin_digest",
+      entityId: digestDay,
+      dedupeKey: `incentive:admin-digest:${admin.id}:${digestDay}`,
+      channels: [EMAIL_CHANNEL],
+      email: {
+        to: admin.user.email,
+        subject: "Daily incentive digest - MYSverse DevHub",
+        category: "incentive_admin_digest",
+        idempotencyKey: `incentive:admin-digest:${digestDay}`,
+        react: createElement(IncentiveAdminDigest, {
+          eventCount: events.length,
+          pendingCount,
+          heldCount,
+          releasedCount,
+          paidCount,
+        }),
+      },
     });
-    if (result.status === "sent") sent++;
+    sent++;
   }
   return sent;
 }

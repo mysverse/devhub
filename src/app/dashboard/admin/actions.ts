@@ -8,12 +8,12 @@ import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
-import { sendEmail } from "@/lib/email";
 import {
   cancelIncentiveAwardsForTransaction,
   formatAwardType,
   markIncentiveAwardsPaidForTransaction,
 } from "@/lib/incentives";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import {
   initiateBillplzPayout,
   initiateRobloxPayout,
@@ -75,21 +75,35 @@ export async function sendPaymentConfirmation(transactionId: string) {
           }))
         : undefined;
 
-  await sendEmail({
-    to: email,
-    subject: "Payment Processed - MYSverse DevHub",
-    category: "payment_processed",
-    idempotencyKey: `transaction:paid:${transactionId}`,
-    react: PaymentProcessed({
-      userName: name,
-      amount: formatAmount(
-        transaction.amount,
-        transaction.currency as CurrencyCode,
-      ),
-      taskTitle,
-      lineItems,
-    }),
-    attachments: [{ filename, content: Buffer.from(buffer) }],
+  const amount = formatAmount(
+    transaction.amount,
+    transaction.currency as CurrencyCode,
+  );
+  await notify({
+    userId: transaction.userId,
+    domain: "payment",
+    type: "PROCESSED",
+    title: "Payment processed",
+    message: `${amount} for ${taskTitle} has been processed.`,
+    href: "/dashboard",
+    entityType: "transaction",
+    entityId: transactionId,
+    payload: { transactionId, amount, taskTitle },
+    dedupeKey: `transaction:paid:${transactionId}`,
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    email: {
+      to: email,
+      subject: "Payment Processed - MYSverse DevHub",
+      category: "payment_processed",
+      idempotencyKey: `transaction:paid:${transactionId}`,
+      react: PaymentProcessed({
+        userName: name,
+        amount,
+        taskTitle,
+        lineItems,
+      }),
+      attachments: [{ filename, content: Buffer.from(buffer) }],
+    },
   });
 }
 
@@ -212,20 +226,36 @@ export async function rejectTransaction(
               transaction.linearIssueIdentifier ||
               "Manual Payout";
 
-      await sendEmail({
-        to: email,
-        subject: "Payout Rejected - MYSverse DevHub",
-        category: "payment_rejected",
-        idempotencyKey: `transaction:rejected:${transactionId}`,
-        react: PaymentRejected({
-          userName: name,
-          amount: formatAmount(
-            transaction.amount,
-            transaction.currency as CurrencyCode,
-          ),
-          taskTitle,
-          reason: reason || undefined,
-        }),
+      const amount = formatAmount(
+        transaction.amount,
+        transaction.currency as CurrencyCode,
+      );
+      await notify({
+        userId: transaction.userId,
+        domain: "payment",
+        type: "REJECTED",
+        title: "Payout rejected",
+        message: reason
+          ? `${amount} for ${taskTitle} was rejected: ${reason}`
+          : `${amount} for ${taskTitle} was rejected.`,
+        href: "/dashboard",
+        entityType: "transaction",
+        entityId: transactionId,
+        payload: { transactionId, amount, taskTitle, reason },
+        dedupeKey: `transaction:rejected:${transactionId}`,
+        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+        email: {
+          to: email,
+          subject: "Payout Rejected - MYSverse DevHub",
+          category: "payment_rejected",
+          idempotencyKey: `transaction:rejected:${transactionId}`,
+          react: PaymentRejected({
+            userName: name,
+            amount,
+            taskTitle,
+            reason: reason || undefined,
+          }),
+        },
       });
     } catch (emailError) {
       console.error("Failed to send rejection notification email:", emailError);

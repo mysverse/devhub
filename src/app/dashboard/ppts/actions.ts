@@ -6,8 +6,8 @@ import PptRequestSubmitted from "@/emails/PptRequestSubmitted";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import {
   evaluatePptIssueById,
   postPptProofComment,
@@ -199,26 +199,40 @@ export async function submitPptRequest(data: {
     );
 
     for (const admin of admins) {
-      if (!admin.user.email) continue;
-      await sendEmail({
-        to: admin.user.email,
-        subject: `New PPT Request: ${data.linearIssueTitle}`,
-        category: "ppt_request_submitted",
-        idempotencyKey: `ppt-request:submitted:${request.id}`,
-        react: createElement(PptRequestSubmitted, {
-          requesterName,
-          issueTitle: data.linearIssueTitle,
-          isNewIssue: data.mode === "new",
-          issueIdentifier: data.linearIssueIdentifier ?? undefined,
-          estimate: data.requestedEstimate,
-          estimatedAmount,
-          dueDate: dueDate.toLocaleDateString("en-MY", {
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-          }),
-          note: data.note || undefined,
-        }),
+      await notify({
+        userId: admin.id,
+        actorId: userId,
+        domain: "ppt_request",
+        type: "SUBMITTED",
+        title: `New PPT request: ${data.linearIssueTitle}`,
+        message: `${requesterName} requested ${estimatedAmount} for ${data.linearIssueTitle}.`,
+        href: "/dashboard/admin",
+        entityType: "ppt_request",
+        entityId: request.id,
+        dedupeKey: `ppt-request:submitted:${request.id}:${admin.id}`,
+        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+        email: admin.user.email
+          ? {
+              to: admin.user.email,
+              subject: `New PPT Request: ${data.linearIssueTitle}`,
+              category: "ppt_request_submitted",
+              idempotencyKey: `ppt-request:submitted:${request.id}`,
+              react: createElement(PptRequestSubmitted, {
+                requesterName,
+                issueTitle: data.linearIssueTitle,
+                isNewIssue: data.mode === "new",
+                issueIdentifier: data.linearIssueIdentifier ?? undefined,
+                estimate: data.requestedEstimate,
+                estimatedAmount,
+                dueDate: dueDate.toLocaleDateString("en-MY", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                }),
+                note: data.note || undefined,
+              }),
+            }
+          : undefined,
       });
     }
   } catch (emailError) {

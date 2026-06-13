@@ -5,11 +5,13 @@ import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
 import {
   evaluateWeeklyIncentives,
+  formatAwardType,
   getIncentiveConfig,
   releaseDueIncentives,
   requestIncentiveClawback as requestClawbackDebt,
   sendIncentiveActivationAlert,
 } from "@/lib/incentives";
+import { IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 
 type IncentiveConfigInput = {
@@ -221,12 +223,27 @@ export async function disputeIncentiveAward(awardId: string, reason?: string) {
       message: reason?.trim() || null,
     },
   });
-  await prisma.incentiveNotification.create({
-    data: {
-      userId: award.userId,
+  await notify({
+    userId: award.userId,
+    actorId: adminUserId,
+    domain: "incentive",
+    type: "INCENTIVE_DISPUTED",
+    title: formatAwardType(award.type),
+    message:
+      reason?.trim() || "This incentive award was cancelled by an admin.",
+    href: "/dashboard",
+    entityType: "incentive_award",
+    entityId: awardId,
+    payload: {
       awardId,
-      type: "INCENTIVE_DISPUTED",
+      awardType: award.type,
+      period: award.period,
+      amount: award.amount,
+      currency: award.currency,
+      status: "CANCELLED",
     },
+    dedupeKey: `incentive:INCENTIVE_DISPUTED:${award.userId}:${awardId}`,
+    channels: [IN_APP_CHANNEL],
   });
   revalidateIncentivePaths();
   return { success: true };

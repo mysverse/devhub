@@ -3,7 +3,12 @@ import type { BonusCandidate, BonusConfig } from "@prisma/client";
 import { cacheLife, cacheTag } from "next/cache";
 import { cache } from "react";
 import { TAGS } from "@/lib/cache-tags";
-import { type CurrencyCode, getCurrencyForPaymentMethod } from "@/lib/currency";
+import {
+  type CurrencyCode,
+  formatAmount,
+  getCurrencyForPaymentMethod,
+} from "@/lib/currency";
+import { IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 
 export const DEFAULT_BONUS_EXCLUDED_LABELS = [
@@ -265,20 +270,30 @@ export async function syncBonusCandidateFromLinearIssue(
         existing.status !== "READY_FOR_REVIEW"));
 
   if (shouldNotify) {
-    await prisma.bonusNotification.upsert({
-      where: {
-        userId_candidateId_type: {
-          userId: candidate.userId as string,
-          candidateId: candidate.id,
-          type: "NEW_ELIGIBLE_BONUS",
-        },
-      },
-      update: { readAt: null },
-      create: {
-        userId: candidate.userId as string,
+    const currencyCode =
+      candidate.currency === "ROBUX" ? "ROBUX" : ("MYR" as CurrencyCode);
+    await notify({
+      userId: candidate.userId as string,
+      domain: "bonus",
+      type: "NEW_ELIGIBLE_BONUS",
+      title:
+        candidate.linearIssueTitle ||
+        candidate.linearIssueIdentifier ||
+        "Bonus task",
+      message: `Up to ${formatAmount(candidate.maxAmount, currencyCode)} is available for review.`,
+      href: "/dashboard/bonuses",
+      entityType: "bonus_candidate",
+      entityId: candidate.id,
+      payload: {
         candidateId: candidate.id,
-        type: "NEW_ELIGIBLE_BONUS",
+        identifier: candidate.linearIssueIdentifier,
+        issueTitle: candidate.linearIssueTitle,
+        amount: candidate.maxAmount,
+        currency: candidate.currency,
       },
+      dedupeKey: `bonus:new-eligible:${candidate.userId}:${candidate.id}`,
+      channels: [IN_APP_CHANNEL],
+      resetReadOnDedupe: true,
     });
   }
 

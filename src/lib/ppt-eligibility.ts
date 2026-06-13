@@ -9,12 +9,12 @@ import {
   estimateToAmount,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { sendEmail } from "@/lib/email";
 import {
   getLinearClient,
   getLinearServiceClient,
   LinearReauthRequiredError,
 } from "@/lib/linear";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { initiateAutoPayout } from "@/lib/payout";
 import prisma from "@/lib/prisma";
 
@@ -954,19 +954,6 @@ async function appendEvent({
   });
 }
 
-async function createPptNotification(
-  userId: string | null | undefined,
-  stateId: string,
-  type: "BLOCKED" | "HELD" | "READY" | "PROOF_ACCEPTED" | "PAID_REOPENED",
-  title: string,
-  message: string,
-) {
-  if (!userId) return;
-  await prisma.pptNotification.create({
-    data: { userId, stateId, type, title, message },
-  });
-}
-
 async function notifyDeveloper(
   stateId: string,
   userId: string | null,
@@ -990,28 +977,42 @@ async function notifyDeveloper(
     : getIssueTitle(snapshot);
   const message = formatReason(reason);
 
-  await createPptNotification(userId, stateId, type, title, message);
-
-  if (state?.user?.user.email) {
-    try {
-      await sendEmail({
-        to: state.user.user.email,
-        subject: `PPT payout update: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
-        category: "ppt_developer_notice",
-        idempotencyKey: `ppt:developer:${stateId}:${state.completionEpisode}:${reason}`,
-        react: createElement(PptPayoutBlocked, {
-          userName: state.user.legalName || state.user.user.name || "developer",
-          issueIdentifier: snapshot.identifier,
-          issueTitle: getIssueTitle(snapshot),
-          issueUrl: snapshot.url,
-          reason: formatReason(reason),
-          action: getActionForReason(reason),
-        }),
-      });
-    } catch (error) {
-      console.error("[ppt-eligibility] Failed to email developer:", error);
-    }
-  }
+  await notify({
+    userId,
+    domain: "ppt",
+    type,
+    title,
+    message,
+    href: "/dashboard/ppts",
+    entityType: "ppt_payout_state",
+    entityId: stateId,
+    payload: {
+      stateId,
+      identifier: snapshot.identifier,
+      issueTitle: getIssueTitle(snapshot),
+      issueUrl: snapshot.url,
+      reason,
+    },
+    dedupeKey: `ppt:developer:${userId}:${stateId}:${state?.completionEpisode ?? "unknown"}:${reason}`,
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    email: state?.user?.user.email
+      ? {
+          to: state.user.user.email,
+          subject: `PPT payout update: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
+          category: "ppt_developer_notice",
+          idempotencyKey: `ppt:developer:${stateId}:${state.completionEpisode}:${reason}`,
+          react: createElement(PptPayoutBlocked, {
+            userName:
+              state.user.legalName || state.user.user.name || "developer",
+            issueIdentifier: snapshot.identifier,
+            issueTitle: getIssueTitle(snapshot),
+            issueUrl: snapshot.url,
+            reason: formatReason(reason),
+            action: getActionForReason(reason),
+          }),
+        }
+      : undefined,
+  });
 
   await prisma.pptPayoutState.update({
     where: { id: stateId },
@@ -1055,8 +1056,24 @@ async function notifyAdmins(
 
   for (const admin of admins) {
     if (!admin.user.email) continue;
-    try {
-      await sendEmail({
+    await notify({
+      userId: admin.id,
+      domain: "ppt",
+      type: "ADMIN_ALERT",
+      title: `PPT payout alert: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
+      message: message ?? formatReason(reason),
+      href: "/dashboard/admin",
+      entityType: "ppt_payout_state",
+      entityId: stateId,
+      payload: {
+        stateId,
+        identifier: snapshot.identifier,
+        issueTitle: getIssueTitle(snapshot),
+        reason,
+      },
+      dedupeKey: `ppt:admin-alert:${admin.id}:${stateId}:${reason}`,
+      channels: [EMAIL_CHANNEL],
+      email: {
         to: admin.user.email,
         subject: `PPT payout alert: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
         category: "ppt_admin_alert",
@@ -1072,10 +1089,8 @@ async function notifyAdmins(
           reason: formatReason(reason),
           detail: message ?? undefined,
         }),
-      });
-    } catch (error) {
-      console.error("[ppt-eligibility] Failed to email admin:", error);
-    }
+      },
+    });
   }
 
   await prisma.pptPayoutState.update({
@@ -1929,13 +1944,27 @@ async function handleEligiblePayout(
     });
   }
 
-  await createPptNotification(
-    userId,
-    stateId,
-    "READY",
-    snapshot.identifier ?? getIssueTitle(snapshot),
-    "Your PPT payout is ready and has been sent to the payout queue.",
-  );
+  if (userId) {
+    await notify({
+      userId,
+      domain: "ppt",
+      type: "READY",
+      title: snapshot.identifier ?? getIssueTitle(snapshot),
+      message:
+        "Your PPT payout is ready and has been sent to the payout queue.",
+      href: "/dashboard/ppts",
+      entityType: "ppt_payout_state",
+      entityId: stateId,
+      payload: {
+        stateId,
+        identifier: snapshot.identifier,
+        issueTitle: getIssueTitle(snapshot),
+        issueUrl: snapshot.url,
+      },
+      dedupeKey: `ppt:ready:${userId}:${stateId}`,
+      channels: [IN_APP_CHANNEL],
+    });
+  }
 
   if (withinLimit) {
     try {
@@ -2368,13 +2397,25 @@ async function evaluatePptSnapshot(
     actorLinearId: proof.userId,
     metadata: { commentId: proof.id },
   });
-  await createPptNotification(
-    linkedUser.id,
-    base.id,
-    "PROOF_ACCEPTED",
-    snapshot.identifier ?? getIssueTitle(snapshot),
-    "Your proof was accepted. DevHub is checking the stability window.",
-  );
+  await notify({
+    userId: linkedUser.id,
+    domain: "ppt",
+    type: "PROOF_ACCEPTED",
+    title: snapshot.identifier ?? getIssueTitle(snapshot),
+    message:
+      "Your proof was accepted. DevHub is checking the stability window.",
+    href: "/dashboard/ppts",
+    entityType: "ppt_payout_state",
+    entityId: base.id,
+    payload: {
+      stateId: base.id,
+      identifier: snapshot.identifier,
+      issueTitle: getIssueTitle(snapshot),
+      issueUrl: snapshot.url,
+    },
+    dedupeKey: `ppt:proof-accepted:${linkedUser.id}:${base.id}:${proof.id}`,
+    channels: [IN_APP_CHANNEL],
+  });
 
   const completedAt = base.completedAt ?? snapshot.completedAt ?? new Date();
   const stableAt = new Date(
@@ -2512,19 +2553,31 @@ export async function sendPptAdminDigest() {
   const digestDay = new Date().toISOString().slice(0, 10);
   for (const admin of admins) {
     if (!admin.user.email) continue;
-    const result = await sendEmail({
-      to: admin.user.email,
-      subject: "Daily PPT payout digest - MYSverse DevHub",
-      category: "ppt_admin_digest",
-      idempotencyKey: `ppt:admin-digest:${digestDay}`,
-      react: createElement(PptPayoutAdminDigest, {
-        eventCount: events.length,
-        blockedCount,
-        readyCount,
-        heldCount,
-      }),
+    await notify({
+      userId: admin.id,
+      domain: "ppt",
+      type: "ADMIN_DIGEST",
+      title: "Daily PPT payout digest",
+      message: `${events.length} PPT payout event(s) in the last 24 hours.`,
+      href: "/dashboard/admin",
+      entityType: "ppt_admin_digest",
+      entityId: digestDay,
+      dedupeKey: `ppt:admin-digest:${admin.id}:${digestDay}`,
+      channels: [EMAIL_CHANNEL],
+      email: {
+        to: admin.user.email,
+        subject: "Daily PPT payout digest - MYSverse DevHub",
+        category: "ppt_admin_digest",
+        idempotencyKey: `ppt:admin-digest:${digestDay}`,
+        react: createElement(PptPayoutAdminDigest, {
+          eventCount: events.length,
+          blockedCount,
+          readyCount,
+          heldCount,
+        }),
+      },
     });
-    if (result.status === "sent") sent++;
+    sent++;
   }
   return sent;
 }

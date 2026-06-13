@@ -716,36 +716,57 @@ export async function seed() {
     }
   }
 
-  await prisma.pptNotification.createMany({
-    data: [
-      {
+  for (const notification of [
+    {
+      stateId: pptStateIdByIdentifier.get("MYS-221") as string,
+      type: "READY",
+      title: "MYS-221 is ready for payout",
+      message:
+        "Add weapon holstering animations cleared all checks and is queued for payout.",
+      createdAt: daysAgo(2),
+      readAt: null,
+    },
+    {
+      stateId: pptStateIdByIdentifier.get("MYS-230") as string,
+      type: "BLOCKED",
+      title: "MYS-230 payout blocked",
+      message: "Prototype drone camera system was canceled before payout.",
+      createdAt: daysAgo(7),
+      readAt: null,
+    },
+    {
+      stateId: pptStateIdByIdentifier.get("MYS-220") as string,
+      type: "PROOF_ACCEPTED",
+      title: "Proof accepted for MYS-220",
+      message: "Ship patrol radio overhaul proof was accepted.",
+      readAt: daysAgo(6),
+      createdAt: daysAgo(8),
+    },
+  ]) {
+    await prisma.notification.create({
+      data: {
         userId: devId,
-        stateId: pptStateIdByIdentifier.get("MYS-221") as string,
-        type: "READY",
-        title: "MYS-221 is ready for payout",
-        message:
-          "Add weapon holstering animations cleared all checks and is queued for payout.",
-        createdAt: daysAgo(2),
+        domain: "ppt",
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        href: "/dashboard/ppts",
+        entityType: "ppt_payout_state",
+        entityId: notification.stateId,
+        dedupeKey: `seed:ppt:${notification.stateId}:${notification.type}`,
+        createdAt: notification.createdAt,
+        deliveries: {
+          create: {
+            channel: "in_app",
+            status: "SENT",
+            sentAt: notification.createdAt,
+            readAt: notification.readAt,
+            createdAt: notification.createdAt,
+          },
+        },
       },
-      {
-        userId: devId,
-        stateId: pptStateIdByIdentifier.get("MYS-230") as string,
-        type: "BLOCKED",
-        title: "MYS-230 payout blocked",
-        message: "Prototype drone camera system was canceled before payout.",
-        createdAt: daysAgo(7),
-      },
-      {
-        userId: devId,
-        stateId: pptStateIdByIdentifier.get("MYS-220") as string,
-        type: "PROOF_ACCEPTED",
-        title: "Proof accepted for MYS-220",
-        message: "Ship patrol radio overhaul proof was accepted.",
-        readAt: daysAgo(6),
-        createdAt: daysAgo(8),
-      },
-    ],
-  });
+    });
+  }
 
   // ── Bonus candidates ───────────────────────────────────────────────────────
   const candidate203 = await prisma.bonusCandidate.create({
@@ -841,12 +862,33 @@ export async function seed() {
     },
   });
 
-  await prisma.bonusNotification.create({
+  await prisma.notification.create({
     data: {
       userId: devId,
-      candidateId: candidate203.id,
+      domain: "bonus",
       type: "NEW_ELIGIBLE_BONUS",
+      title: candidate203.linearIssueTitle ?? "Bonus task",
+      message: "Up to RM40 is available for review.",
+      href: "/dashboard/bonuses",
+      entityType: "bonus_candidate",
+      entityId: candidate203.id,
+      payload: {
+        candidateId: candidate203.id,
+        identifier: candidate203.linearIssueIdentifier,
+        issueTitle: candidate203.linearIssueTitle,
+        amount: candidate203.maxAmount,
+        currency: candidate203.currency,
+      },
+      dedupeKey: `seed:bonus:${candidate203.id}`,
       createdAt: daysAgo(4),
+      deliveries: {
+        create: {
+          channel: "in_app",
+          status: "SENT",
+          sentAt: daysAgo(4),
+          createdAt: daysAgo(4),
+        },
+      },
     },
   });
 
@@ -974,12 +1016,34 @@ export async function seed() {
     },
   });
 
-  await prisma.incentiveNotification.create({
+  await prisma.notification.create({
     data: {
       userId: devId,
-      awardId: leaderboardAward.id,
+      domain: "incentive",
       type: "NEW_INCENTIVE",
+      title: "Leaderboard",
+      message: "RM40 is pending release.",
+      href: "/dashboard",
+      entityType: "incentive_award",
+      entityId: leaderboardAward.id,
+      payload: {
+        awardId: leaderboardAward.id,
+        awardType: leaderboardAward.type,
+        period: leaderboardAward.period,
+        amount: leaderboardAward.amount,
+        currency: leaderboardAward.currency,
+        status: leaderboardAward.status,
+      },
+      dedupeKey: `seed:incentive:${leaderboardAward.id}`,
       createdAt: daysAgo(1),
+      deliveries: {
+        create: {
+          channel: "in_app",
+          status: "SENT",
+          sentAt: daysAgo(1),
+          createdAt: daysAgo(1),
+        },
+      },
     },
   });
   await prisma.incentiveEvent.createMany({
@@ -1160,6 +1224,10 @@ export async function seed() {
       isActive: true,
       currentWave: 1,
       wave2Open: true,
+      defaultDomesticFulfillmentDays: 10,
+      defaultInternationalFulfillmentDays: 18,
+      defaultDomesticDeliveryDays: 3,
+      defaultInternationalDeliveryDays: 12,
     },
   });
   const [shirtItem, stickerItem, lanyardItem] = await Promise.all([
@@ -1249,8 +1317,11 @@ export async function seed() {
       stateProvince: "Pulau Pinang",
       postalCode: "10450",
       country: "MY",
+      carrierName: "PosLaju",
       trackingNumber: "MYTRACK123456",
       trackingUrl: "https://tracking.devhub.mock/MYTRACK123456",
+      estimatedFulfillmentAt: daysAgo(7),
+      estimatedDeliveryAt: daysAgo(-2),
       eligibilitySnapshot: {
         wave: 1,
         qualifyingIssues: ["MYS-224"],
@@ -1287,6 +1358,158 @@ export async function seed() {
             createdAt: daysAgo(6),
           },
         ],
+      },
+    },
+  });
+  const deliveredWelcomePackOrder = await prisma.welcomePackOrder.create({
+    data: {
+      userId: devId,
+      activeUserId: devId,
+      packId: pack.id,
+      status: "DELIVERED",
+      wave: 1,
+      idCardName: "Alex Architect",
+      region: "DOMESTIC",
+      recipientName: "Alexander Tan Wei Ming",
+      phone: "+60149876543",
+      addressLine1: "12 Jalan Ampang",
+      city: "Kuala Lumpur",
+      stateProvince: "Kuala Lumpur",
+      postalCode: "50450",
+      country: "MY",
+      carrierName: "DHL eCommerce",
+      trackingNumber: "DHLDEVHUB2026",
+      trackingUrl: "https://tracking.devhub.mock/DHLDEVHUB2026",
+      estimatedFulfillmentAt: daysAgo(18),
+      estimatedDeliveryAt: daysAgo(13),
+      eligibilitySnapshot: {
+        wave: 1,
+        qualifyingIssues: ["MYS-221"],
+        checkedAt: daysAgo(24).toISOString(),
+      },
+      createdAt: daysAgo(24),
+      approvedAt: daysAgo(22),
+      shippedAt: daysAgo(17),
+      deliveredAt: daysAgo(13),
+      selections: {
+        create: [
+          { itemId: shirtItem.id, selectedSize: "XL" },
+          { itemId: stickerItem.id },
+          { itemId: lanyardItem.id },
+        ],
+      },
+      events: {
+        create: [
+          {
+            actorId: devId,
+            actorRole: "USER",
+            type: "SUBMITTED",
+            message: "Order submitted (wave 1)",
+            createdAt: daysAgo(24),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "APPROVED",
+            message: "Order approved; estimated fulfilment in 10 days",
+            createdAt: daysAgo(22),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "SHIPPED",
+            message: "Marked shipped via DHL eCommerce",
+            createdAt: daysAgo(17),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "DELIVERED",
+            message: "Marked delivered",
+            createdAt: daysAgo(13),
+          },
+        ],
+      },
+    },
+  });
+  await prisma.welcomePackOrder.create({
+    data: {
+      userId: ravi.userId,
+      activeUserId: ravi.userId,
+      packId: pack.id,
+      status: "APPROVED",
+      wave: 2,
+      idCardName: "Ravi Rigger",
+      region: "INTERNATIONAL",
+      recipientName: "Ravindran a/l Suppiah",
+      phone: "+6581234567",
+      addressLine1: "7 North Bridge Road",
+      city: "Singapore",
+      postalCode: "179094",
+      country: "SG",
+      estimatedFulfillmentAt: daysAgo(2),
+      estimatedDeliveryAt: daysAgo(-10),
+      delayedAt: daysAgo(1),
+      delayReason: "Waiting for the next international courier pickup.",
+      logisticsNote: "Batch with other SG orders if possible.",
+      eligibilitySnapshot: {
+        wave: 2,
+        checkedAt: daysAgo(9).toISOString(),
+      },
+      createdAt: daysAgo(9),
+      approvedAt: daysAgo(8),
+      selections: {
+        create: [
+          { itemId: shirtItem.id, selectedSize: "S" },
+          { itemId: stickerItem.id },
+          { itemId: lanyardItem.id },
+        ],
+      },
+      events: {
+        create: [
+          {
+            actorId: ravi.userId,
+            actorRole: "USER",
+            type: "SUBMITTED",
+            message: "Order submitted (wave 2)",
+            createdAt: daysAgo(9),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "APPROVED",
+            message: "Order approved; estimated fulfilment in 18 days",
+            createdAt: daysAgo(8),
+          },
+          {
+            actorRole: "ADMIN",
+            type: "DELAYED",
+            message: "Order marked delayed",
+            metadata: {
+              reason: "Waiting for the next international courier pickup.",
+            },
+            createdAt: daysAgo(1),
+          },
+        ],
+      },
+    },
+  });
+  await prisma.notification.create({
+    data: {
+      userId: devId,
+      domain: "welcome_pack",
+      type: "DELIVERED",
+      title: "Welcome Pack delivered",
+      message: "Your welcome pack was marked as delivered.",
+      href: "/dashboard/welcome-pack",
+      entityType: "welcome_pack_order",
+      entityId: deliveredWelcomePackOrder.id,
+      payload: { orderId: deliveredWelcomePackOrder.id },
+      dedupeKey: `seed:welcome-pack:${deliveredWelcomePackOrder.id}:delivered`,
+      createdAt: daysAgo(13),
+      deliveries: {
+        create: {
+          channel: "in_app",
+          status: "SENT",
+          sentAt: daysAgo(13),
+          createdAt: daysAgo(13),
+        },
       },
     },
   });

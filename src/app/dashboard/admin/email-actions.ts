@@ -5,7 +5,7 @@ import DocumentInvalidated from "@/emails/DocumentInvalidated";
 import LegalNameReminder from "@/emails/LegalNameReminder";
 import PaymentInfoInvalid from "@/emails/PaymentInfoInvalid";
 import { requireAdmin } from "@/lib/authz";
-import { sendEmail } from "@/lib/email";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 
 export async function getUserEmailAndName(userId: string) {
@@ -22,17 +22,32 @@ export async function getUserEmailAndName(userId: string) {
 }
 
 export async function sendLegalNameReminder(userId: string) {
-  await requireAdmin();
+  const adminId = await requireAdmin();
 
   try {
     const { email, name } = await getUserEmailAndName(userId);
 
-    await sendEmail({
-      to: email,
-      subject: "Action Required: Please Update Your Legal Name",
-      category: "admin_notice_legal_name",
-      idempotencyKey: `admin-notice:legal-name:${userId}:${new Date().toISOString().slice(0, 10)}`,
-      react: LegalNameReminder({ userName: name }),
+    const day = new Date().toISOString().slice(0, 10);
+    await notify({
+      userId,
+      actorId: adminId,
+      domain: "admin_notice",
+      type: "LEGAL_NAME",
+      title: "Please update your legal name",
+      message:
+        "Your legal name is required before documents and payouts can be processed.",
+      href: "/dashboard/settings",
+      entityType: "user_profile",
+      entityId: userId,
+      dedupeKey: `admin-notice:legal-name:${userId}:${day}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: {
+        to: email,
+        subject: "Action Required: Please Update Your Legal Name",
+        category: "admin_notice_legal_name",
+        idempotencyKey: `admin-notice:legal-name:${userId}:${day}`,
+        react: LegalNameReminder({ userName: name }),
+      },
     });
 
     return { success: true };
@@ -46,7 +61,7 @@ export async function sendDocumentInvalidatedNotice(
   userId: string,
   documentType: string,
 ) {
-  await requireAdmin();
+  const adminId = await requireAdmin();
 
   try {
     const { email, name } = await getUserEmailAndName(userId);
@@ -61,12 +76,26 @@ export async function sendDocumentInvalidatedNotice(
       },
     });
 
-    await sendEmail({
-      to: email,
-      subject: "Action Required: Document Re-signing Needed",
-      category: "admin_notice_document_invalidated",
-      idempotencyKey: `admin-notice:document-invalidated:${userId}:${documentType}:${new Date().toISOString().slice(0, 10)}`,
-      react: DocumentInvalidated({ userName: name, documentType }),
+    const day = new Date().toISOString().slice(0, 10);
+    await notify({
+      userId,
+      actorId: adminId,
+      domain: "admin_notice",
+      type: "DOCUMENT_INVALIDATED",
+      title: "Document re-signing needed",
+      message: `Your ${documentType} document needs to be signed again.`,
+      href: "/dashboard/documents",
+      entityType: "signed_document",
+      entityId: `${userId}:${documentType}`,
+      dedupeKey: `admin-notice:document-invalidated:${userId}:${documentType}:${day}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: {
+        to: email,
+        subject: "Action Required: Document Re-signing Needed",
+        category: "admin_notice_document_invalidated",
+        idempotencyKey: `admin-notice:document-invalidated:${userId}:${documentType}:${day}`,
+        react: DocumentInvalidated({ userName: name, documentType }),
+      },
     });
 
     revalidatePath("/dashboard/admin/users");
@@ -78,17 +107,31 @@ export async function sendDocumentInvalidatedNotice(
 }
 
 export async function sendPaymentInfoNotice(userId: string, reason?: string) {
-  await requireAdmin();
+  const adminId = await requireAdmin();
 
   try {
     const { email, name } = await getUserEmailAndName(userId);
 
-    await sendEmail({
-      to: email,
-      subject: "Action Required: Payment Information Issue",
-      category: "admin_notice_payment_info",
-      idempotencyKey: `admin-notice:payment-info:${userId}:${new Date().toISOString().slice(0, 10)}`,
-      react: PaymentInfoInvalid({ userName: name, reason }),
+    const day = new Date().toISOString().slice(0, 10);
+    await notify({
+      userId,
+      actorId: adminId,
+      domain: "admin_notice",
+      type: "PAYMENT_INFO",
+      title: "Payment information issue",
+      message: reason ?? "Your payment information needs an update.",
+      href: "/dashboard/settings",
+      entityType: "user_profile",
+      entityId: userId,
+      dedupeKey: `admin-notice:payment-info:${userId}:${day}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: {
+        to: email,
+        subject: "Action Required: Payment Information Issue",
+        category: "admin_notice_payment_info",
+        idempotencyKey: `admin-notice:payment-info:${userId}:${day}`,
+        react: PaymentInfoInvalid({ userName: name, reason }),
+      },
     });
 
     return { success: true };

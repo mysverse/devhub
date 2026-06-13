@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import KycApproved from "@/emails/KycApproved";
 import KycRejected from "@/emails/KycRejected";
 import { requireAdmin } from "@/lib/authz";
-import { sendEmail } from "@/lib/email";
 import { createKycAuditEntry } from "@/lib/kyc";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 
 export async function approveKyc(verificationId: string) {
@@ -42,15 +42,28 @@ export async function approveKyc(verificationId: string) {
   // Send approval email
   try {
     const { email, name } = verification.user.user;
-    if (email) {
-      await sendEmail({
-        to: email,
-        subject: "Identity Verified — Automatic Payouts Available",
-        category: "kyc_approved",
-        idempotencyKey: `kyc:approved:${verificationId}`,
-        react: KycApproved({ userName: name }),
-      });
-    }
+    await notify({
+      userId: verification.userId,
+      actorId: adminId,
+      domain: "kyc",
+      type: "APPROVED",
+      title: "Identity verified",
+      message: "Automatic payouts are now available.",
+      href: "/dashboard/settings",
+      entityType: "kyc_verification",
+      entityId: verificationId,
+      dedupeKey: `kyc:approved:${verificationId}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: email
+        ? {
+            to: email,
+            subject: "Identity Verified — Automatic Payouts Available",
+            category: "kyc_approved",
+            idempotencyKey: `kyc:approved:${verificationId}`,
+            react: KycApproved({ userName: name }),
+          }
+        : undefined,
+    });
   } catch (err) {
     console.error("[kyc] Failed to send approval email:", err);
   }
@@ -98,15 +111,28 @@ export async function rejectKyc(verificationId: string, reason: string) {
   // Send rejection email
   try {
     const { email, name } = verification.user.user;
-    if (email) {
-      await sendEmail({
-        to: email,
-        subject: "Identity Verification — Action Required",
-        category: "kyc_rejected",
-        idempotencyKey: `kyc:rejected:${verificationId}`,
-        react: KycRejected({ userName: name, reason: reason.trim() }),
-      });
-    }
+    await notify({
+      userId: verification.userId,
+      actorId: adminId,
+      domain: "kyc",
+      type: "REJECTED",
+      title: "Identity verification needs attention",
+      message: reason.trim(),
+      href: "/dashboard/settings",
+      entityType: "kyc_verification",
+      entityId: verificationId,
+      dedupeKey: `kyc:rejected:${verificationId}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: email
+        ? {
+            to: email,
+            subject: "Identity Verification — Action Required",
+            category: "kyc_rejected",
+            idempotencyKey: `kyc:rejected:${verificationId}`,
+            react: KycRejected({ userName: name, reason: reason.trim() }),
+          }
+        : undefined,
+    });
   } catch (err) {
     console.error("[kyc] Failed to send rejection email:", err);
   }

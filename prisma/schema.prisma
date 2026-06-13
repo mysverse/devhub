@@ -97,14 +97,13 @@ model UserProfile {
   // Relationships
   transactions            Transaction[]
   pptPayoutStates         PptPayoutState[]        @relation("PptPayoutStateUser")
-  pptNotifications        PptNotification[]
+  notificationsReceived   Notification[]         @relation("NotificationRecipient")
+  notificationsActed      Notification[]         @relation("NotificationActor")
   bonusCandidates         BonusCandidate[]        @relation("BonusCandidateUser")
   bonusReviews            BonusCandidate[]        @relation("BonusCandidateReviewer")
-  bonusNotifications      BonusNotification[]
   issueCompletions        IssueCompletion[]       @relation("IssueCompletionUser")
   incentiveAwards         IncentiveAward[]        @relation("IncentiveAwardUser")
   incentiveAwardsDisputed IncentiveAward[]        @relation("IncentiveAwardDisputer")
-  incentiveNotifications  IncentiveNotification[]
   incentiveActivityDays   UserActivityDay[]
   incentiveClawbackDebts  IncentiveClawbackDebt[] @relation("IncentiveClawbackDebtUser")
   invites                 Invite[]
@@ -155,6 +154,56 @@ enum EmailDeliveryStatus {
   PENDING
   SENT
   FAILED
+}
+
+model Notification {
+  id         String      @id @default(cuid())
+  userId     String
+  user       UserProfile @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId    String?
+  actor      UserProfile? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  domain     String
+  type       String
+  title      String
+  message    String
+  href       String?
+  entityType String?
+  entityId   String?
+  payload    Json?
+  dedupeKey  String? @unique
+
+  deliveries NotificationDelivery[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([actorId])
+  @@index([domain, type])
+  @@index([entityType, entityId])
+}
+
+model NotificationDelivery {
+  id             String       @id @default(cuid())
+  notificationId String
+  notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  channel          String
+  status           String   @default("PENDING")
+  readAt           DateTime?
+  sentAt           DateTime?
+  skippedReason    String?
+  failedReason     String?
+  providerMetadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([notificationId, channel])
+  @@index([channel, status])
+  @@index([channel, readAt])
+  @@index([notificationId])
 }
 
 enum Role {
@@ -426,8 +475,7 @@ model PptPayoutState {
   lastLinearCommentReason PptPayoutReason?
   lastLinearCommentAt     DateTime?
 
-  events        PptPayoutEvent[]
-  notifications PptNotification[]
+  events PptPayoutEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -453,22 +501,6 @@ model PptPayoutEvent {
   @@index([stateId, createdAt])
   @@index([linearIssueId, createdAt])
   @@index([type, createdAt])
-}
-
-model PptNotification {
-  id        String              @id @default(cuid())
-  userId    String
-  user      UserProfile         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  stateId   String
-  state     PptPayoutState      @relation(fields: [stateId], references: [id], onDelete: Cascade)
-  type      PptNotificationType
-  title     String
-  message   String
-  readAt    DateTime?
-  createdAt DateTime            @default(now())
-
-  @@index([userId, readAt])
-  @@index([stateId, createdAt])
 }
 
 enum PptPayoutStatus {
@@ -546,14 +578,6 @@ enum PptPayoutEventType {
   ADMIN_ALERT_SENT
 }
 
-enum PptNotificationType {
-  BLOCKED
-  HELD
-  READY
-  PROOF_ACCEPTED
-  PAID_REOPENED
-}
-
 // ── Bonus tables ────────────────────────────────────────────────────────────
 
 model BonusConfig {
@@ -597,8 +621,7 @@ model BonusCandidate {
   rejectionReason String?
 
   transactionId String?
-  transaction   Transaction?        @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-  notifications BonusNotification[]
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -608,30 +631,12 @@ model BonusCandidate {
   @@index([transactionId])
 }
 
-model BonusNotification {
-  id          String                @id @default(cuid())
-  userId      String
-  user        UserProfile           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  candidateId String
-  candidate   BonusCandidate        @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  type        BonusNotificationType @default(NEW_ELIGIBLE_BONUS)
-  readAt      DateTime?
-  createdAt   DateTime              @default(now())
-
-  @@unique([userId, candidateId, type])
-  @@index([userId, readAt])
-}
-
 enum BonusCandidateStatus {
   ELIGIBLE
   READY_FOR_REVIEW
   APPROVED
   REJECTED
   INELIGIBLE
-}
-
-enum BonusNotificationType {
-  NEW_ELIGIBLE_BONUS
 }
 
 // ── Incentive tables ────────────────────────────────────────────────────────
@@ -740,7 +745,6 @@ model IncentiveAward {
   disputedAt      DateTime?
   disputeReason   String?
   awardIssues     IncentiveAwardIssue[]
-  notifications   IncentiveNotification[]
   events          IncentiveEvent[]
   clawbackDebts   IncentiveClawbackDebt[] @relation("OriginalClawbackAward")
   createdAt       DateTime                @default(now())
@@ -762,20 +766,6 @@ model IncentiveAwardIssue {
 
   @@unique([awardId, issueCompletionId])
   @@index([issueCompletionId])
-}
-
-model IncentiveNotification {
-  id        String                    @id @default(cuid())
-  userId    String
-  user      UserProfile               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  awardId   String
-  award     IncentiveAward            @relation(fields: [awardId], references: [id], onDelete: Cascade)
-  type      IncentiveNotificationType @default(NEW_INCENTIVE)
-  readAt    DateTime?
-  createdAt DateTime                  @default(now())
-
-  @@unique([userId, awardId, type])
-  @@index([userId, readAt])
 }
 
 model IncentiveEvent {
@@ -840,11 +830,6 @@ enum IncentiveAwardStatus {
   CANCELLED
   CLAWBACK_REQUESTED
   SETTLED_BY_CLAWBACK
-}
-
-enum IncentiveNotificationType {
-  NEW_INCENTIVE
-  INCENTIVE_DISPUTED
 }
 
 enum IncentiveClawbackMode {
@@ -1001,6 +986,13 @@ model WelcomePack {
   ordersOpenAt    DateTime?
   ordersCloseAt   DateTime?
 
+  // Default lead times used to seed per-order logistics estimates on
+  // approval. Admins can override the order-level dates later.
+  defaultDomesticFulfillmentDays      Int @default(14)
+  defaultInternationalFulfillmentDays Int @default(21)
+  defaultDomesticDeliveryDays         Int @default(3)
+  defaultInternationalDeliveryDays    Int @default(14)
+
   // ID card overlay configuration
   idCardTemplateBlobUrl String?
   idCardWidth           Int?
@@ -1080,6 +1072,12 @@ model WelcomePackOrder {
 
   trackingNumber  String?
   trackingUrl     String?
+  carrierName     String?
+  estimatedFulfillmentAt DateTime?
+  estimatedDeliveryAt    DateTime?
+  logisticsNote          String?
+  delayedAt              DateTime?
+  delayReason            String?
   notes           String?
   rejectionReason String?
 

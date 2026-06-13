@@ -2,12 +2,13 @@
 
 import { Prisma, type ShippingRegion } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import type React from "react";
 import { createElement } from "react";
 import WelcomePackOrderCancelled from "@/emails/WelcomePackOrderCancelled";
 import WelcomePackOrderSubmitted from "@/emails/WelcomePackOrderSubmitted";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
-import { sendEmail } from "@/lib/email";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 import { assertEligibleForWelcomePack } from "@/lib/welcome-pack-eligibility";
 import { diffForEvent, logOrderEvent } from "@/lib/welcome-pack-events";
@@ -45,25 +46,46 @@ async function notifyAdmins(input: {
   category: string;
   idempotencyKey: string;
   react: React.ReactElement;
+  title: string;
+  message: string;
+  orderId: string;
+  type: string;
 }) {
   const admins = await prisma.userProfile.findMany({
     where: ADMIN_ACCESS_WHERE,
     include: { user: { select: { email: true } } },
   });
-  const recipients = admins
-    .map((a) => a.user.email)
-    .filter((e): e is string => Boolean(e));
-  if (recipients.length === 0) return;
 
-  // allSettled so one bad recipient doesn't hide the rest; per-recipient
-  // idempotency keys make retries safe.
   const results = await Promise.allSettled(
-    recipients.map((to) => sendEmail({ ...input, to })),
+    admins.map((admin) =>
+      notify({
+        userId: admin.id,
+        domain: "welcome_pack",
+        type: input.type,
+        title: input.title,
+        message: input.message,
+        href: "/dashboard/admin/welcome-pack",
+        entityType: "welcome_pack_order",
+        entityId: input.orderId,
+        payload: { orderId: input.orderId },
+        dedupeKey: `${input.idempotencyKey}:${admin.id}`,
+        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+        email: admin.user.email
+          ? {
+              to: admin.user.email,
+              subject: input.subject,
+              category: input.category,
+              idempotencyKey: input.idempotencyKey,
+              react: input.react,
+            }
+          : undefined,
+      }),
+    ),
   );
   for (const [i, result] of results.entries()) {
     if (result.status === "rejected") {
       console.error(
-        `[welcome-pack] admin notification to ${recipients[i]} failed:`,
+        `[welcome-pack] admin notification to ${admins[i]?.user.email ?? admins[i]?.id} failed:`,
         result.reason,
       );
     }
@@ -203,6 +225,10 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
       subject: `New Welcome Pack order — ${developerName}`,
       category: "welcome_pack_order_submitted",
       idempotencyKey: `welcome-pack:submitted:${order.id}`,
+      title: "New Welcome Pack order",
+      message: `${developerName} submitted a welcome pack order.`,
+      orderId: order.id,
+      type: "SUBMITTED",
       react: createElement(WelcomePackOrderSubmitted, {
         developerName,
         recipientName: order.recipientName,
@@ -278,6 +304,10 @@ export async function cancelWelcomePackOrder() {
       subject: `Welcome Pack order cancelled — ${developerName}`,
       category: "welcome_pack_order_cancelled",
       idempotencyKey: `welcome-pack:cancelled:${order.id}`,
+      title: "Welcome Pack order cancelled",
+      message: `${developerName} cancelled a pending welcome pack order.`,
+      orderId: order.id,
+      type: "CANCELLED",
       react: createElement(WelcomePackOrderCancelled, {
         developerName,
         recipientName: order.recipientName,

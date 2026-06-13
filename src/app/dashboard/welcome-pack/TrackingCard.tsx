@@ -5,9 +5,11 @@ import { ExternalLink, Truck } from "lucide-react";
 import { motion } from "motion/react";
 
 export default function TrackingCard({
+  carrierName,
   trackingNumber,
   trackingUrl,
 }: {
+  carrierName?: string | null;
   trackingNumber: string;
   trackingUrl: string | null;
 }) {
@@ -48,7 +50,7 @@ export default function TrackingCard({
           </motion.div>
           <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
             <Text size="xs" tt="uppercase" fw={600} c="dimmed">
-              Tracking number
+              {carrierName ? `${carrierName} tracking` : "Tracking number"}
             </Text>
             {trackingUrl ? (
               <Anchor

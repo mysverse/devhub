@@ -62,6 +62,10 @@ export type OrderFormPack = {
   idCardNameMaxHeight: number | null;
   idCardNameAlign: "left" | "center" | "right" | null;
   idCardNameWrapMode: "nowrap" | "truncate" | "wrap" | "shrink" | null;
+  defaultDomesticFulfillmentDays: number;
+  defaultInternationalFulfillmentDays: number;
+  defaultDomesticDeliveryDays: number;
+  defaultInternationalDeliveryDays: number;
   items: {
     id: string;
     name: string;
@@ -128,6 +132,14 @@ export default function OrderForm({
   const sizedPickedCount = sizedItems.filter((i) =>
     Boolean(draft.selectedSizes[i.id]),
   ).length;
+  const fulfillmentDays =
+    draft.region === "DOMESTIC"
+      ? pack.defaultDomesticFulfillmentDays
+      : pack.defaultInternationalFulfillmentDays;
+  const deliveryDays =
+    draft.region === "DOMESTIC"
+      ? pack.defaultDomesticDeliveryDays
+      : pack.defaultInternationalDeliveryDays;
 
   // One schema parse per render; every inline error reads from this map.
   const fieldErrors = collectFieldErrors(draftToFields(draft));
@@ -262,9 +274,15 @@ export default function OrderForm({
   return (
     <Stack gap="lg">
       <Group justify="space-between" wrap="wrap" align="center">
-        <Text c="dimmed">
-          Complete the four steps to claim your welcome pack.
-        </Text>
+        <Stack gap={2}>
+          <Text c="dimmed">
+            Complete the four steps to claim your welcome pack.
+          </Text>
+          <Text size="sm" c="dimmed">
+            After approval, fulfilment is usually estimated at {fulfillmentDays}{" "}
+            day(s), plus {deliveryDays} day(s) for delivery.
+          </Text>
+        </Stack>
         <WaveBadge wave={wave} />
       </Group>
 

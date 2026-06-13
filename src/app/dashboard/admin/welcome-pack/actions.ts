@@ -10,8 +10,8 @@ import WelcomePackOrderRejected from "@/emails/WelcomePackOrderRejected";
 import WelcomePackOrderShipped from "@/emails/WelcomePackOrderShipped";
 import { requireAdmin } from "@/lib/authz";
 import { deleteWelcomePackBlob } from "@/lib/blob-storage";
-import { sendEmail } from "@/lib/email";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 import type {
   EligibilitySnapshot,
@@ -31,23 +31,6 @@ function refreshAdminPaths() {
 // ── Email helper ────────────────────────────────────────────────────────────
 
 export type EmailOutcome = { sent: boolean; detail?: string };
-
-/**
- * Send without throwing so a provider hiccup can't fail the action — but
- * surface the outcome to the UI instead of swallowing it.
- */
-async function trySendEmail(
-  args: Parameters<typeof sendEmail>[0],
-): Promise<EmailOutcome> {
-  try {
-    const result = await sendEmail(args);
-    if (result.status === "sent") return { sent: true };
-    return { sent: false, detail: result.reason ?? "skipped" };
-  } catch (error) {
-    console.error(`[welcome-pack] email (${args.category}) failed:`, error);
-    return { sent: false, detail: "failed" };
-  }
-}
 
 function validateTrackingUrl(
   url: string | undefined,
@@ -96,6 +79,10 @@ export type WelcomePackConfigInput = {
   /** ISO datetime strings; null clears the bound. */
   ordersOpenAt?: string | null;
   ordersCloseAt?: string | null;
+  defaultDomesticFulfillmentDays?: number | null;
+  defaultInternationalFulfillmentDays?: number | null;
+  defaultDomesticDeliveryDays?: number | null;
+  defaultInternationalDeliveryDays?: number | null;
   idCardWidth?: number | null;
   idCardHeight?: number | null;
   idCardNameX?: number | null;
@@ -113,6 +100,50 @@ function parseWindowDate(value: string | null | undefined): Date | null {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseOptionalDate(value: string | null | undefined) {
+  if (!value) return { ok: true as const, date: null };
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return { ok: false as const, error: "Date is not valid" };
+  }
+  return { ok: true as const, date: parsed };
+}
+
+function parseLeadDays(value: number | null | undefined, fallback: number) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.min(365, Math.max(0, Math.floor(parsed)));
+}
+
+function estimateDatesFromDefaults(
+  base: Date,
+  region: "DOMESTIC" | "INTERNATIONAL",
+  pack: {
+    defaultDomesticFulfillmentDays: number;
+    defaultInternationalFulfillmentDays: number;
+    defaultDomesticDeliveryDays: number;
+    defaultInternationalDeliveryDays: number;
+  },
+) {
+  const fulfillmentDays =
+    region === "DOMESTIC"
+      ? pack.defaultDomesticFulfillmentDays
+      : pack.defaultInternationalFulfillmentDays;
+  const deliveryDays =
+    region === "DOMESTIC"
+      ? pack.defaultDomesticDeliveryDays
+      : pack.defaultInternationalDeliveryDays;
+  const estimatedFulfillmentAt = dayjs(base)
+    .add(fulfillmentDays, "day")
+    .toDate();
+  return {
+    estimatedFulfillmentAt,
+    estimatedDeliveryAt: dayjs(estimatedFulfillmentAt)
+      .add(deliveryDays, "day")
+      .toDate(),
+  };
 }
 
 /**
@@ -150,6 +181,22 @@ export async function saveWelcomePackConfig(input: WelcomePackConfigInput) {
     orderingEnabled: input.orderingEnabled,
     ordersOpenAt,
     ordersCloseAt,
+    defaultDomesticFulfillmentDays: parseLeadDays(
+      input.defaultDomesticFulfillmentDays,
+      14,
+    ),
+    defaultInternationalFulfillmentDays: parseLeadDays(
+      input.defaultInternationalFulfillmentDays,
+      21,
+    ),
+    defaultDomesticDeliveryDays: parseLeadDays(
+      input.defaultDomesticDeliveryDays,
+      3,
+    ),
+    defaultInternationalDeliveryDays: parseLeadDays(
+      input.defaultInternationalDeliveryDays,
+      14,
+    ),
     idCardWidth: input.idCardWidth ?? null,
     idCardHeight: input.idCardHeight ?? null,
     idCardNameX: input.idCardNameX ?? null,
@@ -341,6 +388,7 @@ async function loadOrderForEmail(orderId: string) {
   return prisma.welcomePackOrder.findUnique({
     where: { id: orderId },
     include: {
+      pack: { select: { name: true } },
       user: {
         include: { user: { select: { email: true, name: true } } },
       },
@@ -414,6 +462,12 @@ function buildStatusEmail(
         react: createElement(WelcomePackOrderApproved, {
           userName: recipientName,
           idCardName: order.idCardName,
+          estimatedFulfillmentAt: formatDateForNotification(
+            order.estimatedFulfillmentAt,
+          ),
+          estimatedDeliveryAt: formatDateForNotification(
+            order.estimatedDeliveryAt,
+          ),
         }),
       };
     case "REJECTED":
@@ -431,8 +485,12 @@ function buildStatusEmail(
         category: "welcome_pack_order_shipped",
         react: createElement(WelcomePackOrderShipped, {
           userName: recipientName,
+          carrierName: order.carrierName,
           trackingNumber: order.trackingNumber ?? "",
           trackingUrl: order.trackingUrl,
+          estimatedDeliveryAt: formatDateForNotification(
+            order.estimatedDeliveryAt,
+          ),
         }),
       };
     case "DELIVERED":
@@ -444,6 +502,50 @@ function buildStatusEmail(
         }),
       };
   }
+}
+
+function formatDateForNotification(value: Date | null | undefined) {
+  return value ? dayjs(value).format("D MMM YYYY") : null;
+}
+
+function welcomePackNotificationPayload(
+  order: NonNullable<Awaited<ReturnType<typeof loadOrderForEmail>>>,
+): Prisma.InputJsonObject {
+  return {
+    orderId: order.id,
+    status: order.status,
+    packName: order.pack.name,
+    trackingNumber: order.trackingNumber,
+    trackingUrl: order.trackingUrl,
+    carrierName: order.carrierName,
+    estimatedFulfillmentAt: order.estimatedFulfillmentAt?.toISOString() ?? null,
+    estimatedDeliveryAt: order.estimatedDeliveryAt?.toISOString() ?? null,
+    delayedAt: order.delayedAt?.toISOString() ?? null,
+    delayReason: order.delayReason,
+  };
+}
+
+function welcomePackNotificationMessage(
+  order: NonNullable<Awaited<ReturnType<typeof loadOrderForEmail>>>,
+  status: NotifiableStatus,
+) {
+  if (status === "APPROVED") {
+    const fulfillment = formatDateForNotification(order.estimatedFulfillmentAt);
+    return fulfillment
+      ? `Your welcome pack was approved. Estimated fulfilment: ${fulfillment}.`
+      : "Your welcome pack was approved and queued for fulfilment.";
+  }
+  if (status === "SHIPPED") {
+    return order.trackingNumber
+      ? `Your welcome pack shipped${order.carrierName ? ` with ${order.carrierName}` : ""}. Tracking: ${order.trackingNumber}.`
+      : "Your welcome pack shipped.";
+  }
+  if (status === "DELIVERED") {
+    return "Your welcome pack was marked as delivered.";
+  }
+  return order.rejectionReason
+    ? `Your welcome pack order was not approved: ${order.rejectionReason}`
+    : "Your welcome pack order was not approved.";
 }
 
 /**
@@ -460,31 +562,141 @@ async function sendStatusEmail(
   const order = await loadOrderForEmail(orderId);
   if (!order) return { sent: false, detail: "order-not-found" };
   const recipient = recipientFromOrder(order);
-  if (!recipient.email) return { sent: false, detail: "no-email-on-file" };
   const content = buildStatusEmail(order, recipient.name, status);
-  return trySendEmail({
-    to: recipient.email,
-    subject: opts.subject ?? content.subject,
-    category: content.category,
-    react: content.react,
-    idempotencyKey: opts.idempotencyKey,
-    dedupeWindowMs: opts.dedupeWindowMs,
+  const notification = await notify({
+    userId: order.userId,
+    domain: "welcome_pack",
+    type: status,
+    title: content.subject,
+    message: welcomePackNotificationMessage(order, status),
+    href: "/dashboard/welcome-pack",
+    entityType: "welcome_pack_order",
+    entityId: orderId,
+    payload: welcomePackNotificationPayload(order),
+    dedupeKey:
+      opts.idempotencyKey ?? `welcome-pack:${status.toLowerCase()}:${orderId}`,
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    email: recipient.email
+      ? {
+          to: recipient.email,
+          subject: opts.subject ?? content.subject,
+          category: content.category,
+          react: content.react,
+          idempotencyKey: opts.idempotencyKey,
+          dedupeWindowMs: opts.dedupeWindowMs,
+        }
+      : undefined,
   });
+  if (!notification) return { sent: false, detail: "notification-not-created" };
+  const delivery = await prisma.notificationDelivery.findUnique({
+    where: {
+      notificationId_channel: {
+        notificationId: notification.id,
+        channel: EMAIL_CHANNEL,
+      },
+    },
+    select: { status: true, skippedReason: true, failedReason: true },
+  });
+  return {
+    sent: delivery?.status === "SENT",
+    detail:
+      delivery?.skippedReason ??
+      delivery?.failedReason ??
+      delivery?.status.toLowerCase(),
+  };
+}
+
+async function sendOrderNotification(
+  orderId: string,
+  input: {
+    type: string;
+    title: string;
+    message: string;
+    idempotencyKey: string;
+    subject?: string;
+  },
+): Promise<EmailOutcome> {
+  const order = await loadOrderForEmail(orderId);
+  if (!order) return { sent: false, detail: "order-not-found" };
+  const recipient = recipientFromOrder(order);
+  const notification = await notify({
+    userId: order.userId,
+    domain: "welcome_pack",
+    type: input.type,
+    title: input.title,
+    message: input.message,
+    href: "/dashboard/welcome-pack",
+    entityType: "welcome_pack_order",
+    entityId: orderId,
+    payload: welcomePackNotificationPayload(order),
+    dedupeKey: input.idempotencyKey,
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    email: recipient.email
+      ? {
+          to: recipient.email,
+          subject: input.subject ?? input.title,
+          category: `welcome_pack_${input.type.toLowerCase()}`,
+          idempotencyKey: input.idempotencyKey,
+        }
+      : undefined,
+  });
+  if (!notification) return { sent: false, detail: "notification-not-created" };
+  const delivery = await prisma.notificationDelivery.findUnique({
+    where: {
+      notificationId_channel: {
+        notificationId: notification.id,
+        channel: EMAIL_CHANNEL,
+      },
+    },
+    select: { status: true, skippedReason: true, failedReason: true },
+  });
+  return {
+    sent: delivery?.status === "SENT",
+    detail:
+      delivery?.skippedReason ??
+      delivery?.failedReason ??
+      delivery?.status.toLowerCase(),
+  };
 }
 
 export async function approveWelcomePackOrder(orderId: string) {
   const adminId = await requireAdmin();
 
+  const order = await prisma.welcomePackOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      region: true,
+      pack: {
+        select: {
+          defaultDomesticFulfillmentDays: true,
+          defaultInternationalFulfillmentDays: true,
+          defaultDomesticDeliveryDays: true,
+          defaultInternationalDeliveryDays: true,
+        },
+      },
+    },
+  });
+  if (!order) return { error: "Order not found" };
+
   const approvedAt = new Date();
+  const estimates = estimateDatesFromDefaults(
+    approvedAt,
+    order.region,
+    order.pack,
+  );
   const ok = await transitionOrder({
     orderId,
     from: ["PENDING"],
-    data: { status: "APPROVED", approvedAt },
+    data: { status: "APPROVED", approvedAt, ...estimates },
     event: {
       actorId: adminId,
       actorRole: "ADMIN",
       type: "APPROVED",
-      message: "Order approved",
+      message: `Order approved; estimated fulfilment ${dayjs(estimates.estimatedFulfillmentAt).format("D MMM YYYY")}`,
+      metadata: {
+        estimatedFulfillmentAt: estimates.estimatedFulfillmentAt.toISOString(),
+        estimatedDeliveryAt: estimates.estimatedDeliveryAt.toISOString(),
+      },
     },
   });
   if (!ok) return statusConflictError(orderId);
@@ -533,6 +745,7 @@ export async function markWelcomePackOrderShipped(
   orderId: string,
   trackingNumber: string,
   trackingUrl?: string,
+  carrierName?: string,
 ) {
   const adminId = await requireAdmin();
 
@@ -542,6 +755,7 @@ export async function markWelcomePackOrderShipped(
   }
   const url = validateTrackingUrl(trackingUrl);
   if (!url.ok) return { error: url.error };
+  const carrier = carrierName?.trim() || null;
 
   const shippedAt = new Date();
   const ok = await transitionOrder({
@@ -552,12 +766,18 @@ export async function markWelcomePackOrderShipped(
       shippedAt,
       trackingNumber: tracking,
       trackingUrl: url.url,
+      carrierName: carrier,
     },
     event: {
       actorId: adminId,
       actorRole: "ADMIN",
       type: "SHIPPED",
-      message: `Marked shipped (tracking ${tracking})`,
+      message: `Marked shipped${carrier ? ` via ${carrier}` : ""} (tracking ${tracking})`,
+      metadata: {
+        trackingNumber: tracking,
+        trackingUrl: url.url,
+        carrierName: carrier,
+      },
     },
   });
   if (!ok) return statusConflictError(orderId);
@@ -671,8 +891,17 @@ export async function cancelWelcomePackOrderAdmin(
   });
   if (!ok) return statusConflictError(orderId);
 
+  const email = await sendOrderNotification(orderId, {
+    type: "ADMIN_CANCELLED",
+    title: "Welcome Pack order cancelled",
+    message: cleanReason
+      ? `Your welcome pack order was cancelled: ${cleanReason}`
+      : "Your welcome pack order was cancelled.",
+    idempotencyKey: `welcome-pack:admin-cancelled:${orderId}:${Date.now()}`,
+  });
+
   refreshAdminPaths();
-  return { success: true };
+  return { success: true, emailSent: email.sent, emailDetail: email.detail };
 }
 
 // ── Order amendments ────────────────────────────────────────────────────────
@@ -867,6 +1096,7 @@ export async function updateWelcomePackOrderTrackingAdmin(
   trackingNumber: string,
   trackingUrl?: string,
   notifyUser?: boolean,
+  carrierName?: string,
 ) {
   const adminId = await requireAdmin();
 
@@ -876,10 +1106,16 @@ export async function updateWelcomePackOrderTrackingAdmin(
   }
   const url = validateTrackingUrl(trackingUrl);
   if (!url.ok) return { error: url.error };
+  const carrier = carrierName?.trim() || null;
 
   const order = await prisma.welcomePackOrder.findUnique({
     where: { id: orderId },
-    select: { status: true, trackingNumber: true, trackingUrl: true },
+    select: {
+      status: true,
+      trackingNumber: true,
+      trackingUrl: true,
+      carrierName: true,
+    },
   });
   if (!order) return { error: "Order not found" };
   if (order.status !== "SHIPPED") {
@@ -891,7 +1127,11 @@ export async function updateWelcomePackOrderTrackingAdmin(
   const ok = await prisma.$transaction(async (tx) => {
     const result = await tx.welcomePackOrder.updateMany({
       where: { id: orderId, status: "SHIPPED" },
-      data: { trackingNumber: tracking, trackingUrl: url.url },
+      data: {
+        trackingNumber: tracking,
+        trackingUrl: url.url,
+        carrierName: carrier,
+      },
     });
     if (result.count === 0) return false;
     await logOrderEvent(tx, {
@@ -904,8 +1144,13 @@ export async function updateWelcomePackOrderTrackingAdmin(
         before: {
           trackingNumber: order.trackingNumber,
           trackingUrl: order.trackingUrl,
+          carrierName: order.carrierName,
         },
-        after: { trackingNumber: tracking, trackingUrl: url.url },
+        after: {
+          trackingNumber: tracking,
+          trackingUrl: url.url,
+          carrierName: carrier,
+        },
       },
     });
     return true;
@@ -927,6 +1172,178 @@ export async function updateWelcomePackOrderTrackingAdmin(
     success: true,
     ...(email ? { emailSent: email.sent, emailDetail: email.detail } : {}),
   };
+}
+
+export type AdminLogisticsInput = {
+  estimatedFulfillmentAt?: string | null;
+  estimatedDeliveryAt?: string | null;
+  carrierName?: string | null;
+  logisticsNote?: string | null;
+  notifyUser?: boolean;
+};
+
+export async function updateWelcomePackOrderLogisticsAdmin(
+  orderId: string,
+  input: AdminLogisticsInput,
+) {
+  const adminId = await requireAdmin();
+  const fulfillment = parseOptionalDate(input.estimatedFulfillmentAt);
+  if (!fulfillment.ok)
+    return { error: `Estimated fulfilment ${fulfillment.error}` };
+  const delivery = parseOptionalDate(input.estimatedDeliveryAt);
+  if (!delivery.ok) return { error: `Estimated delivery ${delivery.error}` };
+  if (fulfillment.date && delivery.date && delivery.date < fulfillment.date) {
+    return { error: "Estimated delivery must be on or after fulfilment" };
+  }
+
+  const order = await prisma.welcomePackOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      status: true,
+      estimatedFulfillmentAt: true,
+      estimatedDeliveryAt: true,
+      carrierName: true,
+      logisticsNote: true,
+    },
+  });
+  if (!order) return { error: "Order not found" };
+  if (order.status === "CANCELLED" || order.status === "REJECTED") {
+    return {
+      error: `Order is ${order.status.toLowerCase()} — logistics cannot be edited`,
+    };
+  }
+
+  const after = {
+    estimatedFulfillmentAt: fulfillment.date,
+    estimatedDeliveryAt: delivery.date,
+    carrierName: input.carrierName?.trim() || null,
+    logisticsNote: input.logisticsNote?.trim() || null,
+  };
+  const before = {
+    estimatedFulfillmentAt: order.estimatedFulfillmentAt?.toISOString() ?? null,
+    estimatedDeliveryAt: order.estimatedDeliveryAt?.toISOString() ?? null,
+    carrierName: order.carrierName,
+    logisticsNote: order.logisticsNote,
+  };
+  const afterForEvent = {
+    estimatedFulfillmentAt: after.estimatedFulfillmentAt?.toISOString() ?? null,
+    estimatedDeliveryAt: after.estimatedDeliveryAt?.toISOString() ?? null,
+    carrierName: after.carrierName,
+    logisticsNote: after.logisticsNote,
+  };
+  const diff = diffForEvent(before, afterForEvent, [
+    "estimatedFulfillmentAt",
+    "estimatedDeliveryAt",
+    "carrierName",
+    "logisticsNote",
+  ]);
+
+  if (Object.keys(diff.after).length === 0) {
+    return { success: true };
+  }
+
+  const ok = await prisma.$transaction(async (tx) => {
+    const result = await tx.welcomePackOrder.updateMany({
+      where: {
+        id: orderId,
+        status: { notIn: ["CANCELLED", "REJECTED"] },
+      },
+      data: after,
+    });
+    if (result.count === 0) return false;
+    await logOrderEvent(tx, {
+      orderId,
+      actorId: adminId,
+      actorRole: "ADMIN",
+      type: "LOGISTICS_UPDATED",
+      message: "Logistics details updated by admin",
+      metadata: diff as unknown as Prisma.InputJsonValue,
+    });
+    return true;
+  });
+  if (!ok) return statusConflictError(orderId);
+
+  let email: EmailOutcome | undefined;
+  if (input.notifyUser) {
+    email = await sendOrderNotification(orderId, {
+      type: "ESTIMATE_UPDATED",
+      title: "Welcome Pack estimate updated",
+      message: after.estimatedDeliveryAt
+        ? `Your welcome pack estimate was updated. Estimated delivery: ${dayjs(after.estimatedDeliveryAt).format("D MMM YYYY")}.`
+        : "Your welcome pack logistics estimate was updated.",
+      idempotencyKey: `welcome-pack:estimate-updated:${orderId}:${Date.now()}`,
+    });
+  }
+
+  refreshAdminPaths();
+  return {
+    success: true,
+    ...(email ? { emailSent: email.sent, emailDetail: email.detail } : {}),
+  };
+}
+
+export async function markWelcomePackOrderDelayed(
+  orderId: string,
+  reason: string,
+  revisedFulfillmentAt?: string | null,
+  revisedDeliveryAt?: string | null,
+) {
+  const adminId = await requireAdmin();
+  const cleanReason = reason.trim();
+  if (cleanReason.length < 3) return { error: "Delay reason is required" };
+  const fulfillment = parseOptionalDate(revisedFulfillmentAt);
+  if (!fulfillment.ok)
+    return { error: `Revised fulfilment ${fulfillment.error}` };
+  const delivery = parseOptionalDate(revisedDeliveryAt);
+  if (!delivery.ok) return { error: `Revised delivery ${delivery.error}` };
+  if (fulfillment.date && delivery.date && delivery.date < fulfillment.date) {
+    return { error: "Revised delivery must be on or after fulfilment" };
+  }
+
+  const delayedAt = new Date();
+  const ok = await prisma.$transaction(async (tx) => {
+    const result = await tx.welcomePackOrder.updateMany({
+      where: {
+        id: orderId,
+        status: { in: ["APPROVED", "SHIPPED"] },
+      },
+      data: {
+        delayedAt,
+        delayReason: cleanReason,
+        ...(fulfillment.date
+          ? { estimatedFulfillmentAt: fulfillment.date }
+          : {}),
+        ...(delivery.date ? { estimatedDeliveryAt: delivery.date } : {}),
+      },
+    });
+    if (result.count === 0) return false;
+    await logOrderEvent(tx, {
+      orderId,
+      actorId: adminId,
+      actorRole: "ADMIN",
+      type: "DELAYED",
+      message: "Order marked delayed",
+      metadata: {
+        reason: cleanReason,
+        revisedFulfillmentAt: fulfillment.date?.toISOString() ?? null,
+        revisedDeliveryAt: delivery.date?.toISOString() ?? null,
+      },
+    });
+    return true;
+  });
+  if (!ok) return statusConflictError(orderId);
+
+  const email = await sendOrderNotification(orderId, {
+    type: "DELAYED",
+    title: "Welcome Pack delayed",
+    message: delivery.date
+      ? `Your welcome pack is delayed. Revised estimated delivery: ${dayjs(delivery.date).format("D MMM YYYY")}. Reason: ${cleanReason}`
+      : `Your welcome pack is delayed. Reason: ${cleanReason}`,
+    idempotencyKey: `welcome-pack:delayed:${orderId}:${delayedAt.getTime()}`,
+  });
+
+  refreshAdminPaths();
+  return { success: true, emailSent: email.sent, emailDetail: email.detail };
 }
 
 /**

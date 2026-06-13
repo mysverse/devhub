@@ -10,6 +10,7 @@ import {
   Box,
   Button,
   Card,
+  Drawer,
   Group,
   Select,
   Stack,
@@ -24,9 +25,10 @@ import {
   TextInput,
   Title,
 } from "@mantine/core";
+import { DateTimePicker } from "@mantine/dates";
 import type { ShippingRegion, WelcomePackOrderStatus } from "@prisma/client";
 import dayjs from "dayjs";
-import { Download, Search } from "lucide-react";
+import { CalendarClock, Download, Eye, Search } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -39,6 +41,7 @@ import {
   fetchLiveEligibilityEvidence,
   fetchOrderEligibilitySnapshot,
   type LiveEligibilityResult,
+  markWelcomePackOrderDelayed,
   markWelcomePackOrderDelivered,
   markWelcomePackOrderShipped,
   rejectWelcomePackOrder,
@@ -47,6 +50,7 @@ import {
 } from "./actions";
 import FulfillmentSummary from "./FulfillmentSummary";
 import {
+  EditLogisticsModal,
   EditSelectionsModal,
   EditShippingModal,
   EditTrackingModal,
@@ -91,6 +95,12 @@ export type AdminOrderRow = {
   notes: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
+  carrierName: string | null;
+  estimatedFulfillmentAt: string | null;
+  estimatedDeliveryAt: string | null;
+  logisticsNote: string | null;
+  delayedAt: string | null;
+  delayReason: string | null;
   rejectionReason: string | null;
   createdAt: string;
   approvedAt: string | null;
@@ -174,8 +184,17 @@ const CSV_COLUMNS: {
         )
         .join("; "),
   },
+  { header: "Carrier", value: (o) => o.carrierName ?? "" },
   { header: "Tracking number", value: (o) => o.trackingNumber ?? "" },
   { header: "Tracking URL", value: (o) => o.trackingUrl ?? "" },
+  {
+    header: "Estimated fulfilment",
+    value: (o) => o.estimatedFulfillmentAt ?? "",
+  },
+  { header: "Estimated delivery", value: (o) => o.estimatedDeliveryAt ?? "" },
+  { header: "Delayed at", value: (o) => o.delayedAt ?? "" },
+  { header: "Delay reason", value: (o) => o.delayReason ?? "" },
+  { header: "Logistics note", value: (o) => o.logisticsNote ?? "" },
   { header: "Submitted", value: (o) => o.createdAt },
   { header: "Approved", value: (o) => o.approvedAt ?? "" },
   { header: "Shipped", value: (o) => o.shippedAt ?? "" },
@@ -211,6 +230,7 @@ export default function OrdersTable({
 }) {
   const [filter, setFilter] = useState<string>("ALL");
   const [search, setSearch] = useState("");
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -234,6 +254,8 @@ export default function OrdersTable({
       ].some((v) => v.toLowerCase().includes(query)),
     );
   }, [orders, filter, search]);
+  const selectedOrder =
+    orders.find((order) => order.id === selectedOrderId) ?? null;
 
   return (
     <Stack gap="md">
@@ -294,11 +316,102 @@ export default function OrdersTable({
       ) : (
         <Stack gap="sm">
           {filtered.map((order) => (
-            <OrderCard key={order.id} order={order} packItems={packItems} />
+            <OrderListRow
+              key={order.id}
+              order={order}
+              onOpen={() => setSelectedOrderId(order.id)}
+            />
           ))}
         </Stack>
       )}
+
+      <Drawer
+        opened={Boolean(selectedOrder)}
+        onClose={() => setSelectedOrderId(null)}
+        title={selectedOrder ? `Order — ${selectedOrder.developerName}` : ""}
+        position="right"
+        size="xl"
+      >
+        {selectedOrder && (
+          <OrderCard order={selectedOrder} packItems={packItems} />
+        )}
+      </Drawer>
     </Stack>
+  );
+}
+
+function OrderListRow({
+  order,
+  onOpen,
+}: {
+  order: AdminOrderRow;
+  onOpen: () => void;
+}) {
+  const overdue =
+    order.status === "APPROVED" &&
+    order.estimatedFulfillmentAt !== null &&
+    dayjs(order.estimatedFulfillmentAt).isBefore(dayjs(), "day");
+
+  return (
+    <Card withBorder radius="md" p="md">
+      <Group justify="space-between" align="center" wrap="wrap" gap="md">
+        <Group gap="sm" style={{ minWidth: 0, flex: 1 }}>
+          <StatusBadge
+            copy={statusCopy(WELCOME_PACK_ORDER_STATUS, order.status)}
+          />
+          <Stack gap={2} style={{ minWidth: 0 }}>
+            <Group gap="xs" wrap="wrap">
+              <Text fw={600} lineClamp={1}>
+                {order.developerName}
+              </Text>
+              <Badge variant="light" color="grape" size="sm">
+                Wave {order.wave}
+              </Badge>
+              {order.delayedAt && (
+                <Badge variant="light" color="orange" size="sm">
+                  Delayed
+                </Badge>
+              )}
+              {overdue && (
+                <Badge variant="light" color="red" size="sm">
+                  Fulfilment overdue
+                </Badge>
+              )}
+            </Group>
+            <Text size="sm" c="dimmed" lineClamp={1}>
+              {order.developerEmail ?? "No email"} · {order.recipientName} ·{" "}
+              {order.region === "DOMESTIC" ? "Malaysia" : "International"}
+            </Text>
+          </Stack>
+        </Group>
+
+        <Group gap="xs" wrap="wrap">
+          {order.estimatedFulfillmentAt && (
+            <Badge
+              variant="light"
+              color={overdue ? "red" : "blue"}
+              leftSection={<CalendarClock size={12} />}
+            >
+              Fulfil {formatDate(order.estimatedFulfillmentAt)}
+            </Badge>
+          )}
+          {order.trackingNumber && (
+            <Badge variant="light" color="indigo">
+              {order.carrierName ? `${order.carrierName} · ` : ""}
+              {order.trackingNumber}
+            </Badge>
+          )}
+          <Button
+            variant="light"
+            size="compact-sm"
+            leftSection={<Eye size={14} />}
+            onClick={onOpen}
+          >
+            Details
+          </Button>
+        </Group>
+      </Group>
+    </Card>
   );
 }
 
@@ -323,9 +436,19 @@ function OrderCard({
   const [cancelReason, setCancelReason] = useState("");
   const [trackingNumber, setTrackingNumber] = useState("");
   const [trackingUrl, setTrackingUrl] = useState("");
+  const [shipCarrierName, setShipCarrierName] = useState("");
   const [editSelections, setEditSelections] = useState(false);
   const [editShipping, setEditShipping] = useState(false);
   const [editTracking, setEditTracking] = useState(false);
+  const [editLogistics, setEditLogistics] = useState(false);
+  const [showDelay, setShowDelay] = useState(false);
+  const [delayReason, setDelayReason] = useState("");
+  const [revisedFulfillmentAt, setRevisedFulfillmentAt] = useState<
+    string | null
+  >(order.estimatedFulfillmentAt);
+  const [revisedDeliveryAt, setRevisedDeliveryAt] = useState<string | null>(
+    order.estimatedDeliveryAt,
+  );
 
   async function run(action: string, fn: () => Promise<ActionResult>) {
     setBusy(action);
@@ -494,12 +617,63 @@ function OrderCard({
             </Text>
             {order.trackingUrl ? (
               <Anchor href={order.trackingUrl} target="_blank">
+                {order.carrierName ? `${order.carrierName} · ` : ""}
                 {order.trackingNumber}
               </Anchor>
             ) : (
-              <Text size="sm">{order.trackingNumber}</Text>
+              <Text size="sm">
+                {order.carrierName ? `${order.carrierName} · ` : ""}
+                {order.trackingNumber}
+              </Text>
             )}
           </Group>
+        )}
+
+        {(order.estimatedFulfillmentAt ||
+          order.estimatedDeliveryAt ||
+          order.logisticsNote ||
+          order.delayedAt) && (
+          <Box
+            p="xs"
+            style={{
+              backgroundColor: "var(--mantine-color-dark-6)",
+              borderRadius: "var(--mantine-radius-sm)",
+              borderLeft: `3px solid var(--mantine-color-${
+                order.delayedAt ? "orange" : "blue"
+              }-7)`,
+            }}
+          >
+            <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb={4}>
+              Logistics
+            </Text>
+            <Group gap="xs" wrap="wrap">
+              {order.estimatedFulfillmentAt && (
+                <Badge variant="light" color="blue">
+                  Fulfil {formatDate(order.estimatedFulfillmentAt)}
+                </Badge>
+              )}
+              {order.estimatedDeliveryAt && (
+                <Badge variant="light" color="indigo">
+                  Deliver {formatDate(order.estimatedDeliveryAt)}
+                </Badge>
+              )}
+              {order.delayedAt && (
+                <Badge variant="light" color="orange">
+                  Delayed {formatDate(order.delayedAt)}
+                </Badge>
+              )}
+            </Group>
+            {order.delayReason && (
+              <Text size="sm" c="dimmed" mt={4}>
+                Delay: {order.delayReason}
+              </Text>
+            )}
+            {order.logisticsNote && (
+              <Text size="sm" c="dimmed" mt={4}>
+                {order.logisticsNote}
+              </Text>
+            )}
+          </Box>
         )}
 
         <Group gap="xs" wrap="wrap">
@@ -564,24 +738,33 @@ function OrderCard({
             </Stack>
           )}
 
-          {order.status === "APPROVED" && !showShip && !showCancel && (
-            <>
-              <Button onClick={() => setShowShip(true)}>Mark shipped</Button>
-              <Button
-                variant="light"
-                color="yellow"
-                loading={busy === "reopen"}
-                onClick={() =>
-                  run("reopen", () => reopenWelcomePackOrder(order.id))
-                }
-              >
-                Un-approve
-              </Button>
-            </>
-          )}
+          {order.status === "APPROVED" &&
+            !showShip &&
+            !showCancel &&
+            !showDelay && (
+              <>
+                <Button onClick={() => setShowShip(true)}>Mark shipped</Button>
+                <Button
+                  variant="light"
+                  color="yellow"
+                  loading={busy === "reopen"}
+                  onClick={() =>
+                    run("reopen", () => reopenWelcomePackOrder(order.id))
+                  }
+                >
+                  Un-approve
+                </Button>
+              </>
+            )}
 
           {order.status === "APPROVED" && showShip && (
             <Stack gap="xs" w="100%">
+              <TextInput
+                label="Carrier (optional)"
+                placeholder="DHL, PosLaju, J&T…"
+                value={shipCarrierName}
+                onChange={(e) => setShipCarrierName(e.currentTarget.value)}
+              />
               <TextInput
                 label="Tracking number"
                 value={trackingNumber}
@@ -610,12 +793,14 @@ function OrderCard({
                         order.id,
                         trackingNumber,
                         trackingUrl.trim() || undefined,
+                        shipCarrierName.trim() || undefined,
                       ),
                     );
                     if (ok) {
                       setShowShip(false);
                       setTrackingNumber("");
                       setTrackingUrl("");
+                      setShipCarrierName("");
                     }
                   }}
                 >
@@ -625,7 +810,7 @@ function OrderCard({
             </Stack>
           )}
 
-          {order.status === "SHIPPED" && (
+          {order.status === "SHIPPED" && !showDelay && (
             <>
               <Button
                 loading={busy === "deliver"}
@@ -641,6 +826,82 @@ function OrderCard({
             </>
           )}
 
+          {(order.status === "APPROVED" || order.status === "SHIPPED") &&
+            !showShip &&
+            !showCancel &&
+            !showDelay && (
+              <>
+                <Button variant="light" onClick={() => setEditLogistics(true)}>
+                  Edit logistics
+                </Button>
+                <Button
+                  variant="light"
+                  color="orange"
+                  onClick={() => setShowDelay(true)}
+                >
+                  Mark delayed
+                </Button>
+              </>
+            )}
+
+          {(order.status === "APPROVED" || order.status === "SHIPPED") &&
+            showDelay && (
+              <Stack gap="xs" w="100%">
+                <Textarea
+                  label="Delay reason"
+                  value={delayReason}
+                  onChange={(e) => setDelayReason(e.currentTarget.value)}
+                  autosize
+                  minRows={2}
+                  maxRows={4}
+                  required
+                />
+                <Group grow align="flex-start">
+                  <DateTimePicker
+                    label="Revised fulfilment"
+                    value={revisedFulfillmentAt}
+                    onChange={setRevisedFulfillmentAt}
+                    clearable
+                  />
+                  <DateTimePicker
+                    label="Revised delivery"
+                    value={revisedDeliveryAt}
+                    onChange={setRevisedDeliveryAt}
+                    clearable
+                  />
+                </Group>
+                <Group gap="xs">
+                  <Button
+                    variant="default"
+                    onClick={() => setShowDelay(false)}
+                    disabled={busy === "delay"}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    color="orange"
+                    loading={busy === "delay"}
+                    onClick={async () => {
+                      const ok = await run("delay", () =>
+                        markWelcomePackOrderDelayed(
+                          order.id,
+                          delayReason,
+                          revisedFulfillmentAt,
+                          revisedDeliveryAt,
+                        ),
+                      );
+                      if (ok) {
+                        setShowDelay(false);
+                        setDelayReason("");
+                      }
+                    }}
+                  >
+                    Notify delay
+                  </Button>
+                </Group>
+              </Stack>
+            )}
+
           {order.status === "REJECTED" && (
             <Button
               variant="light"
@@ -654,23 +915,27 @@ function OrderCard({
             </Button>
           )}
 
-          {canAmend && !showReject && !showShip && !showCancel && (
-            <>
-              <Button variant="light" onClick={() => setEditSelections(true)}>
-                Edit items/sizes
-              </Button>
-              <Button variant="light" onClick={() => setEditShipping(true)}>
-                Edit shipping
-              </Button>
-              <Button
-                variant="subtle"
-                color="red"
-                onClick={() => setShowCancel(true)}
-              >
-                Cancel order
-              </Button>
-            </>
-          )}
+          {canAmend &&
+            !showReject &&
+            !showShip &&
+            !showCancel &&
+            !showDelay && (
+              <>
+                <Button variant="light" onClick={() => setEditSelections(true)}>
+                  Edit items/sizes
+                </Button>
+                <Button variant="light" onClick={() => setEditShipping(true)}>
+                  Edit shipping
+                </Button>
+                <Button
+                  variant="subtle"
+                  color="red"
+                  onClick={() => setShowCancel(true)}
+                >
+                  Cancel order
+                </Button>
+              </>
+            )}
 
           {canAmend && showCancel && (
             <Stack gap="xs" w="100%">
@@ -712,18 +977,22 @@ function OrderCard({
             </Stack>
           )}
 
-          {hasNotification && !showReject && !showShip && !showCancel && (
-            <Button
-              variant="subtle"
-              size="compact-sm"
-              loading={busy === "resend"}
-              onClick={() =>
-                run("resend", () => resendOrderNotification(order.id))
-              }
-            >
-              Resend email
-            </Button>
-          )}
+          {hasNotification &&
+            !showReject &&
+            !showShip &&
+            !showCancel &&
+            !showDelay && (
+              <Button
+                variant="subtle"
+                size="compact-sm"
+                loading={busy === "resend"}
+                onClick={() =>
+                  run("resend", () => resendOrderNotification(order.id))
+                }
+              >
+                Resend email
+              </Button>
+            )}
         </Group>
 
         {order.events.length > 0 && <OrderHistory events={order.events} />}
@@ -752,6 +1021,13 @@ function OrderCard({
           onClose={() => setEditTracking(false)}
         />
       )}
+      {editLogistics && (
+        <EditLogisticsModal
+          order={order}
+          opened
+          onClose={() => setEditLogistics(false)}
+        />
+      )}
     </Card>
   );
 }
@@ -770,6 +1046,9 @@ const EVENT_COLORS: Record<string, string> = {
   SELECTIONS_UPDATED: "cyan",
   SHIPPING_UPDATED: "cyan",
   TRACKING_UPDATED: "cyan",
+  LOGISTICS_UPDATED: "blue",
+  ESTIMATE_UPDATED: "blue",
+  DELAYED: "orange",
   USER_UPDATED: "cyan",
   ITEM_CONFIG_CHANGED: "orange",
   NOTIFICATION_RESENT: "gray",

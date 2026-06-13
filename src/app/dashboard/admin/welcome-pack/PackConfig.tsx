@@ -39,6 +39,10 @@ export type PackConfigData = {
   /** ISO strings (serialized across the RSC boundary). */
   ordersOpenAt: string | null;
   ordersCloseAt: string | null;
+  defaultDomesticFulfillmentDays: number;
+  defaultInternationalFulfillmentDays: number;
+  defaultDomesticDeliveryDays: number;
+  defaultInternationalDeliveryDays: number;
   idCardTemplateBlobUrl: string | null;
   idCardWidth: number | null;
   idCardHeight: number | null;
@@ -80,6 +84,18 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
   const [ordersCloseAt, setOrdersCloseAt] = useState<string | null>(
     pack.ordersCloseAt,
   );
+  const [defaultDomesticFulfillmentDays, setDefaultDomesticFulfillmentDays] =
+    useState<number | "">(pack.defaultDomesticFulfillmentDays);
+  const [
+    defaultInternationalFulfillmentDays,
+    setDefaultInternationalFulfillmentDays,
+  ] = useState<number | "">(pack.defaultInternationalFulfillmentDays);
+  const [defaultDomesticDeliveryDays, setDefaultDomesticDeliveryDays] =
+    useState<number | "">(pack.defaultDomesticDeliveryDays);
+  const [
+    defaultInternationalDeliveryDays,
+    setDefaultInternationalDeliveryDays,
+  ] = useState<number | "">(pack.defaultInternationalDeliveryDays);
   const [idCardWidth, setIdCardWidth] = useState<number | "">(
     pack.idCardWidth ?? "",
   );
@@ -134,6 +150,22 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
       ordersCloseAt: ordersCloseAt
         ? new Date(ordersCloseAt).toISOString()
         : null,
+      defaultDomesticFulfillmentDays:
+        defaultDomesticFulfillmentDays === ""
+          ? 14
+          : Number(defaultDomesticFulfillmentDays),
+      defaultInternationalFulfillmentDays:
+        defaultInternationalFulfillmentDays === ""
+          ? 21
+          : Number(defaultInternationalFulfillmentDays),
+      defaultDomesticDeliveryDays:
+        defaultDomesticDeliveryDays === ""
+          ? 3
+          : Number(defaultDomesticDeliveryDays),
+      defaultInternationalDeliveryDays:
+        defaultInternationalDeliveryDays === ""
+          ? 14
+          : Number(defaultInternationalDeliveryDays),
       idCardWidth: idCardWidth === "" ? null : Number(idCardWidth),
       idCardHeight: idCardHeight === "" ? null : Number(idCardHeight),
       idCardNameX: idCardNameX === "" ? null : Number(idCardNameX),
@@ -253,6 +285,74 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
               description="Lets users without a recent Linear issue order"
               checked={wave2Open}
               onChange={(e) => setWave2Open(e.currentTarget.checked)}
+            />
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card withBorder radius="md" padding="lg">
+        <Stack gap="md">
+          <div>
+            <Title order={4}>Fulfilment defaults</Title>
+            <Text c="dimmed" size="sm">
+              Used to seed estimated dates when an order is approved. Order
+              estimates can still be edited later.
+            </Text>
+          </div>
+
+          <Group grow align="flex-start">
+            <NumberInput
+              label="Domestic fulfilment lead"
+              description="Days from approval to packing/ship-by"
+              value={defaultDomesticFulfillmentDays}
+              onChange={(v) =>
+                setDefaultDomesticFulfillmentDays(
+                  typeof v === "number" ? v : "",
+                )
+              }
+              min={0}
+              max={365}
+              suffix=" days"
+            />
+            <NumberInput
+              label="Domestic delivery lead"
+              description="Days from fulfilment to expected arrival"
+              value={defaultDomesticDeliveryDays}
+              onChange={(v) =>
+                setDefaultDomesticDeliveryDays(typeof v === "number" ? v : "")
+              }
+              min={0}
+              max={365}
+              suffix=" days"
+            />
+          </Group>
+
+          <Group grow align="flex-start">
+            <NumberInput
+              label="International fulfilment lead"
+              description="Days from approval to packing/ship-by"
+              value={defaultInternationalFulfillmentDays}
+              onChange={(v) =>
+                setDefaultInternationalFulfillmentDays(
+                  typeof v === "number" ? v : "",
+                )
+              }
+              min={0}
+              max={365}
+              suffix=" days"
+            />
+            <NumberInput
+              label="International delivery lead"
+              description="Days from fulfilment to expected arrival"
+              value={defaultInternationalDeliveryDays}
+              onChange={(v) =>
+                setDefaultInternationalDeliveryDays(
+                  typeof v === "number" ? v : "",
+                )
+              }
+              min={0}
+              max={365}
+              suffix=" days"
             />
           </Group>
         </Stack>

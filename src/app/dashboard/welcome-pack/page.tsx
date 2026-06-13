@@ -32,6 +32,7 @@ import {
 import CancelOrderButton from "./CancelOrderButton";
 import EditOrderButton, { type EditableOrder } from "./EditOrderModal";
 import EligibilityGate from "./EligibilityGate";
+import IdCardPreview from "./IdCardPreview";
 import type { OrderFormDefaults, OrderFormPack } from "./OrderForm";
 import OrderingWindowBanner from "./OrderingWindowBanner";
 import OrderStatusTimeline from "./OrderStatusTimeline";
@@ -114,12 +115,17 @@ async function WelcomePackContent() {
     prisma.welcomePackOrder.findUnique({
       where: { activeUserId: userId },
       include: {
+        pack: true,
+        events: { orderBy: { createdAt: "asc" } },
         selections: {
           include: {
             item: {
               select: {
                 id: true,
                 name: true,
+                description: true,
+                imageBlobUrl: true,
+                updatedAt: true,
                 requiresSize: true,
                 sizeOptions: true,
               },
@@ -193,14 +199,54 @@ async function WelcomePackContent() {
                     {dayjs(activeOrder.createdAt).format("D MMM YYYY")} · Wave{" "}
                     {activeOrder.wave}
                   </Text>
+                  <Group gap="xs" wrap="wrap">
+                    {activeOrder.estimatedFulfillmentAt && (
+                      <Badge variant="light" color="blue">
+                        Fulfilment estimate{" "}
+                        {dayjs(activeOrder.estimatedFulfillmentAt).format(
+                          "D MMM YYYY",
+                        )}
+                      </Badge>
+                    )}
+                    {activeOrder.estimatedDeliveryAt && (
+                      <Badge variant="light" color="indigo">
+                        Delivery estimate{" "}
+                        {dayjs(activeOrder.estimatedDeliveryAt).format(
+                          "D MMM YYYY",
+                        )}
+                      </Badge>
+                    )}
+                    {activeOrder.delayedAt && (
+                      <Badge variant="light" color="orange">
+                        Delayed
+                      </Badge>
+                    )}
+                  </Group>
+                  {activeOrder.delayReason && (
+                    <Text size="sm" c="orange">
+                      {activeOrder.delayReason}
+                    </Text>
+                  )}
                 </Stack>
 
                 <OrderStatusTimeline status={activeOrder.status} />
 
                 {activeOrder.trackingNumber && (
                   <TrackingCard
+                    carrierName={activeOrder.carrierName}
                     trackingNumber={activeOrder.trackingNumber}
                     trackingUrl={activeOrder.trackingUrl}
+                  />
+                )}
+
+                {activeOrder.events.length > 0 && (
+                  <OrderEventTimeline
+                    events={activeOrder.events.map((event) => ({
+                      id: event.id,
+                      type: event.type,
+                      message: event.message,
+                      createdAt: event.createdAt,
+                    }))}
                   />
                 )}
 
@@ -280,6 +326,70 @@ async function WelcomePackContent() {
                         .join("\n")}
                     </Text>
                   </Stack>
+                </Stack>
+              </Card>
+            </SimpleGrid>
+          </StaggerItem>
+
+          <StaggerItem>
+            <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+              <Stack gap="md">
+                <Title order={5}>Pack preview</Title>
+                <PackItemsPreview
+                  items={activeOrder.selections.map((selection) => ({
+                    id: selection.item.id,
+                    name: selection.item.name,
+                    description: selection.item.description,
+                    imageBlobUrl: selection.item.imageBlobUrl
+                      ? welcomePackAssetUrl(
+                          "item-image",
+                          selection.item.id,
+                          selection.item.updatedAt,
+                        )
+                      : null,
+                  }))}
+                />
+              </Stack>
+
+              <Card withBorder radius="md" p="lg">
+                <Stack gap="md">
+                  <Title order={5}>ID card preview</Title>
+                  <IdCardPreview
+                    templateUrl={
+                      activeOrder.pack.idCardTemplateBlobUrl
+                        ? welcomePackAssetUrl(
+                            "id-card-template",
+                            activeOrder.pack.id,
+                            activeOrder.pack.updatedAt,
+                          )
+                        : null
+                    }
+                    templateWidth={activeOrder.pack.idCardWidth}
+                    templateHeight={activeOrder.pack.idCardHeight}
+                    nameX={activeOrder.pack.idCardNameX}
+                    nameY={activeOrder.pack.idCardNameY}
+                    fontSize={activeOrder.pack.idCardFontSize}
+                    fontColor={activeOrder.pack.idCardFontColor}
+                    fontFamily={activeOrder.pack.idCardFontFamily}
+                    nameMaxWidth={activeOrder.pack.idCardNameMaxWidth}
+                    nameMaxHeight={activeOrder.pack.idCardNameMaxHeight}
+                    nameAlign={
+                      (activeOrder.pack.idCardNameAlign as
+                        | "left"
+                        | "center"
+                        | "right"
+                        | null) ?? null
+                    }
+                    nameWrapMode={
+                      (activeOrder.pack.idCardNameWrapMode as
+                        | "nowrap"
+                        | "truncate"
+                        | "wrap"
+                        | "shrink"
+                        | null) ?? null
+                    }
+                    name={activeOrder.idCardName}
+                  />
                 </Stack>
               </Card>
             </SimpleGrid>
@@ -397,6 +507,11 @@ async function WelcomePackContent() {
       (pack.idCardNameAlign as OrderFormPack["idCardNameAlign"]) ?? null,
     idCardNameWrapMode:
       (pack.idCardNameWrapMode as OrderFormPack["idCardNameWrapMode"]) ?? null,
+    defaultDomesticFulfillmentDays: pack.defaultDomesticFulfillmentDays,
+    defaultInternationalFulfillmentDays:
+      pack.defaultInternationalFulfillmentDays,
+    defaultDomesticDeliveryDays: pack.defaultDomesticDeliveryDays,
+    defaultInternationalDeliveryDays: pack.defaultInternationalDeliveryDays,
     items: pack.items.map((item) => ({
       id: item.id,
       name: item.name,
@@ -438,6 +553,38 @@ async function WelcomePackContent() {
         </Suspense>
       </Stack>
     </FadeIn>
+  );
+}
+
+function OrderEventTimeline({
+  events,
+}: {
+  events: {
+    id: string;
+    type: string;
+    message: string | null;
+    createdAt: Date;
+  }[];
+}) {
+  return (
+    <Stack gap="xs">
+      <Title order={5}>Timeline</Title>
+      <Stack gap={6}>
+        {events.map((event) => (
+          <Group key={event.id} gap="sm" align="flex-start" wrap="nowrap">
+            <Badge variant="light" color="gray" size="sm">
+              {event.type.replaceAll("_", " ").toLowerCase()}
+            </Badge>
+            <Stack gap={0} style={{ minWidth: 0 }}>
+              <Text size="sm">{event.message ?? event.type}</Text>
+              <Text size="xs" c="dimmed">
+                {dayjs(event.createdAt).format("D MMM YYYY, HH:mm")}
+              </Text>
+            </Stack>
+          </Group>
+        ))}
+      </Stack>
+    </Stack>
   );
 }
 

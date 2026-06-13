@@ -43,6 +43,26 @@ export default function FulfillmentSummary({
   packItems: AdminPackItem[];
 }) {
   const [statuses, setStatuses] = useState<string[]>(["PENDING", "APPROVED"]);
+  const operational = useMemo(() => {
+    const open = orders.filter((order) =>
+      ["PENDING", "APPROVED", "SHIPPED"].includes(order.status),
+    );
+    return {
+      domestic: open.filter((order) => order.region === "DOMESTIC").length,
+      international: open.filter((order) => order.region === "INTERNATIONAL")
+        .length,
+      delayed: open.filter((order) => order.delayedAt).length,
+      estimated: open.filter(
+        (order) => order.estimatedFulfillmentAt || order.estimatedDeliveryAt,
+      ).length,
+      overdue: open.filter(
+        (order) =>
+          order.status === "APPROVED" &&
+          order.estimatedFulfillmentAt &&
+          new Date(order.estimatedFulfillmentAt).getTime() < Date.now(),
+      ).length,
+    };
+  }, [orders]);
 
   const { rows, sizeColumns, driftCount } = useMemo(() => {
     const included = orders.filter((o) =>
@@ -122,6 +142,30 @@ export default function FulfillmentSummary({
             </Text>
           </Group>
         )}
+
+        <Group gap="xs" wrap="wrap">
+          <Badge variant="light" color="cyan">
+            {operational.domestic} domestic open
+          </Badge>
+          <Badge variant="light" color="grape">
+            {operational.international} international open
+          </Badge>
+          <Badge variant="light" color="blue">
+            {operational.estimated} with estimates
+          </Badge>
+          <Badge
+            variant="light"
+            color={operational.overdue > 0 ? "red" : "gray"}
+          >
+            {operational.overdue} overdue
+          </Badge>
+          <Badge
+            variant="light"
+            color={operational.delayed > 0 ? "orange" : "gray"}
+          >
+            {operational.delayed} delayed
+          </Badge>
+        </Group>
 
         {rows.length === 0 ? (
           <Text c="dimmed" size="sm">

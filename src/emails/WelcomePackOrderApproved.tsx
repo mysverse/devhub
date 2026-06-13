@@ -6,9 +6,13 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 export default function WelcomePackOrderApproved({
   userName,
   idCardName,
+  estimatedFulfillmentAt,
+  estimatedDeliveryAt,
 }: {
   userName: string;
   idCardName: string;
+  estimatedFulfillmentAt?: string | null;
+  estimatedDeliveryAt?: string | null;
 }) {
   return (
     <BaseLayout previewText="Your welcome pack order has been approved">
@@ -22,6 +26,18 @@ export default function WelcomePackOrderApproved({
         Your welcome pack order has been approved and is queued for fulfillment.
         We&apos;ll email you again with tracking once it ships.
       </Text>
+      {(estimatedFulfillmentAt || estimatedDeliveryAt) && (
+        <Text
+          style={{ color: "#c1c2c5", fontSize: "14px", lineHeight: "24px" }}
+        >
+          {estimatedFulfillmentAt
+            ? `Estimated fulfilment: ${estimatedFulfillmentAt}. `
+            : ""}
+          {estimatedDeliveryAt
+            ? `Estimated delivery: ${estimatedDeliveryAt}.`
+            : ""}
+        </Text>
+      )}
       <Section
         style={{
           backgroundColor: "#2c2e33",

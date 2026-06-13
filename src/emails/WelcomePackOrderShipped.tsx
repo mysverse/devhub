@@ -5,12 +5,16 @@ const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 export default function WelcomePackOrderShipped({
   userName,
+  carrierName,
   trackingNumber,
   trackingUrl,
+  estimatedDeliveryAt,
 }: {
   userName: string;
+  carrierName?: string | null;
   trackingNumber: string;
   trackingUrl: string | null;
+  estimatedDeliveryAt?: string | null;
 }) {
   return (
     <BaseLayout previewText="Your welcome pack is on the way">
@@ -21,9 +25,19 @@ export default function WelcomePackOrderShipped({
         Hi {userName},
       </Text>
       <Text style={{ color: "#c1c2c5", fontSize: "14px", lineHeight: "24px" }}>
-        Your welcome pack is on the way. Use the tracking number below to follow
-        its progress.
+        Your welcome pack is on the way. Use the tracking details below to
+        follow its progress.
       </Text>
+      {(carrierName || estimatedDeliveryAt) && (
+        <Text
+          style={{ color: "#c1c2c5", fontSize: "14px", lineHeight: "24px" }}
+        >
+          {carrierName ? `Carrier: ${carrierName}. ` : ""}
+          {estimatedDeliveryAt
+            ? `Estimated delivery: ${estimatedDeliveryAt}.`
+            : ""}
+        </Text>
+      )}
       <Section
         style={{
           backgroundColor: "#2c2e33",

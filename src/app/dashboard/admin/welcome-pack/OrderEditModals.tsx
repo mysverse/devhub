@@ -12,6 +12,7 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
+import { DateTimePicker } from "@mantine/dates";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -22,6 +23,7 @@ import { FIELD_LIMITS } from "@/lib/welcome-pack-validation";
 import {
   type AdminSelectionInput,
   type AdminShippingInput,
+  updateWelcomePackOrderLogisticsAdmin,
   updateWelcomePackOrderSelectionsAdmin,
   updateWelcomePackOrderShippingAdmin,
   updateWelcomePackOrderTrackingAdmin,
@@ -240,6 +242,7 @@ export function EditTrackingModal({
     order.trackingNumber ?? "",
   );
   const [trackingUrl, setTrackingUrl] = useState(order.trackingUrl ?? "");
+  const [carrierName, setCarrierName] = useState(order.carrierName ?? "");
   const [notifyUser, setNotifyUser] = useState(false);
   const [saving, setSaving] = useState(false);
   const router = useRouter();
@@ -251,6 +254,7 @@ export function EditTrackingModal({
       trackingNumber,
       trackingUrl.trim() || undefined,
       notifyUser,
+      carrierName.trim() || undefined,
     );
     setSaving(false);
     if ("error" in res && res.error) {
@@ -274,6 +278,12 @@ export function EditTrackingModal({
     >
       <Stack gap="sm">
         <TextInput
+          label="Carrier (optional)"
+          placeholder="DHL, PosLaju, J&T…"
+          value={carrierName}
+          onChange={(e) => setCarrierName(e.currentTarget.value)}
+        />
+        <TextInput
           label="Tracking number"
           value={trackingNumber}
           onChange={(e) => setTrackingNumber(e.currentTarget.value)}
@@ -296,6 +306,101 @@ export function EditTrackingModal({
           </Button>
           <Button onClick={handleSave} loading={saving}>
             Save tracking
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
+  );
+}
+
+export function EditLogisticsModal({
+  order,
+  opened,
+  onClose,
+}: {
+  order: AdminOrderRow;
+  opened: boolean;
+  onClose: () => void;
+}) {
+  const [estimatedFulfillmentAt, setEstimatedFulfillmentAt] = useState<
+    string | null
+  >(order.estimatedFulfillmentAt);
+  const [estimatedDeliveryAt, setEstimatedDeliveryAt] = useState<string | null>(
+    order.estimatedDeliveryAt,
+  );
+  const [carrierName, setCarrierName] = useState(order.carrierName ?? "");
+  const [logisticsNote, setLogisticsNote] = useState(order.logisticsNote ?? "");
+  const [notifyUser, setNotifyUser] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const router = useRouter();
+
+  async function handleSave() {
+    setSaving(true);
+    const res = await updateWelcomePackOrderLogisticsAdmin(order.id, {
+      estimatedFulfillmentAt,
+      estimatedDeliveryAt,
+      carrierName,
+      logisticsNote,
+      notifyUser,
+    });
+    setSaving(false);
+    if ("error" in res && res.error) {
+      toast.error(res.error);
+      return;
+    }
+    if (notifyUser && "emailSent" in res && !res.emailSent) {
+      toast.warning("Logistics updated, but the email was not sent");
+    } else {
+      toast.success("Logistics updated");
+    }
+    router.refresh();
+    onClose();
+  }
+
+  return (
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={`Edit logistics — ${order.developerName}`}
+      size="lg"
+    >
+      <Stack gap="sm">
+        <Group grow align="flex-start">
+          <DateTimePicker
+            label="Estimated fulfilment"
+            value={estimatedFulfillmentAt}
+            onChange={setEstimatedFulfillmentAt}
+            clearable
+          />
+          <DateTimePicker
+            label="Estimated delivery"
+            value={estimatedDeliveryAt}
+            onChange={setEstimatedDeliveryAt}
+            clearable
+          />
+        </Group>
+        <TextInput
+          label="Carrier (optional)"
+          placeholder="DHL, PosLaju, J&T…"
+          value={carrierName}
+          onChange={(e) => setCarrierName(e.currentTarget.value)}
+        />
+        <TextInput
+          label="Logistics note (optional)"
+          value={logisticsNote}
+          onChange={(e) => setLogisticsNote(e.currentTarget.value)}
+        />
+        <Checkbox
+          label="Notify the developer about estimate/logistics changes"
+          checked={notifyUser}
+          onChange={(e) => setNotifyUser(e.currentTarget.checked)}
+        />
+        <Group justify="flex-end" gap="xs">
+          <Button variant="default" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} loading={saving}>
+            Save logistics
           </Button>
         </Group>
       </Stack>

@@ -37,19 +37,21 @@ On top of your standard PPT earnings, our active developer incentive program rew
 Not all important work can be labeled with a simple PPT estimate. Bug fixing, refactoring, code reviews, assisting other team members, and maintaining documentation are crucial to our success. 
 
 *   **Automatic Candidate Syncing:** All non-PPT Linear tasks assigned to you are synced automatically as "Bonus Candidates."
-*   **Monthly Reviews:** Admins review your contributions and approve a grouped monthly **BONUS** transaction paid directly to you.
+*   **Monthly Reviews:** Admins review your contributions and approve a grouped monthly **BONUS** transaction paid directly to you based on your completed tasks, at a rate of up to **RM10.00 / 500 Robux** per estimation point.
 *   **In-App Alerts:** Receive real-time push and email notifications showing your potential bonus earnings (`Up to X`) so you know exactly where you stand.
 
 ---
 
-## 4. The MYSverse Founders Welcome Pack
-As soon as you become an active developer on the team, you qualify to receive our exclusive, physical **MYSverse Founders Welcome Pack** shipped straight to your door, completely free of charge.
+## 4. The MYSverse Welcome Pack
+As soon as you become an active developer on the team, you qualify to receive our exclusive, physical **Welcome Pack** shipped straight to your door, completely free of charge.
 
 Your welcome pack includes premium custom merchandise:
-*   **DevHub T-Shirt:** A soft-touch, high-quality cotton tee featuring the official DevHub crest.
-*   **Custom Sticker Sheet:** High-quality die-cut stickers of the MYSverse vehicle fleet and branding.
-*   **Personalized Developer ID Card & Lanyard:** A physical, custom-printed developer ID card with your name and rank, complete with a MYSverse lanyard.
-*   **Fulfillment Tracking:** Enter your size (S to XXL) and shipping details (domestic/international) right inside DevHub and track its shipment status in real time.
+*   **MYSverse Development Polo:** A professional embroidered polo shirt (available in sizes XS to 3XL).
+*   **MYSverse Development Hoodie:** A premium, comfortable fleece hoodie (available in sizes 2XS to 4XL).
+*   **MYSverse Lanyard:** A custom-printed MYSverse lanyard.
+*   **Sticker Pack:** High-quality die-cut stickers featuring MYSverse branding.
+*   **Tote Bag:** A durable, branded canvas tote bag for your daily gear.
+*   **Fulfillment Tracking:** Enter your size/apparel selections and shipping details (domestic/international) right inside DevHub and track its shipment status in real time.
 
 ---
 

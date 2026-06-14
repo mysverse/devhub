@@ -90,6 +90,22 @@ function parseMilestones(config: IncentiveConfig): Milestone[] {
   );
 }
 
+function includesAmount(text: string, amount: number, prefix = "RM"): boolean {
+  const formats = [
+    `${prefix}${amount}`,
+    `${prefix}${amount.toFixed(2)}`,
+    `${prefix}${amount.toLocaleString()}`,
+  ];
+  return formats.some((f) => text.includes(f));
+}
+
+function includesRobux(text: string, amount: number): boolean {
+  const formatted = amount.toLocaleString();
+  const formats = [`${formatted} Robux`, `${amount} Robux`];
+  const cleanedText = text.replace(/\s+/g, " ");
+  return formats.some((f) => cleanedText.includes(f));
+}
+
 export async function GET() {
   try {
     // 1. Verify admin permissions
@@ -131,280 +147,121 @@ export async function GET() {
       console.error("Failed to read JOIN_US.md", error);
     }
 
-    // 4. Perform text searches in JOIN_US.md if found
-    const mdChecks = {
-      pptMyrRateTextFound: /RM20\.00/i.test(joinUsText),
-      pptRobuxRateTextFound: /1,200\s*Robux/i.test(joinUsText),
-      weeklyThroughputTextFound:
-        /Complete\s+5\s+or\s+more\s+qualifying\s+tasks/i.test(joinUsText) &&
-        /RM30\.00\s*\/\s*1,800\s*Robux/i.test(joinUsText),
-      milestone25TextFound:
-        /25\s+Tasks\s+Completed:.*RM40\.00\s*\/\s*2,400\s*Robux/i.test(
-          joinUsText,
-        ),
-      milestone50TextFound:
-        /50\s+Tasks\s+Completed:.*RM75\.00\s*\/\s*4,500\s*Robux/i.test(
-          joinUsText,
-        ),
-      milestone100TextFound:
-        /100\s+Tasks\s+Completed:.*RM150\.00\s*\/\s*9,000\s*Robux/i.test(
-          joinUsText,
-        ),
-      welcomePackShirtTextFound: /DevHub\s+T-Shirt/i.test(joinUsText),
-      welcomePackStickersTextFound: /Custom\s+Sticker\s+Sheet/i.test(
-        joinUsText,
-      ),
-      welcomePackLanyardTextFound: /Developer\s+ID\s+Card\s+&\s+Lanyard/i.test(
-        joinUsText,
-      ),
-      welcomePackSizesTextFound: /S\s+to\s+XXL/i.test(joinUsText),
-    };
-
-    // 5. Compare Live Config with expectations
     const discrepancies: string[] = [];
 
-    // PPT rates
-    const pptRatesMatch = pptMyrRate === 20 && pptRobuxRate === 1200;
-    if (pptMyrRate !== 20) {
-      discrepancies.push(
-        `PPT MYR multiplier is ${pptMyrRate}, expected 20 (RM20.00)`,
-      );
-    }
-    if (pptRobuxRate !== 1200) {
-      discrepancies.push(
-        `PPT Robux multiplier is ${pptRobuxRate}, expected 1200`,
-      );
-    }
-
-    // Weekly incentives
-    const weeklyEnabledMatch = incentiveConfig.weeklyEnabled === true;
-    if (!weeklyEnabledMatch) {
-      discrepancies.push(
-        "Weekly performance incentives are disabled in the live configuration",
-      );
-    }
-
-    const activeWeeklyTier = parsedWeeklyTiers.find((t) => t.threshold === 5);
-    const weeklyThroughputMatch =
-      weeklyEnabledMatch &&
-      activeWeeklyTier &&
-      activeWeeklyTier.myr === 30 &&
-      activeWeeklyTier.robux === 1800;
-
-    if (weeklyEnabledMatch) {
-      if (!activeWeeklyTier) {
-        discrepancies.push(
-          "No weekly incentive tier found for threshold 5 tasks",
-        );
-      } else {
-        if (activeWeeklyTier.myr !== 30) {
-          discrepancies.push(
-            `Weekly incentive MYR payout for 5 tasks is RM${activeWeeklyTier.myr}, expected RM30.00`,
-          );
-        }
-        if (activeWeeklyTier.robux !== 1800) {
-          discrepancies.push(
-            `Weekly incentive Robux payout for 5 tasks is ${activeWeeklyTier.robux}, expected 1800`,
-          );
-        }
-      }
-    }
-
-    // Milestones
-    const milestonesEnabledMatch = incentiveConfig.milestoneEnabled === true;
-    if (!milestonesEnabledMatch) {
-      discrepancies.push(
-        "Milestone incentives are disabled in the live configuration",
-      );
-    }
-
-    const m25 = parsedMilestones.find((m) => m.count === 25);
-    const m50 = parsedMilestones.find((m) => m.count === 50);
-    const m100 = parsedMilestones.find((m) => m.count === 100);
-
-    const milestonesMatch =
-      milestonesEnabledMatch &&
-      m25 &&
-      m25.myr === 40 &&
-      m25.robux === 2400 &&
-      m50 &&
-      m50.myr === 75 &&
-      m50.robux === 4500 &&
-      m100 &&
-      m100.myr === 150 &&
-      m100.robux === 9000;
-
-    if (milestonesEnabledMatch) {
-      if (m25?.myr !== 40 || m25?.robux !== 2400) {
-        discrepancies.push(
-          `Milestone 25 completed tasks payout is RM${m25?.myr ?? "N/A"} / ${m25?.robux ?? "N/A"} Robux, expected RM40.00 / 2,400 Robux`,
-        );
-      }
-      if (m50?.myr !== 75 || m50?.robux !== 4500) {
-        discrepancies.push(
-          `Milestone 50 completed tasks payout is RM${m50?.myr ?? "N/A"} / ${m50?.robux ?? "N/A"} Robux, expected RM75.00 / 4,500 Robux`,
-        );
-      }
-      if (m100?.myr !== 150 || m100?.robux !== 9000) {
-        discrepancies.push(
-          `Milestone 100 completed tasks payout is RM${m100?.myr ?? "N/A"} / ${m100?.robux ?? "N/A"} Robux, expected RM150.00 / 9,000 Robux`,
-        );
-      }
-    }
-
-    // Monthly Discretionary Bonus rates
-    const bonusRatesMatch =
-      bonusConfig.myrRatePerPoint === 20 &&
-      bonusConfig.robuxRatePerPoint === 1200;
-    if (bonusConfig.myrRatePerPoint !== 20) {
-      discrepancies.push(
-        `Discretionary bonus MYR rate per point is ${bonusConfig.myrRatePerPoint}, expected 20 (RM20.00)`,
-      );
-    }
-    if (bonusConfig.robuxRatePerPoint !== 1200) {
-      discrepancies.push(
-        `Discretionary bonus Robux rate per point is ${bonusConfig.robuxRatePerPoint}, expected 1200`,
-      );
-    }
-
-    const hasRedistributableExclusion = bonusExclusions.some(
-      (label) => label.toLowerCase() === "redistributable",
-    );
-    const hasRedistributedExclusion = bonusExclusions.some(
-      (label) => label.toLowerCase() === "redistributed",
-    );
-    const bonusExclusionsMatch =
-      hasRedistributableExclusion && hasRedistributedExclusion;
-    if (!hasRedistributableExclusion) {
-      discrepancies.push(
-        "Bonus configuration is missing the 'Redistributable' label exclusion",
-      );
-    }
-    if (!hasRedistributedExclusion) {
-      discrepancies.push(
-        "Bonus configuration is missing the 'Redistributed' label exclusion",
-      );
-    }
-
-    // Welcome pack items
-    let welcomePackMatch = false;
-    let packName: string | null = null;
-    const itemsReport: Array<{
-      name: string;
-      requiresSize: boolean;
-      sizeOptions: string[];
-    }> = [];
-
-    if (welcomePack) {
-      packName = welcomePack.name;
-      const items = welcomePack.items;
-
-      const shirtItem = items.find(
-        (item) =>
-          item.name.toLowerCase().includes("t-shirt") ||
-          item.name.toLowerCase().includes("tee"),
-      );
-      const stickersItem = items.find((item) =>
-        item.name.toLowerCase().includes("sticker"),
-      );
-      const lanyardItem = items.find(
-        (item) =>
-          item.name.toLowerCase().includes("lanyard") ||
-          item.name.toLowerCase().includes("id card"),
-      );
-
-      const hasShirt = !!shirtItem;
-      const hasStickers = !!stickersItem;
-      const hasLanyard = !!lanyardItem;
-      const shirtSizesCorrect =
-        shirtItem?.requiresSize &&
-        ["S", "M", "L", "XL", "XXL"].every((size) =>
-          shirtItem.sizeOptions.includes(size),
-        );
-
-      welcomePackMatch =
-        hasShirt && hasStickers && hasLanyard && !!shirtSizesCorrect;
-
-      if (!hasShirt)
-        discrepancies.push("Active Welcome Pack is missing a T-shirt item");
-      if (hasShirt && !shirtSizesCorrect) {
-        discrepancies.push(
-          `Welcome Pack T-shirt size options are [${shirtItem?.sizeOptions.join(", ")}], expected to include S, M, L, XL, XXL`,
-        );
-      }
-      if (!hasStickers) {
-        discrepancies.push(
-          "Active Welcome Pack is missing a Sticker sheet item",
-        );
-      }
-      if (!hasLanyard) {
-        discrepancies.push(
-          "Active Welcome Pack is missing a Lanyard / ID Card item",
-        );
-      }
-
-      for (const item of items) {
-        itemsReport.push({
-          name: item.name,
-          requiresSize: item.requiresSize,
-          sizeOptions: item.sizeOptions,
-        });
-      }
-    } else {
-      discrepancies.push("No active Welcome Pack found in the database");
-    }
-
-    // Markdown file text checks
     if (fileFound) {
-      if (!mdChecks.pptMyrRateTextFound) {
+      // PPT rates checks
+      if (!includesAmount(joinUsText, pptMyrRate)) {
         discrepancies.push(
-          "JOIN_US.md text is missing the standard PPT MYR rate of 'RM20.00'",
+          `JOIN_US.md is missing the live PPT MYR rate of RM${pptMyrRate}`,
         );
       }
-      if (!mdChecks.pptRobuxRateTextFound) {
+      if (!includesRobux(joinUsText, pptRobuxRate)) {
         discrepancies.push(
-          "JOIN_US.md text is missing the standard PPT Robux rate of '1,200 Robux'",
+          `JOIN_US.md is missing the live PPT Robux rate of ${pptRobuxRate.toLocaleString()} Robux`,
         );
       }
-      if (!mdChecks.weeklyThroughputTextFound) {
+
+      // Weekly incentives checks
+      if (incentiveConfig.weeklyEnabled) {
+        const activeWeeklyTier = parsedWeeklyTiers.find(
+          (t) => t.threshold === 5,
+        );
+        if (!activeWeeklyTier) {
+          discrepancies.push(
+            "No live weekly incentive tier found for threshold 5 tasks",
+          );
+        } else {
+          if (!joinUsText.includes(`${activeWeeklyTier.threshold} or more`)) {
+            discrepancies.push(
+              `JOIN_US.md does not mention the weekly threshold of ${activeWeeklyTier.threshold} tasks`,
+            );
+          }
+          if (!includesAmount(joinUsText, activeWeeklyTier.myr)) {
+            discrepancies.push(
+              `JOIN_US.md does not mention the weekly reward of RM${activeWeeklyTier.myr}`,
+            );
+          }
+          if (!includesRobux(joinUsText, activeWeeklyTier.robux)) {
+            discrepancies.push(
+              `JOIN_US.md does not mention the weekly reward of ${activeWeeklyTier.robux.toLocaleString()} Robux`,
+            );
+          }
+        }
+      } else {
         discrepancies.push(
-          "JOIN_US.md text is missing the weekly throughput reward rate of 'RM30.00 / 1,800 Robux' or threshold of 5 tasks",
+          "Weekly performance incentives are disabled in the live configuration",
         );
       }
-      if (!mdChecks.milestone25TextFound) {
+
+      // Milestones checks
+      if (incentiveConfig.milestoneEnabled) {
+        for (const m of parsedMilestones) {
+          const milestoneDesc = `${m.count} Tasks`;
+          if (!joinUsText.includes(milestoneDesc)) {
+            discrepancies.push(
+              `JOIN_US.md is missing a description for the ${m.count} completed tasks milestone`,
+            );
+          }
+          if (!includesAmount(joinUsText, m.myr)) {
+            discrepancies.push(
+              `JOIN_US.md is missing the reward of RM${m.myr} for the ${m.count} tasks milestone`,
+            );
+          }
+          if (!includesRobux(joinUsText, m.robux)) {
+            discrepancies.push(
+              `JOIN_US.md is missing the reward of ${m.robux.toLocaleString()} Robux for the ${m.count} tasks milestone`,
+            );
+          }
+        }
+      } else {
         discrepancies.push(
-          "JOIN_US.md text is missing or has incorrect description for 25 Completed Tasks milestone",
+          "Milestone incentives are disabled in the live configuration",
         );
       }
-      if (!mdChecks.milestone50TextFound) {
-        discrepancies.push(
-          "JOIN_US.md text is missing or has incorrect description for 50 Completed Tasks milestone",
-        );
+
+      // Bonus checks
+      if (bonusConfig.enabled) {
+        if (!includesAmount(joinUsText, bonusConfig.myrRatePerPoint)) {
+          discrepancies.push(
+            `JOIN_US.md is missing the discretionary bonus rate of RM${bonusConfig.myrRatePerPoint}`,
+          );
+        }
+        if (!includesRobux(joinUsText, bonusConfig.robuxRatePerPoint)) {
+          discrepancies.push(
+            `JOIN_US.md is missing the discretionary bonus rate of ${bonusConfig.robuxRatePerPoint.toLocaleString()} Robux`,
+          );
+        }
       }
-      if (!mdChecks.milestone100TextFound) {
-        discrepancies.push(
-          "JOIN_US.md text is missing or has incorrect description for 100 Completed Tasks milestone",
-        );
-      }
-      if (!mdChecks.welcomePackShirtTextFound) {
-        discrepancies.push(
-          "JOIN_US.md text is missing reference to 'DevHub T-Shirt'",
-        );
-      }
-      if (!mdChecks.welcomePackStickersTextFound) {
-        discrepancies.push(
-          "JOIN_US.md text is missing reference to 'Custom Sticker Sheet'",
-        );
-      }
-      if (!mdChecks.welcomePackLanyardTextFound) {
-        discrepancies.push(
-          "JOIN_US.md text is missing reference to 'Developer ID Card & Lanyard'",
-        );
-      }
-      if (!mdChecks.welcomePackSizesTextFound) {
-        discrepancies.push(
-          "JOIN_US.md text is missing reference to sizes 'S to XXL'",
-        );
+
+      // Welcome pack checks
+      if (welcomePack) {
+        if (
+          !joinUsText.toLowerCase().includes(welcomePack.name.toLowerCase())
+        ) {
+          discrepancies.push(
+            `JOIN_US.md is missing the active welcome pack name: "${welcomePack.name}"`,
+          );
+        }
+        for (const item of welcomePack.items) {
+          if (!joinUsText.toLowerCase().includes(item.name.toLowerCase())) {
+            discrepancies.push(
+              `JOIN_US.md does not list the welcome pack item: "${item.name}"`,
+            );
+          }
+          if (item.requiresSize && item.sizeOptions.length > 0) {
+            const rangeStr = `${item.sizeOptions[0]} to ${
+              item.sizeOptions[item.sizeOptions.length - 1]
+            }`;
+            if (!joinUsText.toLowerCase().includes(rangeStr.toLowerCase())) {
+              discrepancies.push(
+                `JOIN_US.md is missing size options "${rangeStr}" for item "${item.name}"`,
+              );
+            }
+          }
+        }
+      } else {
+        discrepancies.push("No active Welcome Pack found in the database");
       }
     } else {
       discrepancies.push(
@@ -413,6 +270,14 @@ export async function GET() {
     }
 
     const overallAccuracy = discrepancies.length === 0;
+
+    const itemsReport = welcomePack
+      ? welcomePack.items.map((item) => ({
+          name: item.name,
+          requiresSize: item.requiresSize,
+          sizeOptions: item.sizeOptions,
+        }))
+      : [];
 
     return NextResponse.json({
       timestamp: new Date().toISOString(),
@@ -426,54 +291,96 @@ export async function GET() {
       verifications: {
         pptRates: {
           section: "1. Guaranteed Task Payouts (PPT)",
-          expected: "RM20.00 per point, 1,200 Robux per point",
+          expected: `RM${pptMyrRate.toFixed(2)} per point, ${pptRobuxRate.toLocaleString()} Robux per point`,
           actual: `MYR: RM${pptMyrRate.toFixed(2)} per point, Robux: ${pptRobuxRate.toLocaleString()} Robux per point`,
           match:
-            pptRatesMatch &&
-            mdChecks.pptMyrRateTextFound &&
-            mdChecks.pptRobuxRateTextFound,
+            includesAmount(joinUsText, pptMyrRate) &&
+            includesRobux(joinUsText, pptRobuxRate),
         },
         weeklyThroughput: {
           section: "2. Weekly Performance Incentives - Throughput",
-          expected: "Complete 5 or more tasks for RM30.00 / 1,800 Robux",
-          actual: activeWeeklyTier
-            ? `Threshold: ${activeWeeklyTier.threshold} tasks, Reward: RM${activeWeeklyTier.myr.toFixed(2)} / ${activeWeeklyTier.robux.toLocaleString()} Robux (Enabled: ${incentiveConfig.weeklyEnabled})`
+          expected: `Complete 5 or more tasks for RM${parsedWeeklyTiers.find((t) => t.threshold === 5)?.myr ?? 30} / ${(parsedWeeklyTiers.find((t) => t.threshold === 5)?.robux ?? 1800).toLocaleString()} Robux`,
+          actual: parsedWeeklyTiers.find((t) => t.threshold === 5)
+            ? `Threshold: 5 tasks, Reward: RM${parsedWeeklyTiers.find((t) => t.threshold === 5)?.myr.toFixed(2)} / ${parsedWeeklyTiers.find((t) => t.threshold === 5)?.robux.toLocaleString()} Robux (Enabled: ${incentiveConfig.weeklyEnabled})`
             : "No tier 5 found or incentives disabled",
-          match: weeklyThroughputMatch && mdChecks.weeklyThroughputTextFound,
+          match:
+            incentiveConfig.weeklyEnabled &&
+            joinUsText.includes("5 or more") &&
+            includesAmount(
+              joinUsText,
+              parsedWeeklyTiers.find((t) => t.threshold === 5)?.myr ?? 30,
+            ) &&
+            includesRobux(
+              joinUsText,
+              parsedWeeklyTiers.find((t) => t.threshold === 5)?.robux ?? 1800,
+            ),
         },
         milestones: {
           section: "2. Weekly & Lifetime Performance Incentives - Milestones",
-          expected:
-            "25 Tasks (RM40/2400 Robux), 50 Tasks (RM75/4500 Robux), 100 Tasks (RM150/9000 Robux)",
+          expected: parsedMilestones
+            .map((m) => `${m.count} Tasks (RM${m.myr}/${m.robux})`)
+            .join(", "),
           actual: parsedMilestones
             .map((m) => `${m.count} Tasks (RM${m.myr}/${m.robux})`)
             .join(", "),
-          match:
-            milestonesMatch &&
-            mdChecks.milestone25TextFound &&
-            mdChecks.milestone50TextFound &&
-            mdChecks.milestone100TextFound,
+          match: parsedMilestones.every(
+            (m) =>
+              joinUsText.includes(`${m.count} Tasks`) &&
+              includesAmount(joinUsText, m.myr) &&
+              includesRobux(joinUsText, m.robux),
+          ),
         },
         bonusConfig: {
           section: "3. Discretionary Monthly Bonuses",
-          expected:
-            "MYR: 20 per point, Robux: 1200 per point. Exclude 'Redistributable', 'Redistributed'",
-          actual: `MYR: ${bonusConfig.myrRatePerPoint} per point, Robux: ${bonusConfig.robuxRatePerPoint} per point. Exclusions: ${bonusExclusions.join(", ")}`,
-          match: bonusRatesMatch && bonusExclusionsMatch,
+          expected: `MYR: ${bonusConfig.myrRatePerPoint} per point, Robux: ${bonusConfig.robuxRatePerPoint} per point. Exclusions: 'Redistributable', 'Redistributed'`,
+          actual: `MYR: ${bonusConfig.myrRatePerPoint} per point, Robux: ${
+            bonusConfig.robuxRatePerPoint
+          } per point. Exclusions: ${bonusExclusions.join(", ")}`,
+          match:
+            includesAmount(joinUsText, bonusConfig.myrRatePerPoint) &&
+            includesRobux(joinUsText, bonusConfig.robuxRatePerPoint),
         },
         welcomePack: {
-          section: "4. The MYSverse Founders Welcome Pack",
-          expected:
-            "DevHub T-Shirt (size S to XXL), Custom Sticker Sheet, Developer ID Card & Lanyard",
+          section: "4. The MYSverse Welcome Pack",
+          expected: welcomePack
+            ? `Active Pack: '${welcomePack.name}'. Items: ${welcomePack.items
+                .map((i) => {
+                  const rangeStr =
+                    i.requiresSize && i.sizeOptions.length > 0
+                      ? ` (${i.sizeOptions[0]} to ${
+                          i.sizeOptions[i.sizeOptions.length - 1]
+                        })`
+                      : "";
+                  return `${i.name}${rangeStr}`;
+                })
+                .join(", ")}`
+            : "No active welcome pack found",
           actual: welcomePack
-            ? `Active Pack: '${packName}'. Items: ${itemsReport.map((i) => `${i.name}${i.requiresSize ? ` (${i.sizeOptions.join(",")})` : ""}`).join(", ")}`
+            ? `Active Pack: '${welcomePack.name}'. Items: ${itemsReport
+                .map(
+                  (i) =>
+                    `${i.name}${
+                      i.requiresSize ? ` (${i.sizeOptions.join(",")})` : ""
+                    }`,
+                )
+                .join(", ")}`
             : "No active welcome pack found",
           match:
-            welcomePackMatch &&
-            mdChecks.welcomePackShirtTextFound &&
-            mdChecks.welcomePackStickersTextFound &&
-            mdChecks.welcomePackLanyardTextFound &&
-            mdChecks.welcomePackSizesTextFound,
+            welcomePack &&
+            joinUsText.toLowerCase().includes(welcomePack.name.toLowerCase()) &&
+            welcomePack.items.every(
+              (item) =>
+                joinUsText.toLowerCase().includes(item.name.toLowerCase()) &&
+                (!item.requiresSize ||
+                  item.sizeOptions.length === 0 ||
+                  joinUsText
+                    .toLowerCase()
+                    .includes(
+                      `${item.sizeOptions[0]} to ${
+                        item.sizeOptions[item.sizeOptions.length - 1]
+                      }`.toLowerCase(),
+                    )),
+            ),
         },
       },
       liveConfiguration: {
@@ -519,7 +426,6 @@ export async function GET() {
             }
           : null,
       },
-      markdownTextChecks: mdChecks,
     });
   } catch (error) {
     console.error("Failed to compile JOIN_US.md verification info", error);

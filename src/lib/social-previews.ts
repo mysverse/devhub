@@ -110,6 +110,13 @@ export const socialPreviews: readonly SocialPreview[] = [
     matchSubpaths: true,
   },
   {
+    path: "/dashboard/notifications",
+    title: "Notifications",
+    description: "Your DevHub in-app notification history.",
+    label: "Notifications",
+    matchSubpaths: true,
+  },
+  {
     path: "/dashboard/admin",
     title: "Admin Payouts",
     description:

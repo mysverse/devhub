@@ -1,64 +1,16 @@
 "use client";
 
 import { Anchor, Badge, Group, Stack, Text } from "@mantine/core";
-import {
-  AlertTriangle,
-  Bell,
-  CheckCircle2,
-  Gift,
-  Package,
-  PauseCircle,
-  Sparkles,
-} from "lucide-react";
 import { motion } from "motion/react";
 import type React from "react";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
+import { useNotifications } from "@/components/notifications/NotificationsProvider";
 import {
-  type NotificationPresentation,
-  notificationPresentation,
-} from "@/lib/notifications/copy";
-
-type AppNotification = {
-  id: string;
-  notificationId: string;
-  domain: string;
-  type: string;
-  title: string;
-  message: string;
-  href: string | null;
-  entityType: string | null;
-  entityId: string | null;
-  payload: unknown;
-  createdAt: string;
-};
-
-type NotificationResponse = {
-  notifications?: AppNotification[];
-};
-
-async function markRead(ids: string[]) {
-  if (ids.length === 0) return;
-  await fetch("/api/notifications", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids }),
-  }).catch(() => undefined);
-}
-
-function iconFor(
-  notification: AppNotification,
-  copy: NotificationPresentation,
-) {
-  if (copy.tone === "positive") return CheckCircle2;
-  if (copy.tone === "warning") return PauseCircle;
-  if (copy.tone === "critical") return AlertTriangle;
-  if (notification.domain === "bonus") return Sparkles;
-  if (notification.domain === "incentive") return Gift;
-  if (notification.domain === "welcome_pack") return Package;
-  return Bell;
-}
+  type AppNotification,
+  notificationVisual,
+} from "@/components/notifications/presentation";
 
 function ToastShell({
   children,
@@ -93,19 +45,21 @@ function NotificationToast({
 }: {
   notification: AppNotification;
 }) {
-  const copy = notificationPresentation(notification.domain, notification.type);
-  const Icon = iconFor(notification, copy);
+  const { Icon, color, heading } = notificationVisual(
+    notification.domain,
+    notification.type,
+  );
 
   return (
-    <ToastShell color={copy.color}>
+    <ToastShell color={color}>
       <Group gap="sm" align="flex-start" wrap="nowrap">
-        <Icon size={20} color={`var(--mantine-color-${copy.color}-4)`} />
+        <Icon size={20} color={`var(--mantine-color-${color}-4)`} />
         <Stack gap={4} style={{ minWidth: 0 }}>
           <Group gap="xs">
             <Text size="sm" fw={700}>
-              {copy.heading}
+              {heading}
             </Text>
-            <Badge size="xs" variant="light" color={copy.color}>
+            <Badge size="xs" variant="light" color={color}>
               {notification.type.replaceAll("_", " ").toLowerCase()}
             </Badge>
           </Group>
@@ -126,67 +80,28 @@ function NotificationToast({
   );
 }
 
-/** Minimum gap between polls — guards against rapid focus events hammering
- * the API. */
-const MIN_POLL_GAP_MS = 5_000;
-
+/**
+ * Shows a toast for each newly-arrived notification. Polling and read state
+ * live in NotificationsProvider; this component only turns unseen items into
+ * toasts and marks them seen so they don't re-toast.
+ */
 export default function NotificationPoller() {
-  const inFlight = useRef(false);
-  const lastPolledAt = useRef(0);
+  const { unseen, markSeen } = useNotifications();
+  const toasted = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    let active = true;
-    let interval: number | undefined;
+    const fresh = unseen.filter((n) => !toasted.current.has(n.id));
+    if (fresh.length === 0) return;
 
-    async function poll() {
-      if (document.hidden || inFlight.current) return;
-      if (Date.now() - lastPolledAt.current < MIN_POLL_GAP_MS) return;
-      lastPolledAt.current = Date.now();
-      inFlight.current = true;
-
-      try {
-        const response = await fetch("/api/notifications", {
-          cache: "no-store",
-        });
-        if (!response.ok || !active) return;
-
-        const data = (await response.json()) as NotificationResponse;
-        const notifications = data.notifications ?? [];
-        if (notifications.length === 0) return;
-
-        for (const notification of notifications) {
-          toast.custom(
-            () => <NotificationToast notification={notification} />,
-            {
-              duration: 8000,
-            },
-          );
-        }
-
-        await markRead(notifications.map((notification) => notification.id));
-      } finally {
-        inFlight.current = false;
-      }
+    for (const notification of fresh) {
+      toasted.current.add(notification.id);
+      toast.custom(() => <NotificationToast notification={notification} />, {
+        duration: 8000,
+      });
     }
 
-    function pollWhenVisible() {
-      if (!document.hidden) {
-        void poll();
-      }
-    }
-
-    void poll();
-    interval = window.setInterval(poll, 30_000);
-    window.addEventListener("focus", pollWhenVisible);
-    document.addEventListener("visibilitychange", pollWhenVisible);
-
-    return () => {
-      active = false;
-      if (interval) window.clearInterval(interval);
-      window.removeEventListener("focus", pollWhenVisible);
-      document.removeEventListener("visibilitychange", pollWhenVisible);
-    };
-  }, []);
+    void markSeen(fresh.map((n) => n.id));
+  }, [unseen, markSeen]);
 
   return null;
 }

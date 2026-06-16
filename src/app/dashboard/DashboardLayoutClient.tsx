@@ -26,6 +26,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, use } from "react";
 import { Logo } from "@/components/Logo";
 import NotificationPoller from "@/components/NotificationPoller";
+import NotificationBell from "@/components/notifications/NotificationBell";
+import NotificationsProvider from "@/components/notifications/NotificationsProvider";
 import { signOut, useSession } from "@/lib/auth-client";
 
 type NavLink = { href: string; label: string };
@@ -244,92 +246,101 @@ export default function DashboardLayoutClient({
   const router = useRouter();
 
   return (
-    <AppShell
-      header={{ height: 60 }}
-      navbar={{
-        width: 300,
-        breakpoint: "sm",
-        collapsed: { desktop: true, mobile: !opened },
-      }}
-      padding="md"
-    >
-      <AppShellHeader>
-        <Container size="lg" h="100%">
-          <Group h="100%" px="md" justify="space-between">
-            <Group>
-              <Burger
-                opened={opened}
-                onClick={toggle}
-                hiddenFrom="sm"
-                size="sm"
-              />
-              <Link
-                href="/dashboard"
-                style={{
-                  textDecoration: "none",
-                  color: "inherit",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "10px",
-                }}
-              >
-                <Logo size={32} />
-              </Link>
-            </Group>
-
-            <Group gap={4} visibleFrom="sm">
-              <Suspense fallback={<DesktopNavLinksFallback />}>
-                <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
-              </Suspense>
-            </Group>
-
-            <Menu shadow="md" width={200} transitionProps={{ duration: 160 }}>
-              <MenuTarget>
-                <UnstyledButton>
-                  <Avatar
-                    src={session?.user?.image}
-                    alt={session?.user?.name ?? "User"}
-                    radius="xl"
-                    size="sm"
-                  />
-                </UnstyledButton>
-              </MenuTarget>
-              <MenuDropdown>
-                <MenuLabel>
-                  {session?.user?.name ?? session?.user?.email}
-                </MenuLabel>
-                <MenuItem
-                  leftSection={<LogOut size={14} />}
-                  onClick={async () => {
-                    await signOut();
-                    router.push("/");
+    <NotificationsProvider>
+      <AppShell
+        header={{ height: 60 }}
+        navbar={{
+          width: 300,
+          breakpoint: "sm",
+          collapsed: { desktop: true, mobile: !opened },
+        }}
+        padding="md"
+      >
+        <AppShellHeader>
+          <Container size="lg" h="100%">
+            <Group h="100%" px="md" justify="space-between">
+              <Group>
+                <Burger
+                  opened={opened}
+                  onClick={toggle}
+                  hiddenFrom="sm"
+                  size="sm"
+                />
+                <Link
+                  href="/dashboard"
+                  style={{
+                    textDecoration: "none",
+                    color: "inherit",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "10px",
                   }}
                 >
-                  Sign out
-                </MenuItem>
-              </MenuDropdown>
-            </Menu>
-          </Group>
-        </Container>
-      </AppShellHeader>
+                  <Logo size={32} />
+                </Link>
+              </Group>
 
-      <AppShellNavbar p="md">
-        <Stack gap={4}>
-          <Suspense fallback={<MobileNavLinksFallback onNavigate={close} />}>
-            <MobileNavLinksWithAdmin
-              adminPromise={adminPromise}
-              onNavigate={close}
-            />
-          </Suspense>
-        </Stack>
-      </AppShellNavbar>
+              <Group gap={4} visibleFrom="sm">
+                <Suspense fallback={<DesktopNavLinksFallback />}>
+                  <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
+                </Suspense>
+              </Group>
 
-      <AppShellMain>
-        <Container size="lg" py="xl">
-          {children}
-        </Container>
-      </AppShellMain>
-      <NotificationPoller />
-    </AppShell>
+              <Group gap="xs" wrap="nowrap">
+                <NotificationBell />
+                <Menu
+                  shadow="md"
+                  width={200}
+                  transitionProps={{ duration: 160 }}
+                >
+                  <MenuTarget>
+                    <UnstyledButton>
+                      <Avatar
+                        src={session?.user?.image}
+                        alt={session?.user?.name ?? "User"}
+                        radius="xl"
+                        size="sm"
+                      />
+                    </UnstyledButton>
+                  </MenuTarget>
+                  <MenuDropdown>
+                    <MenuLabel>
+                      {session?.user?.name ?? session?.user?.email}
+                    </MenuLabel>
+                    <MenuItem
+                      leftSection={<LogOut size={14} />}
+                      onClick={async () => {
+                        await signOut();
+                        router.push("/");
+                      }}
+                    >
+                      Sign out
+                    </MenuItem>
+                  </MenuDropdown>
+                </Menu>
+              </Group>
+            </Group>
+          </Container>
+        </AppShellHeader>
+
+        <AppShellNavbar p="md">
+          <Stack gap={4}>
+            <Suspense fallback={<MobileNavLinksFallback onNavigate={close} />}>
+              <MobileNavLinksWithAdmin
+                adminPromise={adminPromise}
+                onNavigate={close}
+              />
+            </Suspense>
+          </Stack>
+        </AppShellNavbar>
+
+        <AppShellMain>
+          <Container size="lg" py="xl">
+            {children}
+          </Container>
+        </AppShellMain>
+        <NotificationPoller />
+      </AppShell>
+    </NotificationsProvider>
   );
 }

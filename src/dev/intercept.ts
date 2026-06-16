@@ -43,7 +43,8 @@ type DevRoute = {
 const ROUTES: DevRoute[] = [
   {
     name: "linear",
-    match: (u) => u.hostname === "api.linear.app",
+    match: (u) =>
+      u.hostname === "api.linear.app" || u.hostname === "uploads.linear.app",
     load: () => import("@/dev/handlers/linear").then((m) => m.handleLinear),
   },
   {

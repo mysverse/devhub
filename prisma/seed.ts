@@ -1520,12 +1520,31 @@ export async function seed() {
       requesterId: devId,
       linearIssueTitle: "Build car wash minigame for petrol stations",
       linearTeamId: LINEAR_TEAM.id,
+      linearProjectId: LINEAR_PROJECT.id,
+      linearProjectName: LINEAR_PROJECT.name,
       requestedEstimate: 3,
       projectedDueDate: daysAgo(-14),
       description:
-        "Interactive car wash with cleanliness state and payment hook.",
+        "## Goal\n\nInteractive car wash with cleanliness state and payment hook.\n\n- Add vehicle detection\n- Show foam/water stages\n- Emit a completion event for rewards",
+      note: "Good candidate for an open PPT because the scope is self-contained.",
+      assigneeIntent: "OPEN",
       status: "PENDING",
       createdAt: daysAgo(1),
+      attachments: {
+        create: [
+          {
+            uploadedById: devId,
+            filename: "car-wash-reference.png",
+            mimeType: "image/png",
+            byteSize: 512,
+            width: 1,
+            height: 1,
+            linearAssetUrl:
+              "https://uploads.linear.app/devhub/seed/car-wash-reference.png",
+            sortOrder: 0,
+          },
+        ],
+      },
     },
   });
   await prisma.pptRequest.create({

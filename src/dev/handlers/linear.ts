@@ -17,6 +17,11 @@ import { PERSONAS } from "@/dev/fixtures/personas";
 import type { DevHandler } from "@/dev/intercept";
 import { getDevState, type MockLinearIssue, stateById } from "@/dev/state";
 
+const PLACEHOLDER_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNsaGj4DwAFhAKAv1oU3gAAAABJRU5ErkJggg==",
+  "base64",
+);
+
 type GraphQLRequest = {
   query: string;
   variables?: Record<string, unknown>;
@@ -481,6 +486,9 @@ function applyIssueInput(
   if ("assigneeId" in input) {
     issue.assigneeId = (input.assigneeId as string | null) ?? null;
   }
+  if ("projectId" in input) {
+    issue.projectId = (input.projectId as string | null) ?? null;
+  }
   if (typeof input.stateId === "string") {
     const state = stateById(input.stateId);
     issue.stateId = state.id;
@@ -620,6 +628,18 @@ function executeOperation(
           members: connection(LINEAR_USERS.map((u) => userNode(u.id))),
         },
       };
+    case "DevHubTeamWorkflowStates":
+      return {
+        team: {
+          states: connection(
+            Object.values(LINEAR_STATES).map((state) => ({
+              id: state.id,
+              name: state.name,
+              type: state.type,
+            })),
+          ),
+        },
+      };
     case "issueLabels": {
       const filter = variables.filter as { name?: { eq?: string } } | undefined;
       const labels = filter?.name?.eq
@@ -722,6 +742,38 @@ function executeOperation(
         },
       };
     }
+    case "fileUpload": {
+      const contentType = String(
+        variables.contentType ?? "application/octet-stream",
+      );
+      const filename = String(variables.filename ?? "attachment");
+      const size = Number(variables.size ?? 0);
+      const id = `upload-${++lastSyncId}`;
+      const assetUrl = `https://uploads.linear.app/devhub/${id}/${encodeURIComponent(filename)}`;
+      return {
+        fileUpload: {
+          __typename: "UploadPayload",
+          lastSyncId,
+          success: true,
+          uploadFile: {
+            __typename: "UploadFile",
+            assetUrl,
+            uploadUrl: assetUrl,
+            contentType,
+            filename,
+            size,
+            metaData: null,
+            headers: [
+              {
+                __typename: "UploadFileHeader",
+                key: "content-type",
+                value: contentType,
+              },
+            ],
+          },
+        },
+      };
+    }
     case "createComment": {
       const input = (variables.input ?? {}) as Record<string, unknown>;
       const issue = requireIssue(input.issueId);
@@ -811,12 +863,12 @@ function inlineFilterFor(
     case "DevHubSuggestedPpts":
       return {
         assignee: { null: true },
-        state: { type: { eq: "unstarted" } },
+        state: { type: { in: ["backlog", "unstarted"] } },
         labels: { name: { eq: "PPT" } },
       };
     case "DevHubPptBoardIssues":
       return {
-        state: { type: { in: ["unstarted", "started"] } },
+        state: { type: { in: ["backlog", "unstarted", "started"] } },
         labels: { name: { eq: "PPT" } },
       };
     case "DevHubIssuesByIds":
@@ -829,6 +881,34 @@ function inlineFilterFor(
 // ── HTTP entrypoint ───────────────────────────────────────────────────────────
 
 export const handleLinear: DevHandler = async (req, url) => {
+  if (url.hostname === "uploads.linear.app") {
+    const key = url.pathname;
+    const state = getDevState();
+    if (req.method === "PUT") {
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      state.blobs.set(key, {
+        contentType:
+          req.headers.get("content-type") ?? "application/octet-stream",
+        bytes,
+      });
+      return new Response(null, { status: 200 });
+    }
+    if (req.method === "GET") {
+      const blob = state.blobs.get(key);
+      if (!blob) {
+        if (/\.(png|jpe?g|webp|gif)$/i.test(key)) {
+          return new Response(PLACEHOLDER_PNG, {
+            headers: { "content-type": "image/png" },
+          });
+        }
+        return new Response("Not found", { status: 404 });
+      }
+      return new Response(Buffer.from(blob.bytes), {
+        headers: { "content-type": blob.contentType },
+      });
+    }
+  }
+
   if (url.pathname === "/oauth/token" && req.method === "POST") {
     const body = new URLSearchParams(await req.text());
     const refreshToken = body.get("refresh_token") ?? "";

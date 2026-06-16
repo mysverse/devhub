@@ -51,6 +51,10 @@ import {
 } from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
+import type {
+  IntegrationAvailability,
+  SetupIntegrationAvailability,
+} from "@/lib/integration-availability";
 import {
   DUITNOW_INSTITUTIONS,
   isBillplzSupported,
@@ -70,6 +74,8 @@ type Props = {
   detectedDiscordId: string | null;
   detectedRobloxId: string | null;
   documentTemplates: DocumentTemplate[];
+  integrationAvailability: SetupIntegrationAvailability;
+  robuxPayoutAvailability: IntegrationAvailability;
 };
 
 export default function OnboardingFlow({
@@ -79,6 +85,8 @@ export default function OnboardingFlow({
   detectedDiscordId,
   detectedRobloxId,
   documentTemplates,
+  integrationAvailability,
+  robuxPayoutAvailability,
 }: Props) {
   const router = useRouter();
   const [active, setActive] = useState(0);
@@ -117,6 +125,27 @@ export default function OnboardingFlow({
   const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [bankAccountName, setBankAccountName] = useState("");
 
+  const discordAvailability = integrationAvailability.discord;
+  const robloxAvailability = integrationAvailability.roblox;
+  const robuxPaymentsAvailable = robuxPayoutAvailability.configured;
+
+  function handleLinkProvider(providerId: "discord" | "roblox") {
+    const availability = integrationAvailability[providerId];
+    if (!availability.configured) {
+      toast.error(
+        availability.unavailableDescription ??
+          `${availability.label} linking is unavailable.`,
+      );
+      return;
+    }
+
+    setLinkingProvider(providerId);
+    signIn.oauth2({
+      providerId,
+      callbackURL: "/onboarding",
+    });
+  }
+
   function nextStep() {
     if (active === 0 && !userType) {
       toast.error("Please select your situation to continue.");
@@ -140,6 +169,13 @@ export default function OnboardingFlow({
   async function handleSubmit() {
     if (paymentMethod === "PAYPAL" && !paypalEmail.trim()) {
       toast.error("Please enter your PayPal email.");
+      return;
+    }
+    if (paymentMethod === "ROBUX" && !robuxPaymentsAvailable) {
+      toast.error(
+        robuxPayoutAvailability.unavailableDescription ??
+          "Robux payments are unavailable right now.",
+      );
       return;
     }
     if (paymentMethod === "ROBUX" && !detectedRobloxId) {
@@ -394,21 +430,25 @@ export default function OnboardingFlow({
                   </Alert>
                 ) : (
                   <Stack gap="xs">
-                    <Text size="sm" c="dimmed">
-                      Link your Discord account so we can identify you in the
-                      server.
-                    </Text>
+                    {discordAvailability.configured ? (
+                      <Text size="sm" c="dimmed">
+                        Link your Discord account so we can identify you in the
+                        server.
+                      </Text>
+                    ) : (
+                      <Alert
+                        color="yellow"
+                        title={discordAvailability.unavailableTitle}
+                      >
+                        {discordAvailability.unavailableDescription}
+                      </Alert>
+                    )}
                     <Button
                       variant="light"
                       color="indigo"
                       loading={linkingProvider === "discord"}
-                      onClick={() => {
-                        setLinkingProvider("discord");
-                        signIn.oauth2({
-                          providerId: "discord",
-                          callbackURL: "/onboarding",
-                        });
-                      }}
+                      disabled={!discordAvailability.configured}
+                      onClick={() => handleLinkProvider("discord")}
                     >
                       Link Discord
                     </Button>
@@ -428,21 +468,25 @@ export default function OnboardingFlow({
                   </Alert>
                 ) : (
                   <Stack gap="xs">
-                    <Text size="sm" c="dimmed">
-                      Link your Roblox account. Required if you want to receive
-                      Robux payments.
-                    </Text>
+                    {robloxAvailability.configured ? (
+                      <Text size="sm" c="dimmed">
+                        Link your Roblox account. Required if you want to
+                        receive Robux payments.
+                      </Text>
+                    ) : (
+                      <Alert
+                        color="yellow"
+                        title={robloxAvailability.unavailableTitle}
+                      >
+                        {robloxAvailability.unavailableDescription}
+                      </Alert>
+                    )}
                     <Button
                       variant="light"
                       color="red"
                       loading={linkingProvider === "roblox"}
-                      onClick={() => {
-                        setLinkingProvider("roblox");
-                        signIn.oauth2({
-                          providerId: "roblox",
-                          callbackURL: "/onboarding",
-                        });
-                      }}
+                      disabled={!robloxAvailability.configured}
+                      onClick={() => handleLinkProvider("roblox")}
                     >
                       Link Roblox
                     </Button>
@@ -526,12 +570,26 @@ export default function OnboardingFlow({
               <Select
                 label="Preferred Payment Method"
                 value={paymentMethod}
-                onChange={(val) =>
-                  setPaymentMethod(val as typeof paymentMethod)
-                }
+                onChange={(val) => {
+                  if (!val) return;
+                  if (val === "ROBUX" && !robuxPaymentsAvailable) {
+                    toast.error(
+                      robuxPayoutAvailability.unavailableDescription ??
+                        "Robux payments are unavailable right now.",
+                    );
+                    return;
+                  }
+                  setPaymentMethod(val as typeof paymentMethod);
+                }}
                 data={[
                   { value: "PAYPAL", label: "PayPal" },
-                  { value: "ROBUX", label: "Robux" },
+                  {
+                    value: "ROBUX",
+                    label: robuxPaymentsAvailable
+                      ? "Robux"
+                      : "Robux (unavailable)",
+                    disabled: !robuxPaymentsAvailable,
+                  },
                   { value: "DUITNOW", label: "DuitNow" },
                   {
                     value: "BANK_TRANSFER",
@@ -539,6 +597,15 @@ export default function OnboardingFlow({
                   },
                 ]}
               />
+
+              {!robuxPaymentsAvailable && (
+                <Alert
+                  color="yellow"
+                  title={robuxPayoutAvailability.unavailableTitle}
+                >
+                  {robuxPayoutAvailability.unavailableDescription}
+                </Alert>
+              )}
 
               {paymentMethod === "PAYPAL" && (
                 <TextInput

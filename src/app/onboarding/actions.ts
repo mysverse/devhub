@@ -6,6 +6,7 @@ import { getSession } from "@/lib/auth-utils";
 import { siteConfig } from "@/lib/config";
 import { getProbationReviewDates } from "@/lib/developer-access";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
+import { getRobuxPayoutAvailability } from "@/lib/integration-availability";
 import { getLinearClient } from "@/lib/linear";
 import {
   normalizeMalaysianPhone,
@@ -103,11 +104,22 @@ export async function completeOnboarding(
       }),
     ]);
 
-    if (data.paymentMethod === "ROBUX" && !robloxAccount) {
-      return {
-        error:
-          "Please link your Roblox account before selecting Robux payments.",
-      };
+    if (data.paymentMethod === "ROBUX") {
+      const robuxPayoutAvailability = getRobuxPayoutAvailability();
+      if (!robuxPayoutAvailability.configured) {
+        return {
+          error:
+            robuxPayoutAvailability.unavailableDescription ??
+            "Robux payments are unavailable right now.",
+        };
+      }
+
+      if (!robloxAccount) {
+        return {
+          error:
+            "Please link your Roblox account before selecting Robux payments.",
+        };
+      }
     }
 
     const profileData = {

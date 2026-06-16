@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Alert,
   Button,
   Card,
   Center,
@@ -12,21 +13,45 @@ import {
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { signIn } from "@/lib/auth-client";
+import type { IntegrationAvailability } from "@/lib/integration-availability";
 
-function ReauthContent() {
+function ReauthContent({
+  linearAvailability,
+}: {
+  linearAvailability: IntegrationAvailability;
+}) {
   const searchParams = useSearchParams();
   const returnTo = searchParams.get("returnTo") || "/dashboard";
   const attempt = searchParams.get("attempt");
   const [failed] = useState(!!attempt);
 
   useEffect(() => {
-    if (!attempt) {
+    if (!attempt && linearAvailability.configured) {
       signIn.oauth2({
         providerId: "linear",
         callbackURL: returnTo,
       });
     }
-  }, [attempt, returnTo]);
+  }, [attempt, linearAvailability.configured, returnTo]);
+
+  if (!linearAvailability.configured) {
+    return (
+      <Center h="100vh" bg="var(--mantine-color-body)">
+        <Card withBorder radius="md" padding="xl" ta="center" maw={400}>
+          <Title order={2} mb="xs">
+            Linear Sign-in Unavailable
+          </Title>
+          <Text c="dimmed" mb="lg">
+            Your Linear connection needs attention, but Linear OAuth is not
+            configured right now.
+          </Text>
+          <Alert color="yellow" title={linearAvailability.unavailableTitle}>
+            {linearAvailability.unavailableDescription}
+          </Alert>
+        </Card>
+      </Center>
+    );
+  }
 
   if (failed) {
     return (
@@ -72,7 +97,11 @@ function ReauthContent() {
   );
 }
 
-export default function ReauthLinearClient() {
+export default function ReauthLinearClient({
+  linearAvailability,
+}: {
+  linearAvailability: IntegrationAvailability;
+}) {
   return (
     <Suspense
       fallback={
@@ -81,7 +110,7 @@ export default function ReauthLinearClient() {
         </Center>
       }
     >
-      <ReauthContent />
+      <ReauthContent linearAvailability={linearAvailability} />
     </Suspense>
   );
 }

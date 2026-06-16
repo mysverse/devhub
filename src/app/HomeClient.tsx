@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Alert,
   AppShell,
   AppShellHeader,
   AppShellMain,
@@ -15,9 +16,22 @@ import Link from "next/link";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import { Logo } from "@/components/Logo";
 import { signIn, useSession } from "@/lib/auth-client";
+import type { IntegrationAvailability } from "@/lib/integration-availability";
 
-export default function HomeClient() {
+type Props = {
+  linearAvailability: IntegrationAvailability;
+};
+
+export default function HomeClient({ linearAvailability }: Props) {
   const { data: session, isPending } = useSession();
+
+  function signInWithLinear() {
+    if (!linearAvailability.configured) return;
+    signIn.oauth2({
+      providerId: "linear",
+      callbackURL: "/onboarding",
+    });
+  }
 
   return (
     <AppShell header={{ height: 60 }} padding="md">
@@ -35,12 +49,8 @@ export default function HomeClient() {
             {!isPending && !session && (
               <Button
                 variant="subtle"
-                onClick={() =>
-                  signIn.oauth2({
-                    providerId: "linear",
-                    callbackURL: "/onboarding",
-                  })
-                }
+                disabled={!linearAvailability.configured}
+                onClick={signInWithLinear}
               >
                 Sign In
               </Button>
@@ -76,6 +86,18 @@ export default function HomeClient() {
               </Text>
             </StaggerItem>
 
+            {!linearAvailability.configured && (
+              <StaggerItem>
+                <Alert
+                  color="yellow"
+                  title={linearAvailability.unavailableTitle}
+                  mb="xl"
+                >
+                  {linearAvailability.unavailableDescription}
+                </Alert>
+              </StaggerItem>
+            )}
+
             <StaggerItem>
               <Group justify="center">
                 {session ? (
@@ -92,12 +114,8 @@ export default function HomeClient() {
                     size="lg"
                     radius="xl"
                     loading={isPending}
-                    onClick={() =>
-                      signIn.oauth2({
-                        providerId: "linear",
-                        callbackURL: "/onboarding",
-                      })
-                    }
+                    disabled={!linearAvailability.configured}
+                    onClick={signInWithLinear}
                   >
                     Join the Team
                   </Button>

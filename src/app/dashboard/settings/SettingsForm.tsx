@@ -18,6 +18,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { StepTransition } from "@/components/animations";
 import FormSection from "@/components/FormSection";
+import type { IntegrationAvailability } from "@/lib/integration-availability";
 import {
   DUITNOW_INSTITUTIONS,
   isBillplzSupported,
@@ -43,9 +44,14 @@ type ProfileProps = {
     shippingAddress: string | null;
   };
   robloxLinked: boolean;
+  robuxPayoutAvailability: IntegrationAvailability;
 };
 
-export default function SettingsForm({ profile, robloxLinked }: ProfileProps) {
+export default function SettingsForm({
+  profile,
+  robloxLinked,
+  robuxPayoutAvailability,
+}: ProfileProps) {
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(profile.paymentMethod);
   const [duitNowType, setDuitNowType] = useState<"ID" | "BANK">(
@@ -76,9 +82,15 @@ export default function SettingsForm({ profile, robloxLinked }: ProfileProps) {
       }
     }
 
-    if (paymentMethod === "ROBUX" && !robloxLinked) {
-      newErrors.robux =
-        "Link your Roblox account in the Linked Accounts section above first.";
+    if (paymentMethod === "ROBUX") {
+      if (!robuxPayoutAvailability.configured) {
+        newErrors.robux =
+          robuxPayoutAvailability.unavailableDescription ??
+          "Robux payments are unavailable right now.";
+      } else if (!robloxLinked) {
+        newErrors.robux =
+          "Link your Roblox account in the Linked Accounts section above first.";
+      }
     }
 
     if (paymentMethod === "DUITNOW") {
@@ -155,12 +167,26 @@ export default function SettingsForm({ profile, robloxLinked }: ProfileProps) {
             name="paymentMethod"
             value={paymentMethod}
             onChange={(val) => {
+              if (!val) return;
+              if (val === "ROBUX" && !robuxPayoutAvailability.configured) {
+                toast.error(
+                  robuxPayoutAvailability.unavailableDescription ??
+                    "Robux payments are unavailable right now.",
+                );
+                return;
+              }
               setPaymentMethod(val as string);
               clearErrors();
             }}
             data={[
               { value: "PAYPAL", label: "PayPal" },
-              { value: "ROBUX", label: "Robux" },
+              {
+                value: "ROBUX",
+                label: robuxPayoutAvailability.configured
+                  ? "Robux"
+                  : "Robux (unavailable)",
+                disabled: !robuxPayoutAvailability.configured,
+              },
               { value: "DUITNOW", label: "DuitNow" },
               {
                 value: "BANK_TRANSFER",
@@ -169,6 +195,15 @@ export default function SettingsForm({ profile, robloxLinked }: ProfileProps) {
             ]}
           />
           <input type="hidden" name="paymentMethod" value={paymentMethod} />
+
+          {!robuxPayoutAvailability.configured && (
+            <Alert
+              color="yellow"
+              title={robuxPayoutAvailability.unavailableTitle}
+            >
+              {robuxPayoutAvailability.unavailableDescription}
+            </Alert>
+          )}
 
           <StepTransition step={paymentMethod} minHeight={64}>
             {paymentMethod === "PAYPAL" && (
@@ -195,7 +230,12 @@ export default function SettingsForm({ profile, robloxLinked }: ProfileProps) {
             )}
 
             {paymentMethod === "ROBUX" &&
-              (robloxLinked ? (
+              (!robuxPayoutAvailability.configured ? (
+                <Alert color="yellow" title="Robux payments unavailable">
+                  {errors.robux ??
+                    robuxPayoutAvailability.unavailableDescription}
+                </Alert>
+              ) : robloxLinked ? (
                 <Alert color="green" title="Roblox account linked">
                   Robux payments will be sent to your linked Roblox account.
                 </Alert>

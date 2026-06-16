@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import PageSkeleton from "@/components/PageSkeleton";
+import { getOauthProviderAvailability } from "@/lib/integration-availability";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import SignInClient from "./SignInClient";
 
@@ -18,5 +19,7 @@ export default function SignInPage({ params }: { params: Params }) {
 
 async function SignInContent({ params }: { params: Params }) {
   await params;
-  return <SignInClient />;
+  return (
+    <SignInClient linearAvailability={getOauthProviderAvailability("linear")} />
+  );
 }

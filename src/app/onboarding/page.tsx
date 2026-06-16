@@ -4,6 +4,10 @@ import { Suspense } from "react";
 import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { getDocumentTemplate, REQUIRED_DOCUMENTS } from "@/lib/documents";
+import {
+  getRobuxPayoutAvailability,
+  getSetupIntegrationAvailability,
+} from "@/lib/integration-availability";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import OnboardingFlow from "./OnboardingFlow";
@@ -69,6 +73,8 @@ async function OnboardingContent() {
       detectedDiscordId={detectedDiscordId}
       detectedRobloxId={detectedRobloxId}
       documentTemplates={documentTemplates}
+      integrationAvailability={getSetupIntegrationAvailability()}
+      robuxPayoutAvailability={getRobuxPayoutAvailability()}
     />
   );
 }

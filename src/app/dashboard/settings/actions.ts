@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/auth-utils";
+import { getRobuxPayoutAvailability } from "@/lib/integration-availability";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import {
   normalizeMalaysianPhone,
@@ -65,6 +66,15 @@ export async function updateProfileSettings(formData: FormData) {
   try {
     // Verify Roblox account is linked via OAuth when payment method is ROBUX
     if (paymentMethod === "ROBUX") {
+      const robuxPayoutAvailability = getRobuxPayoutAvailability();
+      if (!robuxPayoutAvailability.configured) {
+        return {
+          error:
+            robuxPayoutAvailability.unavailableDescription ??
+            "Robux payments are unavailable right now.",
+        };
+      }
+
       const robloxAccount = await prisma.account.findFirst({
         where: { userId, providerId: "roblox" },
         select: { accountId: true },

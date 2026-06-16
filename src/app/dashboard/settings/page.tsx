@@ -8,6 +8,10 @@ import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
+import {
+  getRobuxPayoutAvailability,
+  getSetupIntegrationAvailability,
+} from "@/lib/integration-availability";
 import { requiresKycForAutoPayout } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -58,6 +62,9 @@ async function SettingsContent() {
     redirect("/dashboard");
   }
 
+  const integrationAvailability = getSetupIntegrationAvailability();
+  const robuxPayoutAvailability = getRobuxPayoutAvailability();
+
   return (
     <StaggerContainer>
       <Stack gap="xl">
@@ -66,6 +73,7 @@ async function SettingsContent() {
             linkedAccounts={linkedAccounts}
             linearEmail={userProfile.linearEmail}
             paymentMethod={userProfile.paymentMethod}
+            integrationAvailability={integrationAvailability}
           />
         </StaggerItem>
 
@@ -73,6 +81,7 @@ async function SettingsContent() {
           <SettingsForm
             profile={userProfile}
             robloxLinked={!!userProfile.robloxId}
+            robuxPayoutAvailability={robuxPayoutAvailability}
           />
         </StaggerItem>
 

@@ -268,8 +268,9 @@ async function AdminPageContent() {
       where: { status: "PENDING" },
       include: {
         requester: {
-          include: { user: { select: { name: true } } },
+          include: { user: { select: { name: true, email: true } } },
         },
+        attachments: { orderBy: { sortOrder: "asc" } },
       },
       orderBy: { createdAt: "asc" },
       take: 100,
@@ -624,16 +625,31 @@ async function AdminPageContent() {
               req.requester.legalName ||
               req.requester.user.name ||
               "Unknown Developer",
+            requesterEmail: req.requester.user.email,
             requesterLinearId: req.requester.linearId,
             linearIssueId: req.linearIssueId,
             linearIssueIdentifier: req.linearIssueIdentifier,
             linearIssueTitle: req.linearIssueTitle,
             linearIssueUrl: req.linearIssueUrl,
             linearTeamId: req.linearTeamId,
+            linearProjectId: req.linearProjectId,
+            linearProjectName: req.linearProjectName,
             requestedEstimate: req.requestedEstimate,
             projectedDueDate: req.projectedDueDate.toISOString(),
             description: req.description,
             note: req.note,
+            assigneeIntent: req.assigneeIntent,
+            intendedAssigneeLinearId: req.intendedAssigneeLinearId,
+            intendedAssigneeName: req.intendedAssigneeName,
+            intendedAssigneeEmail: req.intendedAssigneeEmail,
+            attachments: req.attachments.map((attachment) => ({
+              id: attachment.id,
+              filename: attachment.filename,
+              mimeType: attachment.mimeType,
+              byteSize: attachment.byteSize,
+              width: attachment.width,
+              height: attachment.height,
+            })),
             createdAt: req.createdAt.toISOString(),
           }),
         )}

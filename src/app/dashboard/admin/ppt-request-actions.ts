@@ -8,12 +8,178 @@ import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
-import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import { findTodoWorkflowStateId } from "@/lib/linear-queries";
+import {
+  EMAIL_CHANNEL,
+  IN_APP_CHANNEL,
+  notifyWithPreferences,
+} from "@/lib/notifications";
 import prisma from "@/lib/prisma";
+
+export type PptApprovalAssigneeTarget =
+  | { type: "requester" }
+  | { type: "linear_user"; linearId: string; name?: string | null }
+  | { type: "open" }
+  | { type: "keep_existing" };
+
+function attachmentMarkdown(
+  attachments: { filename: string; mimeType: string; linearAssetUrl: string }[],
+) {
+  if (attachments.length === 0) return "";
+  const lines = ["## Attachments", ""];
+  for (const attachment of attachments) {
+    if (attachment.mimeType.startsWith("image/")) {
+      lines.push(`![${attachment.filename}](${attachment.linearAssetUrl})`);
+    } else {
+      lines.push(`- [${attachment.filename}](${attachment.linearAssetUrl})`);
+    }
+  }
+  return lines.join("\n");
+}
+
+function approvedIssueDescription(request: {
+  description: string | null;
+  note: string | null;
+  requester: { legalName: string | null; user: { name: string | null } };
+  attachments: { filename: string; mimeType: string; linearAssetUrl: string }[];
+}) {
+  const parts = [
+    request.description?.trim(),
+    attachmentMarkdown(request.attachments),
+    request.note ? `## Request note\n\n${request.note.trim()}` : null,
+    `---\nApproved from a DevHub PPT request by ${
+      request.requester.legalName ||
+      request.requester.user.name ||
+      "a developer"
+    }.`,
+  ];
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function approvalComment(request: {
+  linearIssueTitle: string;
+  requestedEstimate: number;
+  projectedDueDate: Date;
+  description: string | null;
+  note: string | null;
+  attachments: { filename: string; mimeType: string; linearAssetUrl: string }[];
+}) {
+  const parts = [
+    "DevHub PPT request approved",
+    "",
+    `Complexity: ${request.requestedEstimate}`,
+    `Projected due: ${request.projectedDueDate.toISOString().slice(0, 10)}`,
+    request.description
+      ? `\n## Request description\n\n${request.description}`
+      : null,
+    request.note ? `\n## Request note\n\n${request.note}` : null,
+    attachmentMarkdown(request.attachments),
+  ];
+  return parts.filter(Boolean).join("\n");
+}
+
+async function notifyOpenPptAvailable({
+  requesterId,
+  actorId,
+  issueIdentifier,
+  issueTitle,
+  issueUrl,
+}: {
+  requesterId: string;
+  actorId: string;
+  issueIdentifier: string | null | undefined;
+  issueTitle: string;
+  issueUrl: string | null | undefined;
+}) {
+  const users = await prisma.userProfile.findMany({
+    where: {
+      id: { not: requesterId },
+      linearId: { not: null },
+      role: "DEVELOPER",
+    },
+    include: { user: { select: { email: true } } },
+  });
+
+  for (const user of users) {
+    await notifyWithPreferences({
+      userId: user.id,
+      actorId,
+      domain: "ppt_task",
+      type: "UNCLAIMED_AVAILABLE",
+      title: issueIdentifier
+        ? `New PPT available: ${issueIdentifier}`
+        : "New PPT task available",
+      message: `${issueTitle} is open to claim on the PPT board.`,
+      href: "/dashboard/ppts",
+      entityType: "linear_issue",
+      entityId: issueIdentifier ?? issueTitle,
+      payload: { issueIdentifier, issueTitle, issueUrl },
+      dedupeKey: `ppt-task:unclaimed:${user.id}:${issueIdentifier ?? issueTitle}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: user.user.email
+        ? {
+            to: user.user.email,
+            subject: `New unclaimed PPT task: ${issueTitle}`,
+            category: "ppt_task_unclaimed_available",
+            idempotencyKey: `ppt-task:unclaimed:${issueIdentifier ?? issueTitle}:${user.id}`,
+          }
+        : undefined,
+    });
+  }
+}
+
+async function notifyAssignedPpt({
+  assigneeLinearId,
+  requesterId,
+  actorId,
+  issueIdentifier,
+  issueTitle,
+  issueUrl,
+}: {
+  assigneeLinearId: string;
+  requesterId: string;
+  actorId: string;
+  issueIdentifier: string | null | undefined;
+  issueTitle: string;
+  issueUrl: string | null | undefined;
+}) {
+  const assignee = await prisma.userProfile.findUnique({
+    where: { linearId: assigneeLinearId },
+    include: { user: { select: { email: true } } },
+  });
+  if (!assignee || assignee.id === requesterId) return;
+
+  await notifyWithPreferences({
+    userId: assignee.id,
+    actorId,
+    domain: "ppt_task",
+    type: "ASSIGNED_TO_YOU",
+    title: issueIdentifier
+      ? `PPT assigned to you: ${issueIdentifier}`
+      : "PPT assigned to you",
+    message: `${issueTitle} was approved and assigned to you.`,
+    href: "/dashboard/ppts",
+    entityType: "linear_issue",
+    entityId: issueIdentifier ?? issueTitle,
+    payload: { issueIdentifier, issueTitle, issueUrl },
+    dedupeKey: `ppt-task:assigned:${assignee.id}:${issueIdentifier ?? issueTitle}`,
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    email: assignee.user.email
+      ? {
+          to: assignee.user.email,
+          subject: `PPT assigned to you: ${issueTitle}`,
+          category: "ppt_task_assigned_to_you",
+          idempotencyKey: `ppt-task:assigned:${issueIdentifier ?? issueTitle}:${assignee.id}`,
+        }
+      : undefined,
+  });
+}
 
 export async function approvePptRequest(
   requestId: string,
-  options: { assignRequester?: boolean } = { assignRequester: true },
+  options: { assigneeTarget?: PptApprovalAssigneeTarget } = {
+    assigneeTarget: { type: "requester" },
+  },
 ) {
   const adminUserId = await requireAdmin();
 
@@ -23,6 +189,7 @@ export async function approvePptRequest(
       requester: {
         include: { user: { select: { email: true, name: true } } },
       },
+      attachments: { orderBy: { sortOrder: "asc" } },
     },
   });
 
@@ -52,6 +219,13 @@ export async function approvePptRequest(
       let issueId = request.linearIssueId;
       let issueIdentifier = request.linearIssueIdentifier;
       let issueUrl = request.linearIssueUrl;
+      const assigneeTarget = options.assigneeTarget ?? { type: "requester" };
+      const selectedAssigneeId =
+        assigneeTarget.type === "requester"
+          ? request.requester.linearId
+          : assigneeTarget.type === "linear_user"
+            ? assigneeTarget.linearId
+            : null;
 
       if (issueId) {
         // Existing issue — update it
@@ -65,24 +239,41 @@ export async function approvePptRequest(
           dueDate,
         };
 
-        if (options.assignRequester && request.requester.linearId) {
-          updateData.assigneeId = request.requester.linearId;
+        if (assigneeTarget.type === "open") {
+          updateData.assigneeId = null;
+        } else if (selectedAssigneeId) {
+          updateData.assigneeId = selectedAssigneeId;
         }
 
         await client.updateIssue(issueId, updateData);
+        if (
+          request.attachments.length > 0 ||
+          request.note ||
+          request.description
+        ) {
+          await client.createComment({
+            issueId,
+            body: approvalComment(request),
+          });
+        }
       } else {
         // New issue — create it
+        const todoStateId = await findTodoWorkflowStateId(
+          client,
+          request.linearTeamId,
+        );
         const result = await client.createIssue({
           title: request.linearIssueTitle,
           teamId: request.linearTeamId,
           labelIds: [pptLabelId],
           estimate: request.requestedEstimate,
           dueDate,
-          ...(request.description && { description: request.description }),
-          ...(options.assignRequester &&
-            request.requester.linearId && {
-              assigneeId: request.requester.linearId,
-            }),
+          ...(todoStateId && { stateId: todoStateId }),
+          ...(request.linearProjectId && {
+            projectId: request.linearProjectId,
+          }),
+          description: approvedIssueDescription(request),
+          ...(selectedAssigneeId && { assigneeId: selectedAssigneeId }),
         });
         const createdIssue = await result.issue;
         if (!createdIssue) return { error: "Failed to create Linear issue" };
@@ -117,7 +308,7 @@ export async function approvePptRequest(
           "MYR",
         );
 
-        await notify({
+        await notifyWithPreferences({
           userId: request.requesterId,
           actorId: adminUserId,
           domain: "ppt_request",
@@ -156,8 +347,24 @@ export async function approvePptRequest(
       revalidatePath("/dashboard/admin");
       revalidatePath("/dashboard/ppts");
       updateTag(TAGS.workspacePpts);
-      if (options.assignRequester && request.requester.linearId) {
-        updateTag(TAGS.userIssues(request.requester.linearId));
+      if (selectedAssigneeId) {
+        updateTag(TAGS.userIssues(selectedAssigneeId));
+        await notifyAssignedPpt({
+          assigneeLinearId: selectedAssigneeId,
+          requesterId: request.requesterId,
+          actorId: adminUserId,
+          issueIdentifier,
+          issueTitle: request.linearIssueTitle,
+          issueUrl,
+        });
+      } else if (assigneeTarget.type === "open") {
+        await notifyOpenPptAvailable({
+          requesterId: request.requesterId,
+          actorId: adminUserId,
+          issueIdentifier,
+          issueTitle: request.linearIssueTitle,
+          issueUrl,
+        });
       }
 
       return { success: true };
@@ -206,7 +413,7 @@ export async function rejectPptRequest(requestId: string, reason?: string) {
     const name =
       request.requester.legalName || request.requester.user.name || "Developer";
 
-    await notify({
+    await notifyWithPreferences({
       userId: request.requesterId,
       actorId: adminUserId,
       domain: "ppt_request",

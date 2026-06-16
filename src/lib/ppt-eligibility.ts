@@ -1115,6 +1115,8 @@ async function commentGuidanceIfNeeded(
   snapshot: LinearIssueSnapshot,
   reason: PptReason,
 ) {
+  if (reason === "NOT_COMPLETED") return;
+
   const serviceClient = getLinearServiceClient();
   if (!serviceClient) return;
 

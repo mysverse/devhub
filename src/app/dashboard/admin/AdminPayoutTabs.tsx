@@ -1,6 +1,7 @@
 "use client";
 
 import { SimpleGrid, Tabs, TabsList, TabsPanel, TabsTab } from "@mantine/core";
+import { useSearchParams } from "next/navigation";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import AdminBonusesTab, {
@@ -64,20 +65,31 @@ export default function AdminPayoutTabs({
   incentiveAwards: AdminIncentiveAwardData[];
   pptEligibilityStates: AdminPptEligibilityState[];
 }) {
+  const searchParams = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const availableTabs = new Set([
+    ...(pptRequests.length > 0 ? ["ppt-requests"] : []),
+    "bonuses",
+    "incentives",
+    "ppt-eligibility",
+    "pending",
+    "paid",
+    "rejected",
+  ]);
+  const defaultValue = availableTabs.has(requestedTab ?? "")
+    ? (requestedTab as string)
+    : pptRequests.length > 0
+      ? "ppt-requests"
+      : pptEligibilityStates.length > 0
+        ? "ppt-eligibility"
+        : bonusCandidates.length > 0
+          ? "bonuses"
+          : incentiveAwards.some((award) => award.status === "HELD")
+            ? "incentives"
+            : "pending";
+
   return (
-    <Tabs
-      defaultValue={
-        pptRequests.length > 0
-          ? "ppt-requests"
-          : pptEligibilityStates.length > 0
-            ? "ppt-eligibility"
-            : bonusCandidates.length > 0
-              ? "bonuses"
-              : incentiveAwards.some((award) => award.status === "HELD")
-                ? "incentives"
-                : "pending"
-      }
-    >
+    <Tabs defaultValue={defaultValue}>
       <TabsList mb="lg">
         {pptRequests.length > 0 && (
           <TabsTab value="ppt-requests">

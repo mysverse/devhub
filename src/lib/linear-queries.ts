@@ -37,6 +37,12 @@ export type PptBoardIssueDTO = IssueDTO & {
   subIssueCount: number;
 };
 
+export type WorkflowStateDTO = {
+  id: string;
+  name: string;
+  type: string;
+};
+
 type RawLinearClient = LinearClient & {
   client: {
     rawRequest<TData, TVariables extends Record<string, unknown> | undefined>(
@@ -230,7 +236,7 @@ export async function fetchSuggestedPpts(client: LinearClient) {
           first: 10
           filter: {
             assignee: { null: true }
-            state: { type: { eq: "unstarted" } }
+            state: { type: { in: ["backlog", "unstarted"] } }
             labels: { name: { eq: "PPT" } }
           }
         ) {
@@ -257,7 +263,7 @@ export async function fetchPptBoardIssues(client: LinearClient) {
         issues(
           first: 100
           filter: {
-            state: { type: { in: ["unstarted", "started"] } }
+            state: { type: { in: ["backlog", "unstarted", "started"] } }
             labels: { name: { eq: "PPT" } }
           }
         ) {
@@ -293,4 +299,50 @@ export async function fetchIssuesByIds(client: LinearClient, ids: string[]) {
   );
 
   return data.issues.nodes.map(issueDto);
+}
+
+export async function fetchTeamWorkflowStates(
+  client: LinearClient,
+  teamId: string,
+) {
+  const data = await gql<
+    {
+      team: {
+        states: {
+          nodes: WorkflowStateDTO[];
+        };
+      } | null;
+    },
+    { teamId: string }
+  >(
+    client,
+    `
+      query DevHubTeamWorkflowStates($teamId: String!) {
+        team(id: $teamId) {
+          states(first: 50) {
+            nodes { id name type }
+          }
+        }
+      }
+    `,
+    { teamId },
+  );
+
+  return data.team?.states.nodes ?? [];
+}
+
+export async function findTodoWorkflowStateId(
+  client: LinearClient,
+  teamId: string,
+) {
+  const states = await fetchTeamWorkflowStates(client, teamId);
+  return (
+    states.find(
+      (state) =>
+        state.type === "unstarted" &&
+        state.name.trim().toLowerCase() === "todo",
+    )?.id ??
+    states.find((state) => state.type === "unstarted")?.id ??
+    null
+  );
 }

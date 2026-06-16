@@ -24,16 +24,31 @@ import { approvePptRequest, rejectPptRequest } from "./ppt-request-actions";
 export type PptRequestData = {
   id: string;
   requesterName: string;
+  requesterEmail: string | null;
   requesterLinearId: string | null;
   linearIssueId: string | null;
   linearIssueIdentifier: string | null;
   linearIssueTitle: string;
   linearIssueUrl: string | null;
   linearTeamId: string;
+  linearProjectId: string | null;
+  linearProjectName: string | null;
   requestedEstimate: number;
   projectedDueDate: string;
   description: string | null;
   note: string | null;
+  assigneeIntent: "SELF" | "TEAM_MEMBER" | "OPEN";
+  intendedAssigneeLinearId: string | null;
+  intendedAssigneeName: string | null;
+  intendedAssigneeEmail: string | null;
+  attachments: {
+    id: string;
+    filename: string;
+    mimeType: string;
+    byteSize: number;
+    width: number | null;
+    height: number | null;
+  }[];
   createdAt: string;
 };
 
@@ -68,7 +83,11 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
 
   async function handleApprove() {
     setApproving(true);
-    const result = await approvePptRequest(request.id, { assignRequester });
+    const result = await approvePptRequest(request.id, {
+      assigneeTarget: assignRequester
+        ? { type: "requester" }
+        : { type: "open" },
+    });
     setApproving(false);
 
     if (result.error) {

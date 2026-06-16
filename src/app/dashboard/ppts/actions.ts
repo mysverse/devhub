@@ -53,6 +53,42 @@ export async function getLinearProjects(teamId: string) {
   }
 }
 
+export async function searchLinearUsers(query: string) {
+  const { userId } = await getSession();
+  if (!userId) return { error: "Unauthorized" };
+
+  const needle = query.trim().toLowerCase();
+  if (!needle) return { users: [] };
+
+  try {
+    return await withLinearFallback(userId, async (client) => {
+      const users = await client.users({ first: 50 });
+      return {
+        users: users.nodes
+          .filter((user) => {
+            const haystack = [user.name, user.displayName, user.email]
+              .filter(Boolean)
+              .join(" ")
+              .toLowerCase();
+            return haystack.includes(needle);
+          })
+          .slice(0, 10)
+          .map((user) => ({
+            id: user.id,
+            name: user.displayName || user.name || "Unknown",
+            email: user.email ?? null,
+            avatarUrl: user.avatarUrl ?? null,
+          })),
+      };
+    });
+  } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      return { error: "reauth_required", reauth: true };
+    }
+    return { error: (e as Error).message || "Failed to search users" };
+  }
+}
+
 export async function searchLinearIssues(query: string) {
   const { userId } = await getSession();
   if (!userId) return { error: "Unauthorized" };

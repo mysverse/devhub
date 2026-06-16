@@ -16,6 +16,7 @@ const DOMAIN_COPY: Record<string, NotificationPresentation> = {
   payment: { heading: "Payment update", color: "blue", tone: "info" },
   kyc: { heading: "KYC update", color: "blue", tone: "info" },
   ppt_request: { heading: "PPT request update", color: "blue", tone: "info" },
+  ppt_task: { heading: "PPT task update", color: "blue", tone: "info" },
   admin_notice: {
     heading: "Action required",
     color: "yellow",
@@ -44,6 +45,8 @@ const TYPE_OVERRIDES: Record<string, Partial<NotificationPresentation>> = {
   "ppt_request:APPROVED": { color: "green", tone: "positive" },
   "ppt_request:REJECTED": { color: "red", tone: "critical" },
   "ppt_request:SUBMITTED": { color: "blue", tone: "info" },
+  "ppt_task:ASSIGNED_TO_YOU": { color: "green", tone: "positive" },
+  "ppt_task:UNCLAIMED_AVAILABLE": { color: "blue", tone: "info" },
 };
 
 export function notificationPresentation(

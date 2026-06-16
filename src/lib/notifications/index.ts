@@ -9,6 +9,17 @@ export const IN_APP_CHANNEL = "in_app";
 export const EMAIL_CHANNEL = "email";
 
 export type NotificationChannel = typeof IN_APP_CHANNEL | typeof EMAIL_CHANNEL;
+export type NotificationChannelDefaults = Partial<
+  Record<NotificationChannel, boolean>
+>;
+
+const BUILT_IN_CHANNEL_DEFAULTS: Record<string, NotificationChannelDefaults> = {
+  "ppt_request:SUBMITTED": { in_app: true, email: true },
+  "ppt_request:APPROVED": { in_app: true, email: true },
+  "ppt_request:REJECTED": { in_app: true, email: true },
+  "ppt_task:ASSIGNED_TO_YOU": { in_app: true, email: true },
+  "ppt_task:UNCLAIMED_AVAILABLE": { in_app: true, email: false },
+};
 
 type EmailOptions = {
   to?: string | null;
@@ -58,8 +69,58 @@ function clean(value: string | null | undefined) {
   return trimmed || null;
 }
 
-function uniqueChannels(channels: NotificationChannel[] | undefined) {
-  return [...new Set(channels?.length ? channels : [IN_APP_CHANNEL])];
+function uniqueChannels(
+  channels: NotificationChannel[] | undefined,
+): NotificationChannel[] {
+  const fallback: NotificationChannel[] = [IN_APP_CHANNEL];
+  return [
+    ...new Set<NotificationChannel>(channels?.length ? channels : fallback),
+  ];
+}
+
+function preferenceKey(domain: string, type: string) {
+  return `${domain}:${type}`;
+}
+
+export function defaultChannelEnabled(
+  domain: string,
+  type: string,
+  channel: NotificationChannel,
+  defaults?: NotificationChannelDefaults,
+) {
+  return (
+    defaults?.[channel] ??
+    BUILT_IN_CHANNEL_DEFAULTS[preferenceKey(domain, type)]?.[channel] ??
+    true
+  );
+}
+
+export async function enabledNotificationChannels(
+  userId: string,
+  domain: string,
+  type: string,
+  channels: NotificationChannel[],
+  defaults?: NotificationChannelDefaults,
+) {
+  const requestedChannels = uniqueChannels(channels);
+  const preferences = await prisma.notificationPreference.findMany({
+    where: {
+      userId,
+      domain,
+      type,
+      channel: { in: requestedChannels },
+    },
+    select: { channel: true, enabled: true },
+  });
+  const preferenceByChannel = new Map(
+    preferences.map((preference) => [preference.channel, preference.enabled]),
+  );
+
+  return requestedChannels.filter((channel) => {
+    const stored = preferenceByChannel.get(channel);
+    if (stored != null) return stored;
+    return defaultChannelEnabled(domain, type, channel, defaults);
+  });
 }
 
 function deliveryFor(record: NotificationRecord, channel: string) {
@@ -296,6 +357,22 @@ export async function notify(input: NotifyInput) {
   }
 
   return record;
+}
+
+export async function notifyWithPreferences(
+  input: NotifyInput,
+  defaults?: NotificationChannelDefaults,
+) {
+  if (!input.userId) return null;
+  const channels = await enabledNotificationChannels(
+    input.userId,
+    input.domain,
+    input.type,
+    uniqueChannels(input.channels),
+    defaults,
+  );
+  if (channels.length === 0) return null;
+  return notify({ ...input, channels });
 }
 
 export async function listUnreadInAppNotifications(userId: string, take = 20) {

@@ -99,6 +99,7 @@ model UserProfile {
   pptPayoutStates         PptPayoutState[]        @relation("PptPayoutStateUser")
   notificationsReceived   Notification[]         @relation("NotificationRecipient")
   notificationsActed      Notification[]         @relation("NotificationActor")
+  notificationPreferences NotificationPreference[]
   bonusCandidates         BonusCandidate[]        @relation("BonusCandidateUser")
   bonusReviews            BonusCandidate[]        @relation("BonusCandidateReviewer")
   issueCompletions        IssueCompletion[]       @relation("IssueCompletionUser")
@@ -110,6 +111,7 @@ model UserProfile {
   signedDocuments         SignedDocument[]
   pptRequestsMade         PptRequest[]            @relation("PptRequestRequester")
   pptRequestsReviewed     PptRequest[]            @relation("PptRequestReviewer")
+  pptRequestAttachments   PptRequestAttachment[]  @relation("PptRequestAttachmentUploader")
   kycVerifications        KycVerification[]
   welcomePackOrders       WelcomePackOrder[]
   projectMemberships      ProjectMembership[]     @relation("ProjectMember")
@@ -204,6 +206,24 @@ model NotificationDelivery {
   @@index([channel, status])
   @@index([channel, readAt])
   @@index([notificationId])
+}
+
+model NotificationPreference {
+  id      String      @id @default(cuid())
+  userId  String
+  user    UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  domain  String
+  type    String
+  channel String
+  enabled Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, domain, type, channel])
+  @@index([userId])
+  @@index([domain, type])
 }
 
 enum Role {
@@ -883,6 +903,12 @@ enum PptRequestStatus {
   REJECTED
 }
 
+enum PptRequestAssigneeIntent {
+  SELF
+  TEAM_MEMBER
+  OPEN
+}
+
 model PptRequest {
   id          String       @id @default(cuid())
   requesterId String
@@ -896,12 +922,19 @@ model PptRequest {
   linearIssueTitle      String
   linearIssueUrl        String?
   linearTeamId          String
+  linearProjectId       String?
+  linearProjectName     String?
 
   // Request details
-  requestedEstimate Int
-  projectedDueDate  DateTime
-  description       String?
-  note              String?
+  requestedEstimate      Int
+  projectedDueDate       DateTime
+  description            String?
+  note                   String?
+  assigneeIntent         PptRequestAssigneeIntent @default(SELF)
+  intendedAssigneeLinearId String?
+  intendedAssigneeName     String?
+  intendedAssigneeEmail    String?
+  attachments              PptRequestAttachment[]
 
   // Status
   status          PptRequestStatus @default(PENDING)
@@ -911,6 +944,29 @@ model PptRequest {
 
   @@index([requesterId])
   @@index([status])
+  @@index([assigneeIntent])
+}
+
+model PptRequestAttachment {
+  id          String     @id @default(cuid())
+  requestId   String
+  request     PptRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedById String
+  uploadedBy   UserProfile @relation("PptRequestAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  filename       String
+  mimeType       String
+  byteSize       Int
+  width          Int?
+  height         Int?
+  linearAssetUrl String
+  sortOrder      Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([requestId, sortOrder])
+  @@index([uploadedById])
 }
 
 // ── KYC Verification tables ─────────────────────────────────────────────────

@@ -375,6 +375,46 @@ export async function notifyWithPreferences(
   return notify({ ...input, channels });
 }
 
+type InAppDelivery = Prisma.NotificationDeliveryGetPayload<{
+  include: { notification: true };
+}>;
+
+export type SerializedNotification = {
+  id: string;
+  notificationId: string;
+  domain: string;
+  type: string;
+  title: string;
+  message: string;
+  href: string | null;
+  entityType: string | null;
+  entityId: string | null;
+  payload: Prisma.JsonValue;
+  readAt: string | null;
+  createdAt: string;
+};
+
+/** Flatten an in-app delivery (+ its notification) into the shape the toast,
+ * bell, and notifications page consume. */
+export function serializeInAppDelivery(
+  delivery: InAppDelivery,
+): SerializedNotification {
+  return {
+    id: delivery.id,
+    notificationId: delivery.notificationId,
+    domain: delivery.notification.domain,
+    type: delivery.notification.type,
+    title: delivery.notification.title,
+    message: delivery.notification.message,
+    href: delivery.notification.href,
+    entityType: delivery.notification.entityType,
+    entityId: delivery.notification.entityId,
+    payload: delivery.notification.payload,
+    readAt: delivery.readAt?.toISOString() ?? null,
+    createdAt: delivery.notification.createdAt.toISOString(),
+  };
+}
+
 export async function listUnreadInAppNotifications(userId: string, take = 20) {
   return prisma.notificationDelivery.findMany({
     where: {
@@ -385,6 +425,45 @@ export async function listUnreadInAppNotifications(userId: string, take = 20) {
     include: { notification: true },
     orderBy: { createdAt: "asc" },
     take,
+  });
+}
+
+/** In-app deliveries that have not yet been shown as a toast. Drives the
+ * NotificationPoller; oldest-first so toasts surface in arrival order. */
+export async function listUnseenInAppNotifications(userId: string, take = 30) {
+  return prisma.notificationDelivery.findMany({
+    where: {
+      channel: IN_APP_CHANNEL,
+      seenAt: null,
+      notification: { userId },
+    },
+    include: { notification: true },
+    orderBy: { createdAt: "asc" },
+    take,
+  });
+}
+
+/** Recent in-app deliveries regardless of read state. Drives the bell
+ * dropdown and the notifications page; newest-first. */
+export async function listInAppNotifications(userId: string, take = 30) {
+  return prisma.notificationDelivery.findMany({
+    where: {
+      channel: IN_APP_CHANNEL,
+      notification: { userId },
+    },
+    include: { notification: true },
+    orderBy: { createdAt: "desc" },
+    take,
+  });
+}
+
+export async function countUnreadInAppNotifications(userId: string) {
+  return prisma.notificationDelivery.count({
+    where: {
+      channel: IN_APP_CHANNEL,
+      readAt: null,
+      notification: { userId },
+    },
   });
 }
 
@@ -401,6 +480,36 @@ export async function markInAppNotificationsRead(
       notification: { userId },
     },
     data: { readAt: new Date() },
+  });
+}
+
+export async function markAllInAppNotificationsRead(userId: string) {
+  await prisma.notificationDelivery.updateMany({
+    where: {
+      channel: IN_APP_CHANNEL,
+      readAt: null,
+      notification: { userId },
+    },
+    data: { readAt: new Date() },
+  });
+}
+
+/** Records that toasts have been shown for these deliveries so they are not
+ * re-toasted. Distinct from read state — a seen item stays unread until the
+ * user opens the inbox. */
+export async function markInAppNotificationsSeen(
+  userId: string,
+  deliveryIds: string[],
+) {
+  if (deliveryIds.length === 0) return;
+  await prisma.notificationDelivery.updateMany({
+    where: {
+      id: { in: deliveryIds },
+      channel: IN_APP_CHANNEL,
+      seenAt: null,
+      notification: { userId },
+    },
+    data: { seenAt: new Date() },
   });
 }
 

@@ -2,8 +2,13 @@ import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
 import { recordUserActivityDay } from "@/lib/incentives";
 import {
-  listUnreadInAppNotifications,
+  countUnreadInAppNotifications,
+  listInAppNotifications,
+  listUnseenInAppNotifications,
+  markAllInAppNotificationsRead,
   markInAppNotificationsRead,
+  markInAppNotificationsSeen,
+  serializeInAppDelivery,
 } from "@/lib/notifications";
 
 export async function GET() {
@@ -12,25 +17,17 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const [deliveries] = await Promise.all([
-    listUnreadInAppNotifications(userId, 30),
+  const [notifications, unread, unseen] = await Promise.all([
+    listInAppNotifications(userId, 30),
+    countUnreadInAppNotifications(userId),
+    listUnseenInAppNotifications(userId, 30),
     recordUserActivityDay(userId),
   ]);
 
   return NextResponse.json({
-    notifications: deliveries.map((delivery) => ({
-      id: delivery.id,
-      notificationId: delivery.notificationId,
-      domain: delivery.notification.domain,
-      type: delivery.notification.type,
-      title: delivery.notification.title,
-      message: delivery.notification.message,
-      href: delivery.notification.href,
-      entityType: delivery.notification.entityType,
-      entityId: delivery.notification.entityId,
-      payload: delivery.notification.payload,
-      createdAt: delivery.notification.createdAt.toISOString(),
-    })),
+    notifications: notifications.map(serializeInAppDelivery),
+    unreadCount: unread,
+    unseen: unseen.map(serializeInAppDelivery),
   });
 }
 
@@ -41,13 +38,27 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => ({}))) as {
+    action?: string;
     ids?: string[];
   };
+  const action = body.action ?? "read";
   const ids = Array.isArray(body.ids)
     ? body.ids.filter((id): id is string => typeof id === "string")
     : [];
 
-  await markInAppNotificationsRead(userId, ids);
+  switch (action) {
+    case "seen":
+      await markInAppNotificationsSeen(userId, ids);
+      break;
+    case "read":
+      await markInAppNotificationsRead(userId, ids);
+      break;
+    case "read-all":
+      await markAllInAppNotificationsRead(userId);
+      break;
+    default:
+      return NextResponse.json({ error: "Unknown action" }, { status: 400 });
+  }
 
   return NextResponse.json({ success: true });
 }

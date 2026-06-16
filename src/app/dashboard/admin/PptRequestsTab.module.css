@@ -1,0 +1,15 @@
+/* Single column on phones; the asymmetric two-column master/detail layout
+ * only kicks in once there's room (sm+). Below that the fixed 260px list
+ * column would crush the detail card and overflow the viewport. */
+.requestGrid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--mantine-spacing-lg);
+}
+
+/* 48em === Mantine's `sm` breakpoint. */
+@media (min-width: 48em) {
+  .requestGrid {
+    grid-template-columns: minmax(260px, 0.42fr) minmax(0, 1fr);
+  }
+}

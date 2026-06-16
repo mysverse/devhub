@@ -27,6 +27,7 @@ import ConfirmModal from "@/components/ConfirmModal";
 import EmptyState from "@/components/EmptyState";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import type { PptRequestData } from "./PptRequestCard";
+import classes from "./PptRequestsTab.module.css";
 import { approvePptRequest, rejectPptRequest } from "./ppt-request-actions";
 
 type AssigneeChoice = "requester" | "suggested" | "open" | "keep_existing";
@@ -222,13 +223,7 @@ export default function PptRequestsTab({
   return (
     <>
       <StaggerContainer>
-        <Box
-          style={{
-            display: "grid",
-            gridTemplateColumns: "minmax(260px, 0.42fr) minmax(0, 1fr)",
-            gap: "var(--mantine-spacing-lg)",
-          }}
-        >
+        <Box className={classes.requestGrid}>
           <StaggerItem>
             <Card withBorder radius="md" padding="md">
               <Stack gap="sm">

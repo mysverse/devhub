@@ -18,6 +18,7 @@ import { buildSocialMetadata } from "@/lib/social-previews";
 import InviteGenerator from "./InviteGenerator";
 import KycStatus from "./KycStatus";
 import LinkedAccounts from "./LinkedAccounts";
+import NotificationPreferences from "./NotificationPreferences";
 import SettingsForm from "./SettingsForm";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/settings");
@@ -43,20 +44,33 @@ async function SettingsContent() {
     redirect("/");
   }
 
-  const [userProfile, linkedAccounts, latestKyc] = await Promise.all([
-    prisma.userProfile.findUnique({
-      where: { id: userId },
-    }),
-    prisma.account.findMany({
-      where: { userId },
-      select: { providerId: true, accountId: true },
-    }),
-    prisma.kycVerification.findFirst({
-      where: { userId },
-      orderBy: { submittedAt: "desc" },
-      select: { status: true, rejectionReason: true },
-    }),
-  ]);
+  const [userProfile, linkedAccounts, latestKyc, notificationPreferences] =
+    await Promise.all([
+      prisma.userProfile.findUnique({
+        where: { id: userId },
+      }),
+      prisma.account.findMany({
+        where: { userId },
+        select: { providerId: true, accountId: true },
+      }),
+      prisma.kycVerification.findFirst({
+        where: { userId },
+        orderBy: { submittedAt: "desc" },
+        select: { status: true, rejectionReason: true },
+      }),
+      prisma.notificationPreference.findMany({
+        where: {
+          userId,
+          OR: [{ domain: "ppt_request" }, { domain: "ppt_task" }],
+        },
+        select: {
+          domain: true,
+          type: true,
+          channel: true,
+          enabled: true,
+        },
+      }),
+    ]);
 
   if (!userProfile) {
     redirect("/dashboard");
@@ -83,6 +97,10 @@ async function SettingsContent() {
             robloxLinked={!!userProfile.robloxId}
             robuxPayoutAvailability={robuxPayoutAvailability}
           />
+        </StaggerItem>
+
+        <StaggerItem>
+          <NotificationPreferences preferences={notificationPreferences} />
         </StaggerItem>
 
         {requiresKycForAutoPayout(userProfile.bankName) && (

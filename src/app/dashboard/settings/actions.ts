@@ -11,6 +11,19 @@ import {
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
+const NOTIFICATION_PREFERENCE_KEYS = new Set([
+  "ppt_request:SUBMITTED:in_app",
+  "ppt_request:SUBMITTED:email",
+  "ppt_request:APPROVED:in_app",
+  "ppt_request:APPROVED:email",
+  "ppt_request:REJECTED:in_app",
+  "ppt_request:REJECTED:email",
+  "ppt_task:ASSIGNED_TO_YOU:in_app",
+  "ppt_task:ASSIGNED_TO_YOU:email",
+  "ppt_task:UNCLAIMED_AVAILABLE:in_app",
+  "ppt_task:UNCLAIMED_AVAILABLE:email",
+]);
+
 const SettingsSchema = z
   .object({
     legalName: z.string().optional().nullable(),
@@ -140,6 +153,43 @@ export async function updateAutoPayoutSetting(enabled: boolean) {
   await prisma.userProfile.update({
     where: { id: userId },
     data: { autoPayoutEnabled: enabled },
+  });
+
+  revalidatePath("/dashboard/settings");
+  return { success: true };
+}
+
+export async function updateNotificationPreference(input: {
+  domain: string;
+  type: string;
+  channel: string;
+  enabled: boolean;
+}) {
+  const { userId } = await getSession();
+  if (!userId) throw new Error("Unauthorized");
+
+  const key = `${input.domain}:${input.type}:${input.channel}`;
+  if (!NOTIFICATION_PREFERENCE_KEYS.has(key)) {
+    return { error: "Unknown notification preference" };
+  }
+
+  await prisma.notificationPreference.upsert({
+    where: {
+      userId_domain_type_channel: {
+        userId,
+        domain: input.domain,
+        type: input.type,
+        channel: input.channel,
+      },
+    },
+    update: { enabled: input.enabled },
+    create: {
+      userId,
+      domain: input.domain,
+      type: input.type,
+      channel: input.channel,
+      enabled: input.enabled,
+    },
   });
 
   revalidatePath("/dashboard/settings");

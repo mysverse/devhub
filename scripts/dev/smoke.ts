@@ -29,6 +29,7 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
     "/dashboard/documents/COI",
     "/dashboard/settings",
     "/dashboard/welcome-pack",
+    "/dashboard/notifications",
     "/api/notifications",
   ],
   admin: [
@@ -39,6 +40,7 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
     "/dashboard/admin/access",
     "/dashboard/admin/documents",
     "/dashboard/admin/welcome-pack",
+    "/dashboard/notifications",
   ],
   fresh: ["/onboarding"],
 };

@@ -725,6 +725,7 @@ export async function seed() {
         "Add weapon holstering animations cleared all checks and is queued for payout.",
       createdAt: daysAgo(2),
       readAt: null,
+      seenAt: null,
     },
     {
       stateId: pptStateIdByIdentifier.get("MYS-230") as string,
@@ -733,6 +734,7 @@ export async function seed() {
       message: "Prototype drone camera system was canceled before payout.",
       createdAt: daysAgo(7),
       readAt: null,
+      seenAt: daysAgo(7),
     },
     {
       stateId: pptStateIdByIdentifier.get("MYS-220") as string,
@@ -741,6 +743,7 @@ export async function seed() {
       message: "Ship patrol radio overhaul proof was accepted.",
       readAt: daysAgo(6),
       createdAt: daysAgo(8),
+      seenAt: daysAgo(6),
     },
   ]) {
     await prisma.notification.create({
@@ -761,6 +764,7 @@ export async function seed() {
             status: "SENT",
             sentAt: notification.createdAt,
             readAt: notification.readAt,
+            seenAt: notification.seenAt,
             createdAt: notification.createdAt,
           },
         },
@@ -886,6 +890,7 @@ export async function seed() {
           channel: "in_app",
           status: "SENT",
           sentAt: daysAgo(4),
+          seenAt: daysAgo(4),
           createdAt: daysAgo(4),
         },
       },
@@ -1041,6 +1046,7 @@ export async function seed() {
           channel: "in_app",
           status: "SENT",
           sentAt: daysAgo(1),
+          seenAt: daysAgo(1),
           createdAt: daysAgo(1),
         },
       },
@@ -1508,6 +1514,7 @@ export async function seed() {
           channel: "in_app",
           status: "SENT",
           sentAt: daysAgo(13),
+          seenAt: daysAgo(13),
           createdAt: daysAgo(13),
         },
       },

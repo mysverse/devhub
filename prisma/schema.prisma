@@ -194,6 +194,7 @@ model NotificationDelivery {
   channel          String
   status           String   @default("PENDING")
   readAt           DateTime?
+  seenAt           DateTime?
   sentAt           DateTime?
   skippedReason    String?
   failedReason     String?
@@ -205,6 +206,7 @@ model NotificationDelivery {
   @@unique([notificationId, channel])
   @@index([channel, status])
   @@index([channel, readAt])
+  @@index([channel, seenAt])
   @@index([notificationId])
 }
 

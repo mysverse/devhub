@@ -83,6 +83,11 @@ export type WelcomePackConfigInput = {
   defaultInternationalFulfillmentDays?: number | null;
   defaultDomesticDeliveryDays?: number | null;
   defaultInternationalDeliveryDays?: number | null;
+  defaultParcelWeightKg?: number | null;
+  defaultParcelLengthCm?: number | null;
+  defaultParcelWidthCm?: number | null;
+  defaultParcelHeightCm?: number | null;
+  defaultParcelCurrency?: string | null;
   idCardWidth?: number | null;
   idCardHeight?: number | null;
   idCardNameX?: number | null;
@@ -115,6 +120,12 @@ function parseLeadDays(value: number | null | undefined, fallback: number) {
   const parsed = Number(value ?? fallback);
   if (!Number.isFinite(parsed)) return fallback;
   return Math.min(365, Math.max(0, Math.floor(parsed)));
+}
+
+/** A positive finite number, else null (used for optional parcel defaults). */
+function positiveOrNull(value: number | null | undefined): number | null {
+  if (value === null || value === undefined) return null;
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function estimateDatesFromDefaults(
@@ -197,6 +208,12 @@ export async function saveWelcomePackConfig(input: WelcomePackConfigInput) {
       input.defaultInternationalDeliveryDays,
       14,
     ),
+    defaultParcelWeightKg: positiveOrNull(input.defaultParcelWeightKg),
+    defaultParcelLengthCm: positiveOrNull(input.defaultParcelLengthCm),
+    defaultParcelWidthCm: positiveOrNull(input.defaultParcelWidthCm),
+    defaultParcelHeightCm: positiveOrNull(input.defaultParcelHeightCm),
+    defaultParcelCurrency:
+      input.defaultParcelCurrency?.trim().toUpperCase() || null,
     idCardWidth: input.idCardWidth ?? null,
     idCardHeight: input.idCardHeight ?? null,
     idCardNameX: input.idCardNameX ?? null,
@@ -254,6 +271,9 @@ export type WelcomePackItemInput = {
   description?: string;
   requiresSize: boolean;
   sizeOptions: string[];
+  customsDescription?: string | null;
+  declaredUnitValue?: number | null;
+  hsCode?: string | null;
   displayOrder: number;
   isActive: boolean;
   /**
@@ -315,6 +335,9 @@ export async function saveWelcomePackItem(input: WelcomePackItemInput) {
     description: input.description?.trim() || null,
     requiresSize: input.requiresSize,
     sizeOptions,
+    customsDescription: input.customsDescription?.trim() || null,
+    declaredUnitValue: positiveOrNull(input.declaredUnitValue),
+    hsCode: input.hsCode?.trim() || null,
     displayOrder: input.displayOrder,
     isActive: input.isActive,
   };
@@ -1280,6 +1303,105 @@ export async function updateWelcomePackOrderLogisticsAdmin(
     success: true,
     ...(email ? { emailSent: email.sent, emailDetail: email.detail } : {}),
   };
+}
+
+export type AdminParcelCustomsInput = {
+  parcelWeightKg?: number | null;
+  parcelLengthCm?: number | null;
+  parcelWidthCm?: number | null;
+  parcelHeightCm?: number | null;
+  addressIsResidential?: boolean | null;
+  taxId?: string | null;
+};
+
+/**
+ * Set per-order EasyParcel parcel overrides + customs identity. A null numeric
+ * clears the override so the order falls back to the pack default. Allowed on
+ * any non-terminal order (parcel/customs is corrected before carrier export).
+ */
+export async function updateWelcomePackOrderParcelCustomsAdmin(
+  orderId: string,
+  input: AdminParcelCustomsInput,
+) {
+  const adminId = await requireAdmin();
+
+  const dims: [number | null | undefined, string][] = [
+    [input.parcelWeightKg, "Parcel weight"],
+    [input.parcelLengthCm, "Parcel length"],
+    [input.parcelWidthCm, "Parcel width"],
+    [input.parcelHeightCm, "Parcel height"],
+  ];
+  for (const [v, label] of dims) {
+    if (v !== undefined && v !== null && (!Number.isFinite(v) || v <= 0)) {
+      return { error: `${label} must be a positive number or left blank` };
+    }
+  }
+
+  const order = await prisma.welcomePackOrder.findUnique({
+    where: { id: orderId },
+    select: {
+      status: true,
+      parcelWeightKg: true,
+      parcelLengthCm: true,
+      parcelWidthCm: true,
+      parcelHeightCm: true,
+      addressIsResidential: true,
+      taxId: true,
+    },
+  });
+  if (!order) return { error: "Order not found" };
+  if (order.status === "CANCELLED" || order.status === "REJECTED") {
+    return {
+      error: `Order is ${order.status.toLowerCase()} — parcel details cannot be edited`,
+    };
+  }
+
+  const after = {
+    parcelWeightKg: input.parcelWeightKg ?? null,
+    parcelLengthCm: input.parcelLengthCm ?? null,
+    parcelWidthCm: input.parcelWidthCm ?? null,
+    parcelHeightCm: input.parcelHeightCm ?? null,
+    addressIsResidential: input.addressIsResidential ?? null,
+    taxId: input.taxId?.trim() || null,
+  };
+  const before = {
+    parcelWeightKg: order.parcelWeightKg,
+    parcelLengthCm: order.parcelLengthCm,
+    parcelWidthCm: order.parcelWidthCm,
+    parcelHeightCm: order.parcelHeightCm,
+    addressIsResidential: order.addressIsResidential,
+    taxId: order.taxId,
+  };
+  const diff = diffForEvent(before, after, [
+    "parcelWeightKg",
+    "parcelLengthCm",
+    "parcelWidthCm",
+    "parcelHeightCm",
+    "addressIsResidential",
+    "taxId",
+  ]);
+  if (Object.keys(diff.after).length === 0) return { success: true };
+
+  const ok = await prisma.$transaction(async (tx) => {
+    const result = await tx.welcomePackOrder.updateMany({
+      where: { id: orderId, status: { notIn: ["CANCELLED", "REJECTED"] } },
+      data: after,
+    });
+    if (result.count === 0) return false;
+    await logOrderEvent(tx, {
+      orderId,
+      actorId: adminId,
+      actorRole: "ADMIN",
+      type: "PARCEL_CUSTOMS_UPDATED",
+      message: "Parcel & customs details updated by admin",
+      metadata: diff as unknown as Prisma.InputJsonValue,
+    });
+    return true;
+  });
+  if (!ok) return statusConflictError(orderId);
+
+  refreshAdminPaths();
+  return { success: true };
 }
 
 export async function markWelcomePackOrderDelayed(

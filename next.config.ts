@@ -3,6 +3,13 @@ import { PHASE_PRODUCTION_BUILD } from "next/constants";
 
 const nextConfig: NextConfig = {
   cacheComponents: true,
+  // The EasyParcel export route reads the committed .xlsx template from disk at
+  // runtime; trace it into that route's bundle so it survives deployment.
+  outputFileTracingIncludes: {
+    "/api/admin/welcome-pack/export/easyparcel": [
+      "./src/lib/welcome-pack/easyparcel-template.xlsx",
+    ],
+  },
   experimental: {
     // Switches App Router to the vendored experimental React channel, which
     // exports ViewTransition/addTransitionType — required by

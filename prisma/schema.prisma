@@ -1051,6 +1051,17 @@ model WelcomePack {
   defaultDomesticDeliveryDays         Int @default(3)
   defaultInternationalDeliveryDays    Int @default(14)
 
+  // Default parcel dimensions/weight + declared-value currency used to fill the
+  // EasyParcel export when an order has no per-order override. Nullable so
+  // existing packs stay "not export-ready" until an admin sets real values
+  // rather than shipping guessed parcel data. Currency must be one of the
+  // template-supported codes (see EASYPARCEL_CURRENCIES).
+  defaultParcelWeightKg  Float?
+  defaultParcelLengthCm  Float?
+  defaultParcelWidthCm   Float?
+  defaultParcelHeightCm  Float?
+  defaultParcelCurrency  String?
+
   // ID card overlay configuration
   idCardTemplateBlobUrl String?
   idCardWidth           Int?
@@ -1089,6 +1100,14 @@ model WelcomePackItem {
   requiresSize     Boolean  @default(false)
   sizeChartBlobUrl String?
   sizeOptions      String[]
+
+  // Customs declaration data — intrinsic to the item, used per line on the
+  // EasyParcel export (Item Name / Price Per Item / HS Code columns).
+  // Nullable so existing items are "not export-ready" until an admin fills
+  // them; declared value is in the pack's default parcel currency.
+  customsDescription String?
+  declaredUnitValue  Float?
+  hsCode             String?
 
   displayOrder Int     @default(0)
   isActive     Boolean @default(true)
@@ -1138,6 +1157,23 @@ model WelcomePackOrder {
   delayReason            String?
   notes           String?
   rejectionReason String?
+
+  // Per-order EasyParcel logistics. Parcel dims/weight override the pack
+  // defaults when the actual parcel differs; null = fall back to pack default.
+  // addressIsResidential maps to the template's residential Yes/No column;
+  // taxId is required for international customs. All nullable: legacy orders
+  // stay "not export-ready" rather than getting invented values.
+  parcelWeightKg       Float?
+  parcelLengthCm       Float?
+  parcelWidthCm        Float?
+  parcelHeightCm       Float?
+  addressIsResidential Boolean?
+  taxId                String?
+
+  // EasyParcel export audit — drives the "previously exported" badge and the
+  // re-export confirmation guard.
+  easyParcelExportedAt  DateTime?
+  easyParcelExportCount Int       @default(0)
 
   // Audit trail of the eligibility check that admitted this order — for
   // wave 1 this is the qualifying Linear issues; for wave 2 it just records

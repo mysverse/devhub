@@ -17,7 +17,9 @@ export type WelcomePackOrderEventType =
   | "DELAYED"
   | "USER_UPDATED"
   | "ITEM_CONFIG_CHANGED"
-  | "NOTIFICATION_RESENT";
+  | "NOTIFICATION_RESENT"
+  | "PARCEL_CUSTOMS_UPDATED"
+  | "EASYPARCEL_EXPORTED";
 
 export type WelcomePackOrderActorRole = "ADMIN" | "USER" | "SYSTEM";
 

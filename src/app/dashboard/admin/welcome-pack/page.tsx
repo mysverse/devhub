@@ -8,6 +8,10 @@ import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
+import {
+  type ExportableOrder,
+  evaluateOrdersForExport,
+} from "@/lib/welcome-pack/easyparcel-validation";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
 import OrdersTable, {
@@ -61,9 +65,30 @@ async function AdminWelcomePackContent() {
         user: {
           include: { user: { select: { email: true, name: true } } },
         },
-        pack: { select: { id: true, name: true, isActive: true } },
+        pack: {
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+            defaultParcelWeightKg: true,
+            defaultParcelLengthCm: true,
+            defaultParcelWidthCm: true,
+            defaultParcelHeightCm: true,
+            defaultParcelCurrency: true,
+          },
+        },
         selections: {
-          include: { item: { select: { id: true, name: true } } },
+          include: {
+            item: {
+              select: {
+                id: true,
+                name: true,
+                customsDescription: true,
+                declaredUnitValue: true,
+                hsCode: true,
+              },
+            },
+          },
         },
         events: { orderBy: { createdAt: "asc" } },
       },
@@ -111,6 +136,11 @@ async function AdminWelcomePackContent() {
           pack.defaultInternationalFulfillmentDays,
         defaultDomesticDeliveryDays: pack.defaultDomesticDeliveryDays,
         defaultInternationalDeliveryDays: pack.defaultInternationalDeliveryDays,
+        defaultParcelWeightKg: pack.defaultParcelWeightKg,
+        defaultParcelLengthCm: pack.defaultParcelLengthCm,
+        defaultParcelWidthCm: pack.defaultParcelWidthCm,
+        defaultParcelHeightCm: pack.defaultParcelHeightCm,
+        defaultParcelCurrency: pack.defaultParcelCurrency,
         idCardTemplateBlobUrl: pack.idCardTemplateBlobUrl
           ? welcomePackAssetUrl("id-card-template", pack.id, pack.updatedAt)
           : null,
@@ -142,6 +172,11 @@ async function AdminWelcomePackContent() {
         defaultInternationalFulfillmentDays: 21,
         defaultDomesticDeliveryDays: 3,
         defaultInternationalDeliveryDays: 14,
+        defaultParcelWeightKg: null,
+        defaultParcelLengthCm: null,
+        defaultParcelWidthCm: null,
+        defaultParcelHeightCm: null,
+        defaultParcelCurrency: null,
         idCardTemplateBlobUrl: null,
         idCardWidth: null,
         idCardHeight: null,
@@ -168,6 +203,9 @@ async function AdminWelcomePackContent() {
       ? welcomePackAssetUrl("size-chart", i.id, i.updatedAt)
       : null,
     sizeOptions: i.sizeOptions,
+    customsDescription: i.customsDescription,
+    declaredUnitValue: i.declaredUnitValue,
+    hsCode: i.hsCode,
     displayOrder: i.displayOrder,
     isActive: i.isActive,
   }));
@@ -181,61 +219,130 @@ async function AdminWelcomePackContent() {
     isActive: i.isActive,
   }));
 
-  const orders: AdminOrderRow[] = orderRecords.map((o) => ({
-    id: o.id,
-    status: o.status,
-    wave: o.wave,
-    packName: o.pack.name,
-    packIsActive: o.pack.isActive,
-    recipientName: o.recipientName,
-    developerName:
-      o.user.legalName || o.user.user.name || o.recipientName || "Developer",
-    developerEmail: o.user.user.email ?? null,
-    region: o.region,
-    idCardName: o.idCardName,
-    phone: o.phone,
-    addressLine1: o.addressLine1,
-    addressLine2: o.addressLine2,
-    city: o.city,
-    stateProvince: o.stateProvince,
-    postalCode: o.postalCode,
-    country: o.country,
-    notes: o.notes,
-    trackingNumber: o.trackingNumber,
-    trackingUrl: o.trackingUrl,
-    carrierName: o.carrierName,
-    estimatedFulfillmentAt: o.estimatedFulfillmentAt?.toISOString() ?? null,
-    estimatedDeliveryAt: o.estimatedDeliveryAt?.toISOString() ?? null,
-    logisticsNote: o.logisticsNote,
-    delayedAt: o.delayedAt?.toISOString() ?? null,
-    delayReason: o.delayReason,
-    rejectionReason: o.rejectionReason,
-    createdAt: o.createdAt.toISOString(),
-    approvedAt: o.approvedAt?.toISOString() ?? null,
-    shippedAt: o.shippedAt?.toISOString() ?? null,
-    deliveredAt: o.deliveredAt?.toISOString() ?? null,
-    selections: o.selections.map((s) => ({
-      itemId: s.item.id,
-      itemName: s.item.name,
-      selectedSize: s.selectedSize,
-    })),
-    events: o.events.map(
-      (e): AdminOrderEvent => ({
-        id: e.id,
-        type: e.type,
-        actorRole: e.actorRole,
-        actorName: e.actorId ? (actorNames.get(e.actorId) ?? null) : null,
-        message: e.message,
-        metadata: e.metadata,
-        createdAt: e.createdAt.toISOString(),
-      }),
-    ),
-  }));
+  // Server-side export readiness so the Orders tab can badge/filter without
+  // bundling the validation + phone libraries into the client. The export API
+  // re-validates authoritatively before generating the workbook.
+  const readinessByOrder = new Map(
+    evaluateOrdersForExport(
+      orderRecords.map(
+        (o): ExportableOrder => ({
+          id: o.id,
+          reference: o.id,
+          status: o.status,
+          region: o.region,
+          recipientName: o.recipientName,
+          email: o.user.user.email ?? null,
+          phone: o.phone,
+          addressLine1: o.addressLine1,
+          addressLine2: o.addressLine2,
+          city: o.city,
+          stateProvince: o.stateProvince,
+          postalCode: o.postalCode,
+          country: o.country,
+          addressIsResidential: o.addressIsResidential,
+          taxId: o.taxId,
+          parcelWeightKg: o.parcelWeightKg,
+          parcelLengthCm: o.parcelLengthCm,
+          parcelWidthCm: o.parcelWidthCm,
+          parcelHeightCm: o.parcelHeightCm,
+          easyParcelExportCount: o.easyParcelExportCount,
+          pack: {
+            defaultParcelWeightKg: o.pack.defaultParcelWeightKg,
+            defaultParcelLengthCm: o.pack.defaultParcelLengthCm,
+            defaultParcelWidthCm: o.pack.defaultParcelWidthCm,
+            defaultParcelHeightCm: o.pack.defaultParcelHeightCm,
+            defaultParcelCurrency: o.pack.defaultParcelCurrency,
+          },
+          items: o.selections.map((s) => ({
+            name: s.item.name,
+            customsDescription: s.item.customsDescription,
+            declaredUnitValue: s.item.declaredUnitValue,
+            hsCode: s.item.hsCode,
+          })),
+        }),
+      ),
+    ).map((r) => [r.orderId, r]),
+  );
+
+  const orders: AdminOrderRow[] = orderRecords.map((o) => {
+    const readiness = readinessByOrder.get(o.id);
+    return {
+      id: o.id,
+      status: o.status,
+      wave: o.wave,
+      packName: o.pack.name,
+      packIsActive: o.pack.isActive,
+      recipientName: o.recipientName,
+      developerName:
+        o.user.legalName || o.user.user.name || o.recipientName || "Developer",
+      developerEmail: o.user.user.email ?? null,
+      region: o.region,
+      idCardName: o.idCardName,
+      phone: o.phone,
+      addressLine1: o.addressLine1,
+      addressLine2: o.addressLine2,
+      city: o.city,
+      stateProvince: o.stateProvince,
+      postalCode: o.postalCode,
+      country: o.country,
+      addressIsResidential: o.addressIsResidential,
+      taxId: o.taxId,
+      parcelWeightKg: o.parcelWeightKg,
+      parcelLengthCm: o.parcelLengthCm,
+      parcelWidthCm: o.parcelWidthCm,
+      parcelHeightCm: o.parcelHeightCm,
+      easyParcelExportCount: o.easyParcelExportCount,
+      easyParcelExportedAt: o.easyParcelExportedAt?.toISOString() ?? null,
+      exportReady: readiness?.ok ?? false,
+      exportIssues:
+        readiness && !readiness.ok
+          ? readiness.issues.map((i) => i.message)
+          : [],
+      notes: o.notes,
+      trackingNumber: o.trackingNumber,
+      trackingUrl: o.trackingUrl,
+      carrierName: o.carrierName,
+      estimatedFulfillmentAt: o.estimatedFulfillmentAt?.toISOString() ?? null,
+      estimatedDeliveryAt: o.estimatedDeliveryAt?.toISOString() ?? null,
+      logisticsNote: o.logisticsNote,
+      delayedAt: o.delayedAt?.toISOString() ?? null,
+      delayReason: o.delayReason,
+      rejectionReason: o.rejectionReason,
+      createdAt: o.createdAt.toISOString(),
+      approvedAt: o.approvedAt?.toISOString() ?? null,
+      shippedAt: o.shippedAt?.toISOString() ?? null,
+      deliveredAt: o.deliveredAt?.toISOString() ?? null,
+      selections: o.selections.map((s) => ({
+        itemId: s.item.id,
+        itemName: s.item.name,
+        selectedSize: s.selectedSize,
+      })),
+      events: o.events.map(
+        (e): AdminOrderEvent => ({
+          id: e.id,
+          type: e.type,
+          actorRole: e.actorRole,
+          actorName: e.actorId ? (actorNames.get(e.actorId) ?? null) : null,
+          message: e.message,
+          metadata: e.metadata,
+          createdAt: e.createdAt.toISOString(),
+        }),
+      ),
+    };
+  });
 
   const pendingCount = orders.filter((o) => o.status === "PENDING").length;
 
+  const packDefaults = {
+    weightKg: packConfig.defaultParcelWeightKg,
+    lengthCm: packConfig.defaultParcelLengthCm,
+    widthCm: packConfig.defaultParcelWidthCm,
+    heightCm: packConfig.defaultParcelHeightCm,
+    currency: packConfig.defaultParcelCurrency,
+  };
+
   return (
-    <Tabs defaultValue="config">
+    <Tabs defaultValue="orders">
       <TabsList>
         <TabsTab value="config">Pack config</TabsTab>
         <TabsTab value="items">Items ({items.length})</TabsTab>
@@ -258,7 +365,11 @@ async function AdminWelcomePackContent() {
       </TabsPanel>
 
       <TabsPanel value="orders" pt="md">
-        <OrdersTable orders={orders} packItems={packItems} />
+        <OrdersTable
+          orders={orders}
+          packItems={packItems}
+          packDefaults={packDefaults}
+        />
       </TabsPanel>
     </Tabs>
   );

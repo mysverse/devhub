@@ -43,6 +43,11 @@ export type PackConfigData = {
   defaultInternationalFulfillmentDays: number;
   defaultDomesticDeliveryDays: number;
   defaultInternationalDeliveryDays: number;
+  defaultParcelWeightKg: number | null;
+  defaultParcelLengthCm: number | null;
+  defaultParcelWidthCm: number | null;
+  defaultParcelHeightCm: number | null;
+  defaultParcelCurrency: string | null;
   idCardTemplateBlobUrl: string | null;
   idCardWidth: number | null;
   idCardHeight: number | null;
@@ -56,6 +61,20 @@ export type PackConfigData = {
   idCardNameAlign: IdCardAlign | null;
   idCardNameWrapMode: IdCardWrapMode | null;
 };
+
+// Mirror of EASYPARCEL_CURRENCIES — duplicated here so this client component
+// doesn't pull the server export module (jszip/libphonenumber) into the bundle.
+const EASYPARCEL_CURRENCY_OPTIONS = [
+  "AUD",
+  "EUR",
+  "GBP",
+  "IDR",
+  "MYR",
+  "SGD",
+  "THB",
+  "TWD",
+  "USD",
+];
 
 const FONT_FAMILIES = [
   { value: "monospace", label: "Monospace" },
@@ -96,6 +115,21 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
     defaultInternationalDeliveryDays,
     setDefaultInternationalDeliveryDays,
   ] = useState<number | "">(pack.defaultInternationalDeliveryDays);
+  const [defaultParcelWeightKg, setDefaultParcelWeightKg] = useState<
+    number | ""
+  >(pack.defaultParcelWeightKg ?? "");
+  const [defaultParcelLengthCm, setDefaultParcelLengthCm] = useState<
+    number | ""
+  >(pack.defaultParcelLengthCm ?? "");
+  const [defaultParcelWidthCm, setDefaultParcelWidthCm] = useState<number | "">(
+    pack.defaultParcelWidthCm ?? "",
+  );
+  const [defaultParcelHeightCm, setDefaultParcelHeightCm] = useState<
+    number | ""
+  >(pack.defaultParcelHeightCm ?? "");
+  const [defaultParcelCurrency, setDefaultParcelCurrency] = useState<string>(
+    pack.defaultParcelCurrency ?? "",
+  );
   const [idCardWidth, setIdCardWidth] = useState<number | "">(
     pack.idCardWidth ?? "",
   );
@@ -166,6 +200,15 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
         defaultInternationalDeliveryDays === ""
           ? 14
           : Number(defaultInternationalDeliveryDays),
+      defaultParcelWeightKg:
+        defaultParcelWeightKg === "" ? null : Number(defaultParcelWeightKg),
+      defaultParcelLengthCm:
+        defaultParcelLengthCm === "" ? null : Number(defaultParcelLengthCm),
+      defaultParcelWidthCm:
+        defaultParcelWidthCm === "" ? null : Number(defaultParcelWidthCm),
+      defaultParcelHeightCm:
+        defaultParcelHeightCm === "" ? null : Number(defaultParcelHeightCm),
+      defaultParcelCurrency: defaultParcelCurrency.trim() || null,
       idCardWidth: idCardWidth === "" ? null : Number(idCardWidth),
       idCardHeight: idCardHeight === "" ? null : Number(idCardHeight),
       idCardNameX: idCardNameX === "" ? null : Number(idCardNameX),
@@ -353,6 +396,61 @@ export default function PackConfig({ pack }: { pack: PackConfigData }) {
               min={0}
               max={365}
               suffix=" days"
+            />
+          </Group>
+        </Stack>
+      </Card>
+
+      <Card withBorder radius="md" padding="lg">
+        <Stack gap="md">
+          <div>
+            <Title order={4}>EasyParcel parcel defaults</Title>
+            <Text c="dimmed" size="sm">
+              Default parcel weight, dimensions and declared-value currency used
+              for the EasyParcel export. Per-order overrides take precedence.
+            </Text>
+          </div>
+          <Group grow align="flex-start">
+            <NumberInput
+              label="Weight (kg)"
+              value={defaultParcelWeightKg}
+              onChange={(v) =>
+                setDefaultParcelWeightKg(typeof v === "number" ? v : "")
+              }
+              min={0}
+              step={0.1}
+              decimalScale={3}
+            />
+            <NumberInput
+              label="Length (cm)"
+              value={defaultParcelLengthCm}
+              onChange={(v) =>
+                setDefaultParcelLengthCm(typeof v === "number" ? v : "")
+              }
+              min={0}
+            />
+            <NumberInput
+              label="Width (cm)"
+              value={defaultParcelWidthCm}
+              onChange={(v) =>
+                setDefaultParcelWidthCm(typeof v === "number" ? v : "")
+              }
+              min={0}
+            />
+            <NumberInput
+              label="Height (cm)"
+              value={defaultParcelHeightCm}
+              onChange={(v) =>
+                setDefaultParcelHeightCm(typeof v === "number" ? v : "")
+              }
+              min={0}
+            />
+            <Select
+              label="Declared currency"
+              data={EASYPARCEL_CURRENCY_OPTIONS}
+              value={defaultParcelCurrency || null}
+              onChange={(v) => setDefaultParcelCurrency(v ?? "")}
+              clearable
             />
           </Group>
         </Stack>

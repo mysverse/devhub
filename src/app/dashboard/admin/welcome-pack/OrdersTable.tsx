@@ -5,14 +5,22 @@ import {
   AccordionControl,
   AccordionItem,
   AccordionPanel,
+  ActionIcon,
+  Alert,
   Anchor,
   Badge,
   Box,
   Button,
   Card,
+  Checkbox,
   Drawer,
   Group,
+  Menu,
+  MenuDropdown,
+  MenuItem,
+  MenuTarget,
   Select,
+  SimpleGrid,
   Stack,
   Table,
   TableTbody,
@@ -28,7 +36,17 @@ import {
 import { DateTimePicker } from "@mantine/dates";
 import type { ShippingRegion, WelcomePackOrderStatus } from "@prisma/client";
 import dayjs from "dayjs";
-import { CalendarClock, Download, Eye, Search } from "lucide-react";
+import {
+  CalendarClock,
+  Check,
+  ClipboardCopy,
+  Copy,
+  Download,
+  Eye,
+  FileSpreadsheet,
+  Package,
+  Search,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -48,6 +66,8 @@ import {
   reopenWelcomePackOrder,
   resendOrderNotification,
 } from "./actions";
+import { EditParcelCustomsModal } from "./EditParcelCustomsModal";
+import { ExportEasyParcelModal } from "./ExportEasyParcelModal";
 import FulfillmentSummary from "./FulfillmentSummary";
 import {
   EditLogisticsModal,
@@ -62,6 +82,14 @@ export type AdminPackItem = {
   requiresSize: boolean;
   sizeOptions: string[];
   isActive: boolean;
+};
+
+export type PackParcelDefaults = {
+  weightKg: number | null;
+  lengthCm: number | null;
+  widthCm: number | null;
+  heightCm: number | null;
+  currency: string | null;
 };
 
 export type AdminOrderEvent = {
@@ -92,6 +120,16 @@ export type AdminOrderRow = {
   stateProvince: string | null;
   postalCode: string;
   country: string;
+  addressIsResidential: boolean | null;
+  taxId: string | null;
+  parcelWeightKg: number | null;
+  parcelLengthCm: number | null;
+  parcelWidthCm: number | null;
+  parcelHeightCm: number | null;
+  easyParcelExportCount: number;
+  easyParcelExportedAt: string | null;
+  exportReady: boolean;
+  exportIssues: string[];
   notes: string | null;
   trackingNumber: string | null;
   trackingUrl: string | null;
@@ -146,6 +184,31 @@ function formatAddress(order: AdminOrderRow) {
     .join("\n");
 }
 
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <ActionIcon
+      variant="subtle"
+      color={copied ? "green" : "gray"}
+      size="xs"
+      onClick={async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          toast.success(`Copied ${label}`);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          toast.error(`Failed to copy ${label}`);
+        }
+      }}
+      title={`Copy ${label}`}
+    >
+      {copied ? <Check size={12} /> : <Copy size={12} />}
+    </ActionIcon>
+  );
+}
+
 // ── CSV export ──────────────────────────────────────────────────────────────
 
 function csvEscape(value: string): string {
@@ -174,6 +237,34 @@ const CSV_COLUMNS: {
   { header: "Postcode", value: (o) => o.postalCode },
   { header: "Country", value: (o) => o.country },
   { header: "Region", value: (o) => o.region },
+  {
+    header: "Residential",
+    value: (o) =>
+      o.addressIsResidential === null
+        ? ""
+        : o.addressIsResidential
+          ? "Yes"
+          : "No",
+  },
+  { header: "Tax ID", value: (o) => o.taxId ?? "" },
+  {
+    header: "Parcel weight (kg)",
+    value: (o) => (o.parcelWeightKg ?? "").toString(),
+  },
+  {
+    header: "Parcel L×W×H (cm)",
+    value: (o) =>
+      [o.parcelLengthCm, o.parcelWidthCm, o.parcelHeightCm].some(
+        (v) => v != null,
+      )
+        ? `${o.parcelLengthCm ?? ""}×${o.parcelWidthCm ?? ""}×${o.parcelHeightCm ?? ""}`
+        : "",
+  },
+  {
+    header: "EasyParcel exports",
+    value: (o) => String(o.easyParcelExportCount),
+  },
+  { header: "Last exported", value: (o) => o.easyParcelExportedAt ?? "" },
   { header: "ID card name", value: (o) => o.idCardName },
   {
     header: "Items",
@@ -208,7 +299,8 @@ function downloadCsv(orders: AdminOrderRow[]) {
       CSV_COLUMNS.map((c) => csvEscape(c.value(o))).join(","),
     ),
   ];
-  const blob = new Blob([lines.join("\n")], {
+  // Prefix a UTF-8 BOM so Excel opens names/addresses with the right encoding.
+  const blob = new Blob(["﻿", lines.join("\r\n")], {
     type: "text/csv;charset=utf-8",
   });
   const url = URL.createObjectURL(blob);
@@ -219,18 +311,64 @@ function downloadCsv(orders: AdminOrderRow[]) {
   URL.revokeObjectURL(url);
 }
 
+// Tab-separated shipping rows for pasting straight into a spreadsheet.
+const TSV_COLUMNS: { header: string; value: (o: AdminOrderRow) => string }[] = [
+  { header: "Recipient", value: (o) => o.recipientName },
+  { header: "Phone", value: (o) => o.phone },
+  { header: "Address 1", value: (o) => o.addressLine1 },
+  { header: "Address 2", value: (o) => o.addressLine2 ?? "" },
+  { header: "City", value: (o) => o.city },
+  { header: "State", value: (o) => o.stateProvince ?? "" },
+  { header: "Postcode", value: (o) => o.postalCode },
+  { header: "Country", value: (o) => o.country },
+];
+
+async function copyShippingTsv(orders: AdminOrderRow[]) {
+  const sanitize = (v: string) => v.replace(/[\t\r\n]+/g, " ").trim();
+  const rows = [
+    TSV_COLUMNS.map((c) => c.header).join("\t"),
+    ...orders.map((o) =>
+      TSV_COLUMNS.map((c) => sanitize(c.value(o))).join("\t"),
+    ),
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(rows);
+    toast.success(`Copied ${orders.length} shipping row(s)`);
+  } catch {
+    toast.error("Could not copy to clipboard");
+  }
+}
+
 // ── Table ───────────────────────────────────────────────────────────────────
+
+const REGION_FILTERS = [
+  { value: "ALL", label: "All regions" },
+  { value: "DOMESTIC", label: "Domestic" },
+  { value: "INTERNATIONAL", label: "International" },
+];
+const READINESS_FILTERS = [
+  { value: "ALL", label: "Any readiness" },
+  { value: "READY", label: "Export-ready" },
+  { value: "NOT_READY", label: "Not export-ready" },
+];
 
 export default function OrdersTable({
   orders,
   packItems,
+  packDefaults,
 }: {
   orders: AdminOrderRow[];
   packItems: AdminPackItem[];
+  packDefaults: PackParcelDefaults;
 }) {
   const [filter, setFilter] = useState<string>("ALL");
+  const [region, setRegion] = useState<string>("ALL");
+  const [readiness, setReadiness] = useState<string>("ALL");
+  const [priorOnly, setPriorOnly] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showExport, setShowExport] = useState(false);
 
   const statusCounts = useMemo(() => {
     const counts = new Map<string, number>();
@@ -241,21 +379,71 @@ export default function OrdersTable({
   }, [orders]);
 
   const filtered = useMemo(() => {
-    const byStatus =
-      filter === "ALL" ? orders : orders.filter((o) => o.status === filter);
     const query = search.trim().toLowerCase();
-    if (!query) return byStatus;
-    return byStatus.filter((o) =>
-      [
-        o.developerName,
-        o.developerEmail ?? "",
-        o.recipientName,
-        o.trackingNumber ?? "",
-      ].some((v) => v.toLowerCase().includes(query)),
-    );
-  }, [orders, filter, search]);
+    return orders.filter((o) => {
+      if (filter !== "ALL" && o.status !== filter) return false;
+      if (region !== "ALL" && o.region !== region) return false;
+      if (readiness === "READY" && !o.exportReady) return false;
+      if (readiness === "NOT_READY" && o.exportReady) return false;
+      if (priorOnly && o.easyParcelExportCount === 0) return false;
+      if (
+        query &&
+        ![
+          o.developerName,
+          o.developerEmail ?? "",
+          o.recipientName,
+          o.trackingNumber ?? "",
+        ].some((v) => v.toLowerCase().includes(query))
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [orders, filter, region, readiness, priorOnly, search]);
+
   const selectedOrder =
     orders.find((order) => order.id === selectedOrderId) ?? null;
+  const selectedOrders = useMemo(
+    () => orders.filter((o) => selectedIds.has(o.id)),
+    [orders, selectedIds],
+  );
+  // EasyParcel export is limited to approved, unshipped orders.
+  const exportableSelected = selectedOrders.filter(
+    (o) => o.status === "APPROVED",
+  );
+  const csvTargets = selectedOrders.length > 0 ? selectedOrders : filtered;
+
+  function toggle(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+  const allFilteredSelected =
+    filtered.length > 0 && filtered.every((o) => selectedIds.has(o.id));
+  function selectAllFiltered() {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (allFilteredSelected) {
+        for (const o of filtered) next.delete(o.id);
+      } else {
+        for (const o of filtered) next.add(o.id);
+      }
+      return next;
+    });
+  }
+  function selectReadyApproved() {
+    setSelectedIds(
+      new Set(
+        filtered
+          .filter((o) => o.status === "APPROVED" && o.exportReady)
+          .map((o) => o.id),
+      ),
+    );
+  }
+  const clearSelection = () => setSelectedIds(new Set());
 
   return (
     <Stack gap="md">
@@ -282,30 +470,99 @@ export default function OrdersTable({
             ))}
           </Group>
         </div>
-        <Group gap="xs" align="flex-end">
+        <Group gap="xs" align="flex-end" wrap="wrap">
           <TextInput
             label="Search"
             placeholder="Name, email, tracking…"
             leftSection={<Search size={14} />}
             value={search}
             onChange={(e) => setSearch(e.currentTarget.value)}
-            w={220}
+            w={200}
           />
           <Select
-            label="Filter status"
+            label="Status"
             data={FILTERS}
             value={filter}
             onChange={(v) => setFilter(v ?? "ALL")}
-            w={160}
+            w={130}
           />
+          <Select
+            label="Region"
+            data={REGION_FILTERS}
+            value={region}
+            onChange={(v) => setRegion(v ?? "ALL")}
+            w={130}
+          />
+          <Select
+            label="Readiness"
+            data={READINESS_FILTERS}
+            value={readiness}
+            onChange={(v) => setReadiness(v ?? "ALL")}
+            w={150}
+          />
+          <Checkbox
+            label="Exported before"
+            checked={priorOnly}
+            onChange={(e) => setPriorOnly(e.currentTarget.checked)}
+            mb={8}
+          />
+        </Group>
+      </Group>
+
+      <Group justify="space-between" wrap="wrap" gap="xs">
+        <Group gap="xs">
           <Button
-            variant="light"
-            leftSection={<Download size={14} />}
-            onClick={() => downloadCsv(filtered)}
+            variant="default"
+            size="compact-sm"
+            onClick={selectAllFiltered}
             disabled={filtered.length === 0}
           >
-            Export CSV ({filtered.length})
+            {allFilteredSelected ? "Deselect filtered" : "Select all filtered"}
           </Button>
+          <Button
+            variant="default"
+            size="compact-sm"
+            onClick={selectReadyApproved}
+          >
+            Select ready approved
+          </Button>
+          {selectedIds.size > 0 && (
+            <Button variant="subtle" size="compact-sm" onClick={clearSelection}>
+              Clear ({selectedIds.size})
+            </Button>
+          )}
+        </Group>
+        <Group gap="xs">
+          <Button
+            leftSection={<FileSpreadsheet size={14} />}
+            onClick={() => setShowExport(true)}
+            disabled={exportableSelected.length === 0}
+          >
+            Export EasyParcel ({exportableSelected.length})
+          </Button>
+          <Menu position="bottom-end" withinPortal>
+            <MenuTarget>
+              <Button variant="light" leftSection={<Download size={14} />}>
+                More exports
+              </Button>
+            </MenuTarget>
+            <MenuDropdown>
+              <MenuItem
+                leftSection={<Download size={14} />}
+                onClick={() => downloadCsv(csvTargets)}
+                disabled={csvTargets.length === 0}
+              >
+                Export internal CSV ({csvTargets.length})
+              </MenuItem>
+              <MenuItem
+                leftSection={<ClipboardCopy size={14} />}
+                onClick={() => copyShippingTsv(csvTargets)}
+                disabled={csvTargets.length === 0}
+              >
+                Copy shipping rows ({csvTargets.length})
+              </MenuItem>
+            </MenuDropdown>
+          </Menu>
         </Group>
       </Group>
 
@@ -314,16 +571,186 @@ export default function OrdersTable({
           <Text c="dimmed">No orders match this filter.</Text>
         </Card>
       ) : (
-        <Stack gap="sm">
-          {filtered.map((order) => (
-            <OrderListRow
-              key={order.id}
-              order={order}
-              onOpen={() => setSelectedOrderId(order.id)}
-            />
-          ))}
-        </Stack>
+        <>
+          {/* Mobile view: stack of cards */}
+          <Stack gap="sm" hiddenFrom="md">
+            {filtered.map((order) => (
+              <OrderListRow
+                key={order.id}
+                order={order}
+                selected={selectedIds.has(order.id)}
+                onToggle={() => toggle(order.id)}
+                onOpen={() => setSelectedOrderId(order.id)}
+              />
+            ))}
+          </Stack>
+
+          {/* Desktop view: high-density selectable table */}
+          <Box visibleFrom="md">
+            <Card withBorder radius="md" p={0} style={{ overflow: "auto" }}>
+              <Table
+                verticalSpacing="sm"
+                horizontalSpacing="md"
+                highlightOnHover
+              >
+                <TableThead>
+                  <TableTr>
+                    <TableTh style={{ width: 40 }}>
+                      <Checkbox
+                        checked={allFilteredSelected}
+                        onChange={selectAllFiltered}
+                        aria-label="Select all filtered orders"
+                      />
+                    </TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>Status</TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>Wave</TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>
+                      Developer
+                    </TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>
+                      Recipient / Destination
+                    </TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>Items</TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>
+                      EasyParcel
+                    </TableTh>
+                    <TableTh style={{ whiteSpace: "nowrap" }}>
+                      Logistics
+                    </TableTh>
+                    <TableTh style={{ width: 80 }} />
+                  </TableTr>
+                </TableThead>
+                <TableTbody>
+                  {filtered.map((order) => {
+                    const overdue =
+                      order.status === "APPROVED" &&
+                      order.estimatedFulfillmentAt !== null &&
+                      dayjs(order.estimatedFulfillmentAt).isBefore(
+                        dayjs(),
+                        "day",
+                      );
+                    return (
+                      <TableTr key={order.id}>
+                        <TableTd>
+                          <Checkbox
+                            checked={selectedIds.has(order.id)}
+                            onChange={() => toggle(order.id)}
+                            aria-label={`Select order for ${order.recipientName}`}
+                          />
+                        </TableTd>
+                        <TableTd>
+                          <StatusBadge
+                            copy={statusCopy(
+                              WELCOME_PACK_ORDER_STATUS,
+                              order.status,
+                            )}
+                          />
+                        </TableTd>
+                        <TableTd>
+                          <Badge variant="light" color="grape" size="sm">
+                            Wave {order.wave}
+                          </Badge>
+                        </TableTd>
+                        <TableTd>
+                          <Stack gap={2}>
+                            <Text fw={600} size="sm">
+                              {order.developerName}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {order.developerEmail ?? "No email"}
+                            </Text>
+                          </Stack>
+                        </TableTd>
+                        <TableTd>
+                          <Stack gap={2}>
+                            <Text size="sm" fw={500}>
+                              {order.recipientName}
+                            </Text>
+                            <Text size="xs" c="dimmed">
+                              {order.region === "DOMESTIC"
+                                ? "Domestic (MY)"
+                                : `International (${order.country})`}
+                            </Text>
+                          </Stack>
+                        </TableTd>
+                        <TableTd>
+                          <Text size="xs" lineClamp={2}>
+                            {order.selections
+                              .map(
+                                (s) =>
+                                  `${s.itemName}${s.selectedSize ? ` (${s.selectedSize})` : ""}`,
+                              )
+                              .join(", ") || "No items"}
+                          </Text>
+                        </TableTd>
+                        <TableTd>
+                          <Group gap={4} wrap="wrap">
+                            {order.status === "APPROVED" &&
+                              (order.exportReady ? (
+                                <Badge variant="light" color="green" size="xs">
+                                  Ready
+                                </Badge>
+                              ) : (
+                                <Badge variant="light" color="gray" size="xs">
+                                  Not Ready
+                                </Badge>
+                              ))}
+                            {order.easyParcelExportCount > 0 && (
+                              <Badge variant="light" color="grape" size="xs">
+                                Exported ×{order.easyParcelExportCount}
+                              </Badge>
+                            )}
+                          </Group>
+                        </TableTd>
+                        <TableTd>
+                          <Stack gap={2}>
+                            {order.estimatedFulfillmentAt && (
+                              <Text size="xs" c={overdue ? "red" : "dimmed"}>
+                                Fulfil:{" "}
+                                {formatDate(order.estimatedFulfillmentAt)}
+                              </Text>
+                            )}
+                            {order.trackingNumber && (
+                              <Text size="xs" c="indigo" fw={500}>
+                                {order.carrierName
+                                  ? `${order.carrierName}: `
+                                  : ""}
+                                {order.trackingNumber}
+                              </Text>
+                            )}
+                            {order.delayedAt && (
+                              <Text size="xs" c="orange">
+                                Delayed
+                              </Text>
+                            )}
+                          </Stack>
+                        </TableTd>
+                        <TableTd>
+                          <Button
+                            variant="light"
+                            size="compact-xs"
+                            leftSection={<Eye size={12} />}
+                            onClick={() => setSelectedOrderId(order.id)}
+                          >
+                            Details
+                          </Button>
+                        </TableTd>
+                      </TableTr>
+                    );
+                  })}
+                </TableTbody>
+              </Table>
+            </Card>
+          </Box>
+        </>
       )}
+
+      <ExportEasyParcelModal
+        orderIds={exportableSelected.map((o) => o.id)}
+        opened={showExport}
+        onClose={() => setShowExport(false)}
+        onExported={clearSelection}
+      />
 
       <Drawer
         opened={Boolean(selectedOrder)}
@@ -333,7 +760,11 @@ export default function OrdersTable({
         size="xl"
       >
         {selectedOrder && (
-          <OrderCard order={selectedOrder} packItems={packItems} />
+          <OrderCard
+            order={selectedOrder}
+            packItems={packItems}
+            packDefaults={packDefaults}
+          />
         )}
       </Drawer>
     </Stack>
@@ -342,9 +773,13 @@ export default function OrdersTable({
 
 function OrderListRow({
   order,
+  selected,
+  onToggle,
   onOpen,
 }: {
   order: AdminOrderRow;
+  selected: boolean;
+  onToggle: () => void;
   onOpen: () => void;
 }) {
   const overdue =
@@ -356,6 +791,11 @@ function OrderListRow({
     <Card withBorder radius="md" p="md">
       <Group justify="space-between" align="center" wrap="wrap" gap="md">
         <Group gap="sm" style={{ minWidth: 0, flex: 1 }}>
+          <Checkbox
+            checked={selected}
+            onChange={onToggle}
+            aria-label={`Select order for ${order.recipientName}`}
+          />
           <StatusBadge
             copy={statusCopy(WELCOME_PACK_ORDER_STATUS, order.status)}
           />
@@ -386,6 +826,21 @@ function OrderListRow({
         </Group>
 
         <Group gap="xs" wrap="wrap">
+          {order.status === "APPROVED" &&
+            (order.exportReady ? (
+              <Badge variant="light" color="green" size="sm">
+                Export-ready
+              </Badge>
+            ) : (
+              <Badge variant="light" color="gray" size="sm">
+                Not export-ready
+              </Badge>
+            ))}
+          {order.easyParcelExportCount > 0 && (
+            <Badge variant="light" color="grape" size="sm">
+              Exported ×{order.easyParcelExportCount}
+            </Badge>
+          )}
           {order.estimatedFulfillmentAt && (
             <Badge
               variant="light"
@@ -423,12 +878,15 @@ type ActionResult =
 function OrderCard({
   order,
   packItems,
+  packDefaults,
 }: {
   order: AdminOrderRow;
   packItems: AdminPackItem[];
+  packDefaults: PackParcelDefaults;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
+  const [editParcel, setEditParcel] = useState(false);
   const [showReject, setShowReject] = useState(false);
   const [showShip, setShowShip] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
@@ -484,6 +942,12 @@ function OrderCard({
     order.approvedAt !== null &&
     dayjs().diff(dayjs(order.approvedAt), "day") >= STALE_APPROVED_DAYS;
 
+  const effectiveWeight = order.parcelWeightKg ?? packDefaults.weightKg;
+  const effectiveLength = order.parcelLengthCm ?? packDefaults.lengthCm;
+  const effectiveWidth = order.parcelWidthCm ?? packDefaults.widthCm;
+  const effectiveHeight = order.parcelHeightCm ?? packDefaults.heightCm;
+  const effectiveCurrency = packDefaults.currency;
+
   return (
     <Card withBorder radius="md" p="lg">
       <Stack gap="md">
@@ -517,62 +981,360 @@ function OrderCard({
           </Text>
         </Group>
 
-        <Group align="flex-start" gap="xl" wrap="wrap">
-          <Stack gap={4} style={{ minWidth: 220 }}>
-            <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
-              Developer
-            </Text>
-            <Text fw={600}>{order.developerName}</Text>
-            <Text size="sm">ID card: {order.idCardName}</Text>
+        <SimpleGrid cols={{ base: 1, md: 2 }} spacing="lg">
+          {/* LEFT COLUMN: Shipping & Customs */}
+          <Stack gap="md">
+            <Card withBorder p="md" radius="sm">
+              <Stack gap="sm">
+                <Group justify="space-between" align="center">
+                  <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+                    Shipping Details
+                  </Text>
+                  <Group gap="xs">
+                    <Button
+                      variant="light"
+                      size="compact-xs"
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(
+                            formatAddress(order),
+                          );
+                          toast.success("Address copied to clipboard");
+                        } catch {
+                          toast.error("Failed to copy address");
+                        }
+                      }}
+                    >
+                      Copy Address
+                    </Button>
+                    <Button
+                      variant="light"
+                      size="compact-xs"
+                      onClick={async () => {
+                        const block = `Recipient: ${order.recipientName}\nPhone: ${order.phone}\nEmail: ${order.developerEmail ?? "N/A"}\nAddress:\n${formatAddress(order)}`;
+                        try {
+                          await navigator.clipboard.writeText(block);
+                          toast.success("Complete shipping block copied");
+                        } catch {
+                          toast.error("Failed to copy shipping block");
+                        }
+                      }}
+                    >
+                      Copy Block
+                    </Button>
+                  </Group>
+                </Group>
+
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    Developer Legal Name
+                  </Text>
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text fw={600} size="sm">
+                      {order.developerName}
+                    </Text>
+                    <CopyButton
+                      value={order.developerName}
+                      label="developer name"
+                    />
+                  </Group>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    ID Card Name
+                  </Text>
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm">{order.idCardName}</Text>
+                    <CopyButton value={order.idCardName} label="ID card name" />
+                  </Group>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    Recipient Name
+                  </Text>
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm" fw={500}>
+                      {order.recipientName}
+                    </Text>
+                    <CopyButton
+                      value={order.recipientName}
+                      label="recipient name"
+                    />
+                  </Group>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    Phone Number
+                  </Text>
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm">{order.phone}</Text>
+                    <CopyButton value={order.phone} label="phone number" />
+                  </Group>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    Email
+                  </Text>
+                  <Group gap="xs" wrap="nowrap" align="center">
+                    <Text size="sm">{order.developerEmail ?? "—"}</Text>
+                    {order.developerEmail && (
+                      <CopyButton
+                        value={order.developerEmail}
+                        label="email address"
+                      />
+                    )}
+                  </Group>
+                </Stack>
+
+                <Stack gap={4}>
+                  <Text size="xs" c="dimmed">
+                    Full Address
+                  </Text>
+                  <Group gap="xs" wrap="nowrap" align="flex-start">
+                    <Text size="sm" style={{ whiteSpace: "pre-line" }}>
+                      {formatAddress(order)}
+                    </Text>
+                    <CopyButton
+                      value={formatAddress(order)}
+                      label="full address"
+                    />
+                  </Group>
+                </Stack>
+              </Stack>
+            </Card>
+
+            <Card withBorder p="md" radius="sm">
+              <Stack gap="sm">
+                <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+                  Parcel & Customs Details
+                </Text>
+
+                {order.exportIssues.length > 0 && (
+                  <Alert color="orange" title="Not yet export-ready">
+                    <Stack gap={2}>
+                      {order.exportIssues.map((issue) => (
+                        <Text key={issue} size="xs">
+                          • {issue}
+                        </Text>
+                      ))}
+                    </Stack>
+                  </Alert>
+                )}
+
+                <SimpleGrid cols={2} spacing="xs">
+                  <div>
+                    <Text size="xs" c="dimmed">
+                      Weight
+                    </Text>
+                    <Group gap="xs" align="center">
+                      <Text size="sm" fw={500}>
+                        {effectiveWeight !== null
+                          ? `${effectiveWeight} kg`
+                          : "—"}
+                      </Text>
+                      <Badge
+                        size="xs"
+                        variant="subtle"
+                        color={
+                          order.parcelWeightKg !== null ? "orange" : "gray"
+                        }
+                      >
+                        {order.parcelWeightKg !== null ? "override" : "default"}
+                      </Badge>
+                    </Group>
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">
+                      Dimensions (L×W×H)
+                    </Text>
+                    <Group gap="xs" align="center">
+                      <Text size="sm" fw={500}>
+                        {effectiveLength != null &&
+                        effectiveWidth != null &&
+                        effectiveHeight != null
+                          ? `${effectiveLength}×${effectiveWidth}×${effectiveHeight} cm`
+                          : "—"}
+                      </Text>
+                      <Badge
+                        size="xs"
+                        variant="subtle"
+                        color={
+                          order.parcelLengthCm !== null ||
+                          order.parcelWidthCm !== null ||
+                          order.parcelHeightCm !== null
+                            ? "orange"
+                            : "gray"
+                        }
+                      >
+                        {order.parcelLengthCm !== null ||
+                        order.parcelWidthCm !== null ||
+                        order.parcelHeightCm !== null
+                          ? "override"
+                          : "default"}
+                      </Badge>
+                    </Group>
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">
+                      Declared Currency
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {effectiveCurrency ?? "—"}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">
+                      Address Type
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {order.addressIsResidential === null
+                        ? "Not set"
+                        : order.addressIsResidential
+                          ? "Residential"
+                          : "Business / Commercial"}
+                    </Text>
+                  </div>
+                  <div>
+                    <Text size="xs" c="dimmed">
+                      Tax ID / Customs ID
+                    </Text>
+                    <Text size="sm" fw={500}>
+                      {order.taxId ?? "—"}
+                    </Text>
+                  </div>
+                </SimpleGrid>
+              </Stack>
+            </Card>
           </Stack>
 
-          <Stack gap={4} style={{ minWidth: 240 }}>
-            <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
-              Shipping
-            </Text>
-            <Text size="sm" fw={500}>
-              {order.recipientName}
-            </Text>
-            <Text size="sm" c="dimmed">
-              {order.phone}
-            </Text>
-            <Text size="sm" style={{ whiteSpace: "pre-line" }}>
-              {formatAddress(order)}
-            </Text>
-          </Stack>
-
-          <Stack gap={4} style={{ minWidth: 220 }}>
-            <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
-              Items
-            </Text>
-            {order.selections.length === 0 ? (
-              <Text size="sm" c="dimmed">
-                —
-              </Text>
-            ) : (
-              <Box>
-                <Table withRowBorders={false} verticalSpacing={2}>
-                  <TableThead>
-                    <TableTr>
-                      <TableTh>Item</TableTh>
-                      <TableTh>Size</TableTh>
-                    </TableTr>
-                  </TableThead>
-                  <TableTbody>
-                    {order.selections.map((s) => (
-                      <TableTr key={`${order.id}-${s.itemId}`}>
-                        <TableTd>{s.itemName}</TableTd>
-                        <TableTd>{s.selectedSize ?? "—"}</TableTd>
+          {/* RIGHT COLUMN: Items & Logistics & Eligibility */}
+          <Stack gap="md">
+            <Card withBorder p="md" radius="sm">
+              <Stack gap="sm">
+                <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+                  Selected Items
+                </Text>
+                {order.selections.length === 0 ? (
+                  <Text size="sm" c="dimmed">
+                    No items selected.
+                  </Text>
+                ) : (
+                  <Table withRowBorders={false} verticalSpacing={2}>
+                    <TableThead>
+                      <TableTr>
+                        <TableTh>Item</TableTh>
+                        <TableTh>Size</TableTh>
+                        <TableTh style={{ width: 40 }} />
                       </TableTr>
-                    ))}
-                  </TableTbody>
-                </Table>
-              </Box>
-            )}
-          </Stack>
-        </Group>
+                    </TableThead>
+                    <TableTbody>
+                      {order.selections.map((s) => {
+                        const itemString = `${s.itemName}${s.selectedSize ? ` (${s.selectedSize})` : ""}`;
+                        return (
+                          <TableTr key={`${order.id}-${s.itemId}`}>
+                            <TableTd>{s.itemName}</TableTd>
+                            <TableTd>{s.selectedSize ?? "—"}</TableTd>
+                            <TableTd style={{ textAlign: "right" }}>
+                              <CopyButton
+                                value={itemString}
+                                label={s.itemName}
+                              />
+                            </TableTd>
+                          </TableTr>
+                        );
+                      })}
+                    </TableTbody>
+                  </Table>
+                )}
+              </Stack>
+            </Card>
 
-        <EligibilityPanel orderId={order.id} wave={order.wave} />
+            <Card withBorder p="md" radius="sm">
+              <Stack gap="sm">
+                <Text size="xs" tt="uppercase" c="dimmed" fw={600}>
+                  Logistics & Tracking
+                </Text>
+
+                {order.trackingNumber && (
+                  <Stack gap={4}>
+                    <Text size="xs" c="dimmed">
+                      Tracking Info
+                    </Text>
+                    <Group gap="xs" wrap="nowrap" align="center">
+                      {order.trackingUrl ? (
+                        <Anchor
+                          href={order.trackingUrl}
+                          target="_blank"
+                          size="sm"
+                          fw={500}
+                        >
+                          {order.carrierName ? `${order.carrierName} · ` : ""}
+                          {order.trackingNumber}
+                        </Anchor>
+                      ) : (
+                        <Text size="sm" fw={500}>
+                          {order.carrierName ? `${order.carrierName} · ` : ""}
+                          {order.trackingNumber}
+                        </Text>
+                      )}
+                      <CopyButton
+                        value={order.trackingNumber}
+                        label="tracking number"
+                      />
+                    </Group>
+                  </Stack>
+                )}
+
+                {(order.estimatedFulfillmentAt ||
+                  order.estimatedDeliveryAt ||
+                  order.logisticsNote ||
+                  order.delayedAt) && (
+                  <Stack gap="xs">
+                    <Group gap="xs" wrap="wrap">
+                      {order.estimatedFulfillmentAt && (
+                        <Badge variant="light" color="blue">
+                          Fulfil {formatDate(order.estimatedFulfillmentAt)}
+                        </Badge>
+                      )}
+                      {order.estimatedDeliveryAt && (
+                        <Badge variant="light" color="indigo">
+                          Deliver {formatDate(order.estimatedDeliveryAt)}
+                        </Badge>
+                      )}
+                      {order.delayedAt && (
+                        <Badge variant="light" color="orange">
+                          Delayed {formatDate(order.delayedAt)}
+                        </Badge>
+                      )}
+                    </Group>
+                    {order.delayReason && (
+                      <Text size="sm" c="dimmed">
+                        <strong>Delay Reason:</strong> {order.delayReason}
+                      </Text>
+                    )}
+                    {order.logisticsNote && (
+                      <Text size="sm" c="dimmed">
+                        <strong>Logistics Note:</strong> {order.logisticsNote}
+                      </Text>
+                    )}
+                  </Stack>
+                )}
+
+                {!order.trackingNumber && !order.estimatedFulfillmentAt && (
+                  <Text size="sm" c="dimmed">
+                    No logistics or tracking info populated yet.
+                  </Text>
+                )}
+              </Stack>
+            </Card>
+
+            <EligibilityPanel orderId={order.id} wave={order.wave} />
+          </Stack>
+        </SimpleGrid>
 
         {order.notes && (
           <Box
@@ -584,7 +1346,7 @@ function OrderCard({
             }}
           >
             <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb={2}>
-              Notes
+              User Order Notes
             </Text>
             <Text size="sm" c="dimmed">
               {order.notes}
@@ -602,77 +1364,11 @@ function OrderCard({
             }}
           >
             <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb={2}>
-              Rejection reason
+              Rejection Reason
             </Text>
             <Text size="sm" c="dimmed">
               {order.rejectionReason}
             </Text>
-          </Box>
-        )}
-
-        {order.trackingNumber && (
-          <Group gap="xs">
-            <Text size="sm" fw={500}>
-              Tracking:
-            </Text>
-            {order.trackingUrl ? (
-              <Anchor href={order.trackingUrl} target="_blank">
-                {order.carrierName ? `${order.carrierName} · ` : ""}
-                {order.trackingNumber}
-              </Anchor>
-            ) : (
-              <Text size="sm">
-                {order.carrierName ? `${order.carrierName} · ` : ""}
-                {order.trackingNumber}
-              </Text>
-            )}
-          </Group>
-        )}
-
-        {(order.estimatedFulfillmentAt ||
-          order.estimatedDeliveryAt ||
-          order.logisticsNote ||
-          order.delayedAt) && (
-          <Box
-            p="xs"
-            style={{
-              backgroundColor: "var(--mantine-color-dark-6)",
-              borderRadius: "var(--mantine-radius-sm)",
-              borderLeft: `3px solid var(--mantine-color-${
-                order.delayedAt ? "orange" : "blue"
-              }-7)`,
-            }}
-          >
-            <Text size="xs" tt="uppercase" c="dimmed" fw={600} mb={4}>
-              Logistics
-            </Text>
-            <Group gap="xs" wrap="wrap">
-              {order.estimatedFulfillmentAt && (
-                <Badge variant="light" color="blue">
-                  Fulfil {formatDate(order.estimatedFulfillmentAt)}
-                </Badge>
-              )}
-              {order.estimatedDeliveryAt && (
-                <Badge variant="light" color="indigo">
-                  Deliver {formatDate(order.estimatedDeliveryAt)}
-                </Badge>
-              )}
-              {order.delayedAt && (
-                <Badge variant="light" color="orange">
-                  Delayed {formatDate(order.delayedAt)}
-                </Badge>
-              )}
-            </Group>
-            {order.delayReason && (
-              <Text size="sm" c="dimmed" mt={4}>
-                Delay: {order.delayReason}
-              </Text>
-            )}
-            {order.logisticsNote && (
-              <Text size="sm" c="dimmed" mt={4}>
-                {order.logisticsNote}
-              </Text>
-            )}
           </Box>
         )}
 
@@ -928,6 +1624,14 @@ function OrderCard({
                   Edit shipping
                 </Button>
                 <Button
+                  variant="light"
+                  leftSection={<Package size={14} />}
+                  color={order.exportReady ? undefined : "orange"}
+                  onClick={() => setEditParcel(true)}
+                >
+                  Edit parcel & customs
+                </Button>
+                <Button
                   variant="subtle"
                   color="red"
                   onClick={() => setShowCancel(true)}
@@ -1028,6 +1732,13 @@ function OrderCard({
           onClose={() => setEditLogistics(false)}
         />
       )}
+      <EditParcelCustomsModal
+        order={order}
+        packDefaults={packDefaults}
+        opened={editParcel}
+        onClose={() => setEditParcel(false)}
+        onSaved={() => router.refresh()}
+      />
     </Card>
   );
 }

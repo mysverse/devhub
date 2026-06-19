@@ -2,9 +2,11 @@
 
 import {
   Badge,
+  Button,
   Card,
   Chip,
   ChipGroup,
+  Collapse,
   Group,
   Stack,
   Table,
@@ -112,107 +114,132 @@ export default function FulfillmentSummary({
     return { rows, sizeColumns, driftCount: drifted.size };
   }, [orders, packItems, statuses]);
 
+  const [opened, setOpened] = useState(false);
+
   return (
     <Card withBorder radius="md" p="lg">
       <Stack gap="md">
-        <Group justify="space-between" align="flex-start" wrap="wrap">
+        <Group justify="space-between" align="center" wrap="wrap">
           <div>
             <Title order={5}>Fulfillment summary</Title>
             <Text c="dimmed" size="sm">
               Item and size counts across the selected statuses.
             </Text>
           </div>
-          <ChipGroup multiple value={statuses} onChange={setStatuses}>
-            <Group gap={6}>
-              {TALLY_STATUSES.map((s) => (
-                <Chip key={s.value} value={s.value} size="xs" variant="light">
-                  {s.label}
-                </Chip>
-              ))}
-            </Group>
-          </ChipGroup>
-        </Group>
-
-        {driftCount > 0 && (
-          <Group gap={6}>
-            <AlertTriangle size={14} color="var(--mantine-color-orange-5)" />
-            <Text size="sm" c="orange">
-              Some selections use sizes the item no longer offers — marked
-              below.
-            </Text>
-          </Group>
-        )}
-
-        <Group gap="xs" wrap="wrap">
-          <Badge variant="light" color="cyan">
-            {operational.domestic} domestic open
-          </Badge>
-          <Badge variant="light" color="grape">
-            {operational.international} international open
-          </Badge>
-          <Badge variant="light" color="blue">
-            {operational.estimated} with estimates
-          </Badge>
-          <Badge
-            variant="light"
-            color={operational.overdue > 0 ? "red" : "gray"}
-          >
-            {operational.overdue} overdue
-          </Badge>
-          <Badge
-            variant="light"
-            color={operational.delayed > 0 ? "orange" : "gray"}
-          >
-            {operational.delayed} delayed
-          </Badge>
-        </Group>
-
-        {rows.length === 0 ? (
-          <Text c="dimmed" size="sm">
-            No orders in the selected statuses.
-          </Text>
-        ) : (
-          <Table withRowBorders={false} verticalSpacing={4}>
-            <TableThead>
-              <TableTr>
-                <TableTh>Item</TableTh>
-                {sizeColumns.map((col) => (
-                  <TableTh key={col} ta="center">
-                    {col}
-                  </TableTh>
-                ))}
-                <TableTh ta="center">Total</TableTh>
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {rows.map((row) => (
-                <TableTr key={row.itemName}>
-                  <TableTd>{row.itemName}</TableTd>
-                  {row.counts.map((cell) => (
-                    <TableTd key={cell.size} ta="center">
-                      {cell.count === 0 ? (
-                        <Text size="sm" c="dimmed" component="span">
-                          —
-                        </Text>
-                      ) : cell.drifted ? (
-                        <Tooltip label="This size was removed from the item's options">
-                          <Badge variant="light" color="orange" size="sm">
-                            {cell.count}
-                          </Badge>
-                        </Tooltip>
-                      ) : (
-                        cell.count
-                      )}
-                    </TableTd>
+          <Group gap="xs">
+            {opened && (
+              <ChipGroup multiple value={statuses} onChange={setStatuses}>
+                <Group gap={6}>
+                  {TALLY_STATUSES.map((s) => (
+                    <Chip
+                      key={s.value}
+                      value={s.value}
+                      size="xs"
+                      variant="light"
+                    >
+                      {s.label}
+                    </Chip>
                   ))}
-                  <TableTd ta="center" fw={600}>
-                    {row.total}
-                  </TableTd>
-                </TableTr>
-              ))}
-            </TableTbody>
-          </Table>
-        )}
+                </Group>
+              </ChipGroup>
+            )}
+            <Button
+              variant="subtle"
+              size="xs"
+              onClick={() => setOpened(!opened)}
+            >
+              {opened ? "Hide Summary" : "Show Summary"}
+            </Button>
+          </Group>
+        </Group>
+
+        <Collapse expanded={opened}>
+          <Stack gap="md" mt="xs">
+            {driftCount > 0 && (
+              <Group gap={6}>
+                <AlertTriangle
+                  size={14}
+                  color="var(--mantine-color-orange-5)"
+                />
+                <Text size="sm" c="orange">
+                  Some selections use sizes the item no longer offers — marked
+                  below.
+                </Text>
+              </Group>
+            )}
+
+            <Group gap="xs" wrap="wrap">
+              <Badge variant="light" color="cyan">
+                {operational.domestic} domestic open
+              </Badge>
+              <Badge variant="light" color="grape">
+                {operational.international} international open
+              </Badge>
+              <Badge variant="light" color="blue">
+                {operational.estimated} with estimates
+              </Badge>
+              <Badge
+                variant="light"
+                color={operational.overdue > 0 ? "red" : "gray"}
+              >
+                {operational.overdue} overdue
+              </Badge>
+              <Badge
+                variant="light"
+                color={operational.delayed > 0 ? "orange" : "gray"}
+              >
+                {operational.delayed} delayed
+              </Badge>
+            </Group>
+
+            {rows.length === 0 ? (
+              <Text c="dimmed" size="sm">
+                No orders in the selected statuses.
+              </Text>
+            ) : (
+              <Table withRowBorders={false} verticalSpacing={4}>
+                <TableThead>
+                  <TableTr>
+                    <TableTh>Item</TableTh>
+                    {sizeColumns.map((col) => (
+                      <TableTh key={col} ta="center">
+                        {col}
+                      </TableTh>
+                    ))}
+                    <TableTh ta="center">Total</TableTh>
+                  </TableTr>
+                </TableThead>
+                <TableTbody>
+                  {rows.map((row) => (
+                    <TableTr key={row.itemName}>
+                      <TableTd>{row.itemName}</TableTd>
+                      {row.counts.map((cell) => (
+                        <TableTd key={cell.size} ta="center">
+                          {cell.count === 0 ? (
+                            <Text size="sm" c="dimmed" component="span">
+                              —
+                            </Text>
+                          ) : cell.drifted ? (
+                            <Tooltip label="This size was removed from the item's options">
+                              <Badge variant="light" color="orange" size="sm">
+                                {cell.count}
+                              </Badge>
+                            </Tooltip>
+                          ) : (
+                            cell.count
+                          )}
+                        </TableTd>
+                      ))}
+                      <TableTd ta="center" fw={600}>
+                        {row.total}
+                      </TableTd>
+                    </TableTr>
+                  ))}
+                </TableTbody>
+              </Table>
+            )}
+          </Stack>
+        </Collapse>
       </Stack>
     </Card>
   );

@@ -40,6 +40,9 @@ export type AdminItemData = {
   requiresSize: boolean;
   sizeChartBlobUrl: string | null;
   sizeOptions: string[];
+  customsDescription: string | null;
+  declaredUnitValue: number | null;
+  hsCode: string | null;
   displayOrder: number;
   isActive: boolean;
 };
@@ -238,6 +241,13 @@ function ItemEditorModal({
   const [sizeOptions, setSizeOptions] = useState<string[]>(
     item?.sizeOptions ?? [],
   );
+  const [customsDescription, setCustomsDescription] = useState(
+    item?.customsDescription ?? "",
+  );
+  const [declaredUnitValue, setDeclaredUnitValue] = useState<number | "">(
+    item?.declaredUnitValue ?? "",
+  );
+  const [hsCode, setHsCode] = useState(item?.hsCode ?? "");
   const [displayOrder, setDisplayOrder] = useState<number>(
     item?.displayOrder ?? 0,
   );
@@ -262,6 +272,10 @@ function ItemEditorModal({
       description,
       requiresSize,
       sizeOptions,
+      customsDescription: customsDescription.trim() || null,
+      declaredUnitValue:
+        declaredUnitValue === "" ? null : Number(declaredUnitValue),
+      hsCode: hsCode.trim() || null,
       displayOrder,
       isActive,
       force,
@@ -381,6 +395,36 @@ function ItemEditorModal({
             onChange={setSizeOptions}
           />
         )}
+
+        <Text size="sm" fw={500} mt="xs">
+          EasyParcel customs
+        </Text>
+        <Group grow align="flex-start">
+          <TextInput
+            label="Customs description"
+            description="Shown on the parcel declaration; falls back to the item name"
+            placeholder={name || "e.g. Cotton T-shirt"}
+            value={customsDescription}
+            onChange={(e) => setCustomsDescription(e.currentTarget.value)}
+          />
+          <NumberInput
+            label="Declared unit value"
+            description="Per-item value in the pack's parcel currency"
+            value={declaredUnitValue}
+            onChange={(v) =>
+              setDeclaredUnitValue(typeof v === "number" ? v : "")
+            }
+            min={0}
+            decimalScale={2}
+          />
+          <TextInput
+            label="HS code"
+            description="Required for international shipments"
+            placeholder="e.g. 6109.10.00"
+            value={hsCode}
+            onChange={(e) => setHsCode(e.currentTarget.value)}
+          />
+        </Group>
 
         {!item ? (
           <Alert color="blue">

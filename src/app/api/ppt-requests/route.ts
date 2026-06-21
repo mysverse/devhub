@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { createElement } from "react";
@@ -118,6 +119,9 @@ export async function POST(req: Request) {
       data: {
         requesterId: userId,
         linearIssueId: mode === "existing" ? linearIssueId : null,
+        // Active discriminator: occupies the issue while PENDING/APPROVED, freed
+        // (NULL) on rejection. NULL for "new" mode (no issue yet).
+        activeLinearIssueId: mode === "existing" ? linearIssueId : null,
         linearIssueIdentifier:
           mode === "existing"
             ? optionalFormString(formData, "linearIssueIdentifier")
@@ -162,66 +166,76 @@ export async function POST(req: Request) {
       },
     });
 
-    const [admins, requester] = await Promise.all([
-      prisma.userProfile.findMany({
-        where: ADMIN_ACCESS_WHERE,
-        include: { user: { select: { email: true, name: true } } },
-      }),
-      prisma.userProfile.findUnique({
-        where: { id: userId },
-        include: { user: { select: { name: true } } },
-      }),
-    ]);
+    // Notify admins — best-effort. The request is already committed, so a
+    // notification/email failure must not surface as a failed submission (which
+    // would push the user to retry and hit the unique constraint).
+    try {
+      const [admins, requester] = await Promise.all([
+        prisma.userProfile.findMany({
+          where: ADMIN_ACCESS_WHERE,
+          include: { user: { select: { email: true, name: true } } },
+        }),
+        prisma.userProfile.findUnique({
+          where: { id: userId },
+          include: { user: { select: { name: true } } },
+        }),
+      ]);
 
-    const requesterName =
-      requester?.legalName || requester?.user.name || "A developer";
-    const estimatedAmount = formatAmount(
-      estimateToAmount(requestedEstimate, "MYR"),
-      "MYR",
-    );
+      const requesterName =
+        requester?.legalName || requester?.user.name || "A developer";
+      const estimatedAmount = formatAmount(
+        estimateToAmount(requestedEstimate, "MYR"),
+        "MYR",
+      );
 
-    for (const admin of admins) {
-      await notifyWithPreferences({
-        userId: admin.id,
-        actorId: userId,
-        domain: "ppt_request",
-        type: "SUBMITTED",
-        title: `New PPT request: ${linearIssueTitle}`,
-        message: `${requesterName} requested ${estimatedAmount} for ${linearIssueTitle}.`,
-        href: `/dashboard/admin?tab=ppt-requests&request=${requestRecord.id}`,
-        entityType: "ppt_request",
-        entityId: requestRecord.id,
-        payload: {
-          attachmentCount: uploadedAttachments.length,
-          assigneeIntent,
-        },
-        dedupeKey: `ppt-request:submitted:${requestRecord.id}:${admin.id}`,
-        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
-        email: admin.user.email
-          ? {
-              to: admin.user.email,
-              subject: `New PPT Request: ${linearIssueTitle}`,
-              category: "ppt_request_submitted",
-              idempotencyKey: `ppt-request:submitted:${requestRecord.id}`,
-              react: createElement(PptRequestSubmitted, {
-                requesterName,
-                issueTitle: linearIssueTitle,
-                isNewIssue: mode === "new",
-                issueIdentifier:
-                  optionalFormString(formData, "linearIssueIdentifier") ??
-                  undefined,
-                estimate: requestedEstimate,
-                estimatedAmount,
-                dueDate: dueDate.toLocaleDateString("en-MY", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
+      for (const admin of admins) {
+        await notifyWithPreferences({
+          userId: admin.id,
+          actorId: userId,
+          domain: "ppt_request",
+          type: "SUBMITTED",
+          title: `New PPT request: ${linearIssueTitle}`,
+          message: `${requesterName} requested ${estimatedAmount} for ${linearIssueTitle}.`,
+          href: `/dashboard/admin?tab=ppt-requests&request=${requestRecord.id}`,
+          entityType: "ppt_request",
+          entityId: requestRecord.id,
+          payload: {
+            attachmentCount: uploadedAttachments.length,
+            assigneeIntent,
+          },
+          dedupeKey: `ppt-request:submitted:${requestRecord.id}:${admin.id}`,
+          channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+          email: admin.user.email
+            ? {
+                to: admin.user.email,
+                subject: `New PPT Request: ${linearIssueTitle}`,
+                category: "ppt_request_submitted",
+                idempotencyKey: `ppt-request:submitted:${requestRecord.id}`,
+                react: createElement(PptRequestSubmitted, {
+                  requesterName,
+                  issueTitle: linearIssueTitle,
+                  isNewIssue: mode === "new",
+                  issueIdentifier:
+                    optionalFormString(formData, "linearIssueIdentifier") ??
+                    undefined,
+                  estimate: requestedEstimate,
+                  estimatedAmount,
+                  dueDate: dueDate.toLocaleDateString("en-MY", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                  }),
+                  note: optionalFormString(formData, "note") ?? undefined,
                 }),
-                note: optionalFormString(formData, "note") ?? undefined,
-              }),
-            }
-          : undefined,
-      });
+              }
+            : undefined,
+        });
+      }
+    } catch (notifyError) {
+      console.error(
+        "[ppt-requests] Submitted but admin notification failed:",
+        notifyError,
+      );
     }
 
     revalidatePath("/dashboard/ppts");
@@ -234,6 +248,15 @@ export async function POST(req: Request) {
         { error: "reauth_required", reauth: true },
         { status: 401 },
       );
+    }
+    // P2002 = unique constraint violation on activeLinearIssueId. Race between
+    // the existence check above and the create — handled cleanly so the user
+    // sees a friendly message instead of the raw Prisma error.
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return jsonError("A PPT request already exists for this issue", 409);
     }
     console.error("[ppt-requests] Submit failed:", error);
     return jsonError(

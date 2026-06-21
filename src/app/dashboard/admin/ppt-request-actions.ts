@@ -291,6 +291,10 @@ export async function approvePptRequest(
           reviewerId: adminUserId,
           reviewedAt: new Date(),
           linearIssueId: issueId,
+          // Keep the active discriminator pointed at the issue. For new-issue
+          // requests the issue is created here, so this is where it first gets
+          // set — otherwise the freshly-created issue would be re-requestable.
+          activeLinearIssueId: issueId,
           linearIssueIdentifier: issueIdentifier,
           linearIssueUrl: issueUrl,
         },
@@ -404,6 +408,8 @@ export async function rejectPptRequest(requestId: string, reason?: string) {
       reviewerId: adminUserId,
       reviewedAt: new Date(),
       rejectionReason: reason?.trim() || null,
+      // Free the issue so the developer can submit a new request for it.
+      activeLinearIssueId: null,
     },
   });
 

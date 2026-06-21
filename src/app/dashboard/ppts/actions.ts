@@ -1,13 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { createElement } from "react";
-import PptRequestSubmitted from "@/emails/PptRequestSubmitted";
 import { getSession } from "@/lib/auth-utils";
-import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
-import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import {
   evaluatePptIssueById,
   postPptProofComment,
@@ -150,138 +145,6 @@ export async function searchLinearIssues(query: string) {
     }
     return { error: (e as Error).message || "Failed to search issues" };
   }
-}
-
-export async function submitPptRequest(data: {
-  mode: "new" | "existing";
-  linearIssueId?: string;
-  linearIssueIdentifier?: string;
-  linearIssueTitle: string;
-  linearIssueUrl?: string;
-  linearTeamId: string;
-  requestedEstimate: number;
-  projectedDueDate: string;
-  description?: string;
-  note?: string;
-}) {
-  const { userId } = await getSession();
-  if (!userId) return { error: "Unauthorized" };
-
-  // Validate estimate
-  if (data.requestedEstimate < 1 || data.requestedEstimate > 5) {
-    return { error: "Complexity must be between 1 and 5" };
-  }
-
-  if (!data.linearIssueTitle.trim()) {
-    return { error: "Issue title is required" };
-  }
-
-  if (!data.linearTeamId.trim()) {
-    return { error: "Team is required" };
-  }
-
-  const dueDate = new Date(data.projectedDueDate);
-  if (Number.isNaN(dueDate.getTime())) {
-    return { error: "Valid due date is required" };
-  }
-
-  // Check for duplicate request on existing issues
-  if (data.mode === "existing" && data.linearIssueId) {
-    const existing = await prisma.pptRequest.findFirst({
-      where: {
-        linearIssueId: data.linearIssueId,
-        status: { in: ["PENDING", "APPROVED"] },
-      },
-    });
-    if (existing) {
-      return { error: "A PPT request already exists for this issue" };
-    }
-  }
-
-  // Create the request
-  const request = await prisma.pptRequest.create({
-    data: {
-      requesterId: userId,
-      linearIssueId: data.mode === "existing" ? data.linearIssueId : null,
-      linearIssueIdentifier:
-        data.mode === "existing" ? data.linearIssueIdentifier : null,
-      linearIssueTitle: data.linearIssueTitle.trim(),
-      linearIssueUrl: data.mode === "existing" ? data.linearIssueUrl : null,
-      linearTeamId: data.linearTeamId,
-      requestedEstimate: data.requestedEstimate,
-      projectedDueDate: dueDate,
-      description: data.description?.trim() || null,
-      note: data.note?.trim() || null,
-    },
-  });
-
-  // Send email to all admins
-  try {
-    const admins = await prisma.userProfile.findMany({
-      where: ADMIN_ACCESS_WHERE,
-      include: { user: { select: { email: true, name: true } } },
-    });
-
-    const requester = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      include: { user: { select: { name: true } } },
-    });
-
-    const requesterName =
-      requester?.legalName || requester?.user.name || "A developer";
-    const estimatedAmount = formatAmount(
-      estimateToAmount(data.requestedEstimate, "MYR"),
-      "MYR",
-    );
-
-    for (const admin of admins) {
-      await notify({
-        userId: admin.id,
-        actorId: userId,
-        domain: "ppt_request",
-        type: "SUBMITTED",
-        title: `New PPT request: ${data.linearIssueTitle}`,
-        message: `${requesterName} requested ${estimatedAmount} for ${data.linearIssueTitle}.`,
-        href: "/dashboard/admin",
-        entityType: "ppt_request",
-        entityId: request.id,
-        dedupeKey: `ppt-request:submitted:${request.id}:${admin.id}`,
-        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
-        email: admin.user.email
-          ? {
-              to: admin.user.email,
-              subject: `New PPT Request: ${data.linearIssueTitle}`,
-              category: "ppt_request_submitted",
-              idempotencyKey: `ppt-request:submitted:${request.id}`,
-              react: createElement(PptRequestSubmitted, {
-                requesterName,
-                issueTitle: data.linearIssueTitle,
-                isNewIssue: data.mode === "new",
-                issueIdentifier: data.linearIssueIdentifier ?? undefined,
-                estimate: data.requestedEstimate,
-                estimatedAmount,
-                dueDate: dueDate.toLocaleDateString("en-MY", {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                }),
-                note: data.note || undefined,
-              }),
-            }
-          : undefined,
-      });
-    }
-  } catch (emailError) {
-    console.error(
-      "Failed to send PPT request notification emails:",
-      emailError,
-    );
-  }
-
-  revalidatePath("/dashboard/ppts");
-  revalidatePath("/dashboard/admin");
-
-  return { success: true, requestId: request.id };
 }
 
 export async function submitPptProof(issueId: string, body: string) {

@@ -919,7 +919,13 @@ model PptRequest {
   reviewer    UserProfile? @relation("PptRequestReviewer", fields: [reviewerId], references: [id])
 
   // Linear issue data (null linearIssueId means issue will be created on approval)
-  linearIssueId         String? @unique
+  linearIssueId         String?
+  // Equals linearIssueId while the request is active (PENDING/APPROVED), NULL
+  // once REJECTED. Postgres allows many NULLs in a unique index, so an issue can
+  // accumulate many rejected requests but have at most one active request — which
+  // lets a developer re-request after a rejection. Every status transition MUST
+  // keep this in sync.
+  activeLinearIssueId   String? @unique
   linearIssueIdentifier String?
   linearIssueTitle      String
   linearIssueUrl        String?
@@ -947,6 +953,7 @@ model PptRequest {
   @@index([requesterId])
   @@index([status])
   @@index([assigneeIntent])
+  @@index([linearIssueId])
 }
 
 model PptRequestAttachment {

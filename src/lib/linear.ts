@@ -110,7 +110,40 @@ const getValidLinearToken = cache(
   },
 );
 
-function isAuthError(error: unknown): boolean {
+function readNested(obj: unknown, ...path: string[]): unknown {
+  let cur: unknown = obj;
+  for (const key of path) {
+    if (cur && typeof cur === "object" && key in cur) {
+      cur = (cur as Record<string, unknown>)[key];
+    } else {
+      return undefined;
+    }
+  }
+  return cur;
+}
+
+/**
+ * Detects a Linear authentication failure (401). Inspects the structured fields
+ * the Linear SDK attaches (`type`, `status`, `errors[].extensions.code`) in
+ * addition to the message string, because message matching alone is fragile and
+ * is defeated when an error is re-thrown across a `"use cache"` boundary (Next.js
+ * masks the message in production). Use only on the *raw* error — i.e. before it
+ * crosses a cache boundary.
+ */
+export function isLinearAuthError(error: unknown): boolean {
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+  const err = error as Record<string, unknown>;
+  if (err.type === "AuthenticationError" || err.status === 401) {
+    return true;
+  }
+  const code =
+    readNested(error, "errors", "0", "extensions", "code") ??
+    readNested(error, "response", "errors", "0", "extensions", "code");
+  if (code === "AUTHENTICATION_ERROR") {
+    return true;
+  }
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     return (
@@ -161,7 +194,7 @@ export async function withLinearFallback<T>(
     if (error instanceof LinearReauthRequiredError) {
       throw error;
     }
-    if (isAuthError(error)) {
+    if (isLinearAuthError(error)) {
       // One in-place recovery attempt: the React-cached client may hold a stale
       // token. Try refreshing before giving up — this restores the old per-call
       // recovery behaviour where a fresh token was read each time.
@@ -178,7 +211,7 @@ export async function withLinearFallback<T>(
           try {
             return await fn(new LinearClient({ accessToken: newToken }));
           } catch (retryError) {
-            if (!isAuthError(retryError)) throw retryError;
+            if (!isLinearAuthError(retryError)) throw retryError;
             // Fall through to null-and-throw
           }
         }

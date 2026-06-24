@@ -28,8 +28,8 @@ import {
   formatEstimate,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
-import { LinearReauthRequiredError } from "@/lib/linear";
 import { getPptBoardIssuesForUser } from "@/lib/linear-data";
+import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { PptBoardIssueDTO } from "@/lib/linear-queries";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { ensureUserProfile } from "@/lib/user-profile";
@@ -296,15 +296,10 @@ async function PPTList({
   try {
     issues = await getPptBoardIssuesForUser(userId);
   } catch (e) {
-    if (e instanceof LinearReauthRequiredError) {
-      redirect("/auth/reauth-linear?returnTo=/dashboard/ppts");
-    }
-    const err = e as Error;
-    console.error("Failed to fetch Linear issues:", err);
+    const message = resolveLinearFetchError(e, "/dashboard/ppts", "PPT board");
     return (
       <Alert color="red" title="Error" mb="xl">
-        {err.message ||
-          "Failed to fetch PPTs. Please check your Linear connection."}
+        {message}
       </Alert>
     );
   }

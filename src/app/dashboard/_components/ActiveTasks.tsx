@@ -1,13 +1,12 @@
 import { Alert, Badge, SimpleGrid } from "@mantine/core";
 import { Zap } from "lucide-react";
-import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { LinearReauthRequiredError } from "@/lib/linear";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
+import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
@@ -33,11 +32,7 @@ export default async function ActiveTasks({
       await getAssignedActiveIssuesForUser(userId, linearId)
     ).slice(0, 10);
   } catch (e) {
-    if (e instanceof LinearReauthRequiredError) {
-      redirect("/auth/reauth-linear?returnTo=/dashboard");
-    }
-    const err = e as Error;
-    linearError = err.message;
+    linearError = resolveLinearFetchError(e, "/dashboard", "active tasks");
   }
 
   const header = (
@@ -64,7 +59,7 @@ export default async function ActiveTasks({
     return (
       <>
         {header}
-        <Alert color="red">Could not load assigned tasks: {linearError}</Alert>
+        <Alert color="red">{linearError}</Alert>
       </>
     );
   }

@@ -1,7 +1,6 @@
 import { Badge, Group, Stack } from "@mantine/core";
 import type { Payout, Transaction, UserProfile } from "@prisma/client";
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
 import LinkButton from "@/components/LinkButton";
@@ -12,11 +11,8 @@ import { requireAdminPage } from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getWeeklyUsageForUsers } from "@/lib/credit-limit";
 import { getIncentiveConfig } from "@/lib/incentives";
-import {
-  getLinearClient,
-  getLinearServiceClient,
-  LinearReauthRequiredError,
-} from "@/lib/linear";
+import { getLinearClient, getLinearServiceClient } from "@/lib/linear";
+import { resolveLinearFetchError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
@@ -398,10 +394,7 @@ async function AdminPageContent() {
         linearIssueTitles.set(issue.id, `${issue.identifier} - ${issue.title}`);
       }
     } catch (e) {
-      if (e instanceof LinearReauthRequiredError) {
-        redirect("/auth/reauth-linear?returnTo=/dashboard/admin");
-      }
-      console.error("Failed to fetch Linear issue titles for admin:", e);
+      resolveLinearFetchError(e, "/dashboard/admin", "admin issue titles");
     }
   }
 

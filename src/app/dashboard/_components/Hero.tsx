@@ -1,10 +1,9 @@
 import type { UserProfile } from "@prisma/client";
-import { redirect } from "next/navigation";
 import { getUserWeeklyUsage, getWeekBounds } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
-import { LinearReauthRequiredError } from "@/lib/linear";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
+import { resolveLinearFetchError } from "@/lib/linear-error";
 import {
   getBankDisplayName,
   getPaymentMethodLabel,
@@ -99,10 +98,7 @@ async function getActivePptPending({
       count: activePptIssues.length,
     };
   } catch (e) {
-    if (e instanceof LinearReauthRequiredError) {
-      redirect("/auth/reauth-linear?returnTo=/dashboard");
-    }
-    console.error("Failed to fetch active tasks for hero:", e);
+    resolveLinearFetchError(e, "/dashboard", "hero active tasks");
     return { amount: 0, count: 0 };
   }
 }

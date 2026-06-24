@@ -1,11 +1,10 @@
 import { Sparkles } from "lucide-react";
 import { Carousel } from "motion-plus/react";
-import { redirect } from "next/navigation";
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import type { CurrencyCode } from "@/lib/currency";
-import { LinearReauthRequiredError } from "@/lib/linear";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
+import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 
@@ -20,10 +19,7 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
   try {
     issues = await getSuggestedPptsForUser(userId);
   } catch (e) {
-    if (e instanceof LinearReauthRequiredError) {
-      redirect("/auth/reauth-linear?returnTo=/dashboard");
-    }
-    console.error("Failed to fetch suggested PPTs:", e);
+    resolveLinearFetchError(e, "/dashboard", "suggested PPTs");
     return null;
   }
 

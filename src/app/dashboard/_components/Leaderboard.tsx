@@ -1,12 +1,11 @@
 import { Avatar, Badge, Card, Group, Stack, Text } from "@mantine/core";
 import { Trophy } from "lucide-react";
-import { redirect } from "next/navigation";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { LinearReauthRequiredError } from "@/lib/linear";
 import { getLeaderboardIssuesForUser } from "@/lib/linear-data";
+import { resolveLinearFetchError } from "@/lib/linear-error";
 import AnimatedProgressBar from "./AnimatedProgressBar";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 
@@ -245,10 +244,7 @@ export default async function Leaderboard({
       </FadeIn>
     );
   } catch (e) {
-    if (e instanceof LinearReauthRequiredError) {
-      redirect("/auth/reauth-linear?returnTo=/dashboard");
-    }
-    console.error("Failed to fetch leaderboard:", e);
+    resolveLinearFetchError(e, "/dashboard", "leaderboard");
     return null;
   }
 }

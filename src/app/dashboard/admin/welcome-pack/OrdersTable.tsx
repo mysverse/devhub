@@ -241,7 +241,7 @@ const CSV_COLUMNS: {
     header: "Residential",
     value: (o) =>
       o.addressIsResidential === null
-        ? ""
+        ? "Yes (default)"
         : o.addressIsResidential
           ? "Yes"
           : "No",
@@ -1192,7 +1192,7 @@ function OrderCard({
                     </Text>
                     <Text size="sm" fw={500}>
                       {order.addressIsResidential === null
-                        ? "Not set"
+                        ? "Residential (default)"
                         : order.addressIsResidential
                           ? "Residential"
                           : "Business / Commercial"}

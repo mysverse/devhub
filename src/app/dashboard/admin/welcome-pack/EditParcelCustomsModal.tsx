@@ -49,11 +49,7 @@ export function EditParcelCustomsModal({
     order.parcelHeightCm ?? "",
   );
   const [residential, setResidential] = useState<string>(
-    order.addressIsResidential === null
-      ? "unset"
-      : order.addressIsResidential
-        ? "yes"
-        : "no",
+    order.addressIsResidential === false ? "no" : "yes",
   );
   const [taxId, setTaxId] = useState(order.taxId ?? "");
   const [busy, setBusy] = useState(false);
@@ -69,8 +65,7 @@ export function EditParcelCustomsModal({
         parcelLengthCm: numberOrNull(length),
         parcelWidthCm: numberOrNull(width),
         parcelHeightCm: numberOrNull(height),
-        addressIsResidential:
-          residential === "unset" ? null : residential === "yes",
+        addressIsResidential: residential === "yes",
         taxId: taxId.trim() || null,
       });
       if (res && "error" in res && res.error) {
@@ -94,8 +89,8 @@ export function EditParcelCustomsModal({
     >
       <Stack gap="md">
         <Text size="sm" c="dimmed">
-          Leave a dimension blank to use the pack default. Customs identity is
-          required for international shipments.
+          Leave a dimension blank to use the pack default. Addresses export as
+          residential unless set to business; tax ID is optional.
         </Text>
 
         <SimpleGrid cols={{ base: 2, sm: 4 }}>
@@ -136,22 +131,19 @@ export function EditParcelCustomsModal({
             label="Residential address?"
             description={
               isInternational
-                ? "Required for international customs"
-                : "Optional"
+                ? "Defaults to residential for international customs"
+                : "Defaults to residential"
             }
             data={[
-              { value: "unset", label: "Not set" },
-              { value: "yes", label: "Yes — residential" },
-              { value: "no", label: "No — business" },
+              { value: "yes", label: "Yes - residential" },
+              { value: "no", label: "No - business" },
             ]}
             value={residential}
-            onChange={(v) => setResidential(v ?? "unset")}
+            onChange={(v) => setResidential(v ?? "yes")}
           />
           <TextInput
             label="Receiver tax ID"
-            description={
-              isInternational ? "Required for international" : "Optional"
-            }
+            description="Optional"
             placeholder="e.g. S1234567D"
             value={taxId}
             onChange={(e) => setTaxId(e.currentTarget.value)}

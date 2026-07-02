@@ -196,6 +196,16 @@ test("residential maps Yes/No; empty COD and alt-phone columns stay blank", asyn
   assert.match(xml, /<c r="Z2" s="\d+"\/>/);
 });
 
+test("blank residential flag defaults to Yes in the workbook", async () => {
+  const xml = await orderSheet(
+    await buildEasyParcelWorkbook(
+      [{ ...domestic, isResidential: null, reference: "default_residential" }],
+      TEMPLATE,
+    ),
+  );
+  assert.match(xml, /<c r="N2"[^>]*><is><t[^>]*>Yes<\/t>/);
+});
+
 test("country resolution is exact and fail-closed", () => {
   assert.deepEqual(resolveEasyParcelCountryName("MY"), {
     ok: true,

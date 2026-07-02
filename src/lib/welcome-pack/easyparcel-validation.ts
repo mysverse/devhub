@@ -117,19 +117,12 @@ export function evaluateOrderForExport(order: ExportableOrder): OrderReadiness {
   const phone = resolveEasyParcelPhone(order.phone ?? "", order.country);
   if (!phone.ok) add("phone", phone.error);
 
-  // Residential flag: required for international customs; optional domestically.
-  if (isInternational && order.addressIsResidential === null) {
-    add(
-      "addressIsResidential",
-      "Address type (residential?) is required for international orders",
-    );
-  }
+  // EasyParcel accepts the residential field for both regions; default blank
+  // legacy rows to residential so admins only need to override business sites.
+  const isResidential = order.addressIsResidential ?? true;
 
-  // Tax ID: required internationally.
+  // Tax ID: optional for EasyParcel bulk export.
   const taxId = order.taxId?.trim() ?? "";
-  if (isInternational && !taxId) {
-    add("taxId", "Receiver tax ID is required for international orders");
-  }
 
   // Parcel dimensions/weight (override → pack default).
   const weight = order.parcelWeightKg ?? order.pack.defaultParcelWeightKg;
@@ -218,7 +211,7 @@ export function evaluateOrderForExport(order: ExportableOrder): OrderReadiness {
     city,
     state,
     countryName: country.value,
-    isResidential: order.addressIsResidential,
+    isResidential,
     taxId: taxId || null,
     weightKg: weight as number,
     lengthCm: length as number,

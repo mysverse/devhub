@@ -1168,8 +1168,7 @@ model WelcomePackOrder {
   // Per-order EasyParcel logistics. Parcel dims/weight override the pack
   // defaults when the actual parcel differs; null = fall back to pack default.
   // addressIsResidential maps to the template's residential Yes/No column;
-  // taxId is required for international customs. All nullable: legacy orders
-  // stay "not export-ready" rather than getting invented values.
+  // null exports as residential. taxId is optional for EasyParcel bulk export.
   parcelWeightKg       Float?
   parcelLengthCm       Float?
   parcelWidthCm        Float?

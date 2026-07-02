@@ -119,20 +119,19 @@ test("a complete international order is export-ready", () => {
   }
 });
 
-test("international without tax ID, residential flag, or HS code blocks", () => {
+test("international without tax ID still exports and missing residential defaults to yes", () => {
   const noTax = evaluateOrderForExport(intl({ taxId: null }));
-  assert.equal(noTax.ok, false);
-  if (!noTax.ok) assert.ok(noTax.issues.some((i) => i.field === "taxId"));
+  assert.equal(noTax.ok, true);
+  if (noTax.ok) assert.equal(noTax.row.taxId, null);
 
   const noResidential = evaluateOrderForExport(
     intl({ addressIsResidential: null }),
   );
-  assert.equal(noResidential.ok, false);
-  if (!noResidential.ok)
-    assert.ok(
-      noResidential.issues.some((i) => i.field === "addressIsResidential"),
-    );
+  assert.equal(noResidential.ok, true);
+  if (noResidential.ok) assert.equal(noResidential.row.isResidential, true);
+});
 
+test("international without HS code blocks", () => {
   const noHs = evaluateOrderForExport(
     intl({
       items: [

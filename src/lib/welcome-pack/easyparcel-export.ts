@@ -199,8 +199,7 @@ function styleMap(sheetXml: string): Record<string, string> {
 }
 
 function residentialText(value: boolean | null): string {
-  if (value === null) return "";
-  return value ? "Yes" : "No";
+  return value === false ? "No" : "Yes";
 }
 
 function serialiseRow(

@@ -34,6 +34,10 @@ import {
   isXenditSupported,
   requiresKycForAutoPayout,
 } from "@/lib/payment-validation";
+import {
+  canConfirmManualPayment,
+  classifyPayoutRoute,
+} from "@/lib/payout-routing";
 import { statusCopy, TRANSACTION_STATUS } from "@/lib/status-copy";
 import {
   markTransactionAsPaid,
@@ -176,6 +180,20 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
 
   const payoutProcessing = tx.payout?.status === "PROCESSING";
   const payoutFailed = tx.payout?.status === "FAILED";
+  const payoutRoute = classifyPayoutRoute({
+    transactionStatus: tx.status,
+    currency: tx.currency,
+    paymentMethod: tx.paymentMethod,
+    paypalEmail: tx.paypalEmail,
+    duitNowId: tx.duitNowId,
+    bankName: tx.bankName,
+    bankAccountNumber: tx.bankAccountNumber,
+    bankAccountName: tx.bankAccountName,
+    robloxId: tx.robloxId,
+    payout: tx.payout,
+    xenditEnabled: tx.xenditEnabled,
+  });
+  const manualPaymentEligible = canConfirmManualPayment(payoutRoute);
 
   async function handleMarkPaid() {
     setLoading(true);
@@ -593,7 +611,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                   >
                     {tx.payout?.provider} Processing...
                   </Button>
-                ) : (
+                ) : manualPaymentEligible ? (
                   <Button
                     fullWidth
                     onClick={handleMarkPaid}
@@ -602,8 +620,20 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                     color="blue"
                     mt="xs"
                   >
-                    Mark as Paid
+                    Confirm Manual Payment
                   </Button>
+                ) : (
+                  <Tooltip label={payoutRoute.reason} withArrow>
+                    <Button
+                      fullWidth
+                      variant="light"
+                      color="gray"
+                      disabled
+                      mt="xs"
+                    >
+                      Manual confirmation unavailable
+                    </Button>
+                  </Tooltip>
                 )}
                 <Button
                   fullWidth

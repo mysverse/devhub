@@ -19,11 +19,16 @@ import {
   initiateRobloxPayout,
   initiateXenditPayout,
 } from "@/lib/payout";
+import {
+  canConfirmManualPayment,
+  classifyPayoutRoute,
+} from "@/lib/payout-routing";
 import prisma from "@/lib/prisma";
 import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
 import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getBaseUrl } from "@/lib/url";
+import { isXenditEnabled } from "@/lib/xendit";
 import { getUserEmailAndName } from "./email-actions";
 
 /**
@@ -111,6 +116,29 @@ export async function markTransactionAsPaid(transactionId: string) {
   await requireAdmin();
 
   try {
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      include: { user: true, payout: true },
+    });
+    if (!transaction) return { error: "Transaction not found" };
+
+    const route = classifyPayoutRoute({
+      transactionStatus: transaction.status,
+      currency: transaction.currency,
+      paymentMethod: transaction.user.paymentMethod,
+      paypalEmail: transaction.user.paypalEmail,
+      duitNowId: transaction.user.duitNowId,
+      bankName: transaction.user.bankName,
+      bankAccountNumber: transaction.user.bankAccountNumber,
+      bankAccountName: transaction.user.bankAccountName,
+      robloxId: transaction.user.robloxId,
+      payout: transaction.payout,
+      xenditEnabled: isXenditEnabled(),
+    });
+    if (!canConfirmManualPayment(route)) {
+      return { error: route.reason };
+    }
+
     // Atomically transition only if still PENDING — prevents duplicate emails
     const result = await prisma.transaction.updateMany({
       where: { id: transactionId, status: "PENDING" },

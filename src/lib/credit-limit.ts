@@ -8,7 +8,7 @@ import prisma from "./prisma";
  */
 export const WEEKLY_CREDIT_LIMITS: Record<CurrencyCode, number> = {
   MYR: 100,
-  ROBUX: 6000, // ~5 estimate points at 1,200 Robux each
+  ROBUX: 6000, // Complexity level 5 at 1,200 Robux each
 };
 
 /**

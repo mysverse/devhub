@@ -6,7 +6,11 @@ import PptRequestApproved from "@/emails/PptRequestApproved";
 import PptRequestRejected from "@/emails/PptRequestRejected";
 import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
+import {
+  complexityLevelToLinearEstimate,
+  estimateToAmount,
+  formatAmount,
+} from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { findTodoWorkflowStateId } from "@/lib/linear-queries";
 import {
@@ -216,6 +220,9 @@ export async function approvePptRequest(
       }
 
       const dueDate = request.projectedDueDate.toISOString().split("T")[0];
+      const linearEstimate =
+        complexityLevelToLinearEstimate(request.requestedEstimate) ??
+        request.requestedEstimate;
       let issueId = request.linearIssueId;
       let issueIdentifier = request.linearIssueIdentifier;
       let issueUrl = request.linearIssueUrl;
@@ -235,7 +242,7 @@ export async function approvePptRequest(
 
         const updateData: Record<string, unknown> = {
           labelIds: [...new Set([...existingLabelIds, pptLabelId])],
-          estimate: request.requestedEstimate,
+          estimate: linearEstimate,
           dueDate,
         };
 
@@ -266,7 +273,7 @@ export async function approvePptRequest(
           title: request.linearIssueTitle,
           teamId: request.linearTeamId,
           labelIds: [pptLabelId],
-          estimate: request.requestedEstimate,
+          estimate: linearEstimate,
           dueDate,
           ...(todoStateId && { stateId: todoStateId }),
           ...(request.linearProjectId && {

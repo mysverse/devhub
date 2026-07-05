@@ -17,21 +17,23 @@ flowchart TD
     A[Developer completes<br/>Linear issue] --> B[Linear webhook<br/>received]
     B --> C{PPT label &<br/>estimate set?}
     C -->|No| D[Ignored]
-    C -->|Yes| E[Transaction created<br/>amount = estimate x 20 MYR]
+    C -->|Yes| E[Transaction created<br/>amount = complexity level x 20 MYR]
     E --> F{Within weekly<br/>credit limit?}
     F -->|No| G[Pending manual<br/>admin approval]
     F -->|Yes| H[Auto-payout<br/>initiated]
     H --> I{Payout routing}
     G --> J[Admin reviews &<br/>processes manually]
-    J --> K[Paid]
-    I --> K
+    J --> K[Paid after<br/>manual confirmation]
+    I --> L[Provider callback<br/>or poll confirms]
+    L --> K
 ```
 
 ### How amounts are calculated
 
-- Each Linear issue has a complexity estimate (1-5 points)
-- Payment amount = estimate points x RM 20 (MYR)
-- For Robux payouts, the amount is converted at the applicable rate
+- DevHub uses complexity levels 1-5 for displayed payout math.
+- Linear stores those levels as Fibonacci estimates: `1 -> 1`, `2 -> 2`, `3 -> 3`, `5 -> 4`, `8 -> 5`.
+- Payment amount = normalized complexity level x RM20 (MYR).
+- For Robux payouts, the amount is normalized complexity level x 1,200 Robux.
 
 ## Payout Routing
 

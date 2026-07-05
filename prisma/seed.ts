@@ -30,7 +30,10 @@ import {
   type Persona,
 } from "@/dev/fixtures/personas";
 import { auth } from "@/lib/auth";
-import { estimateToAmount } from "@/lib/currency";
+import {
+  estimateToAmount,
+  linearEstimateToComplexityLevel,
+} from "@/lib/currency";
 import { assertDevModeSafety, DEV_PASSWORD } from "@/lib/dev-mode";
 import { getDocumentTemplate } from "@/lib/documents";
 import { getWeekKey } from "@/lib/incentives";
@@ -46,8 +49,13 @@ function dateOnlyUtc(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
-function myr(estimate: number): number {
-  return estimateToAmount(estimate, "MYR");
+function complexity(estimate: number | null): number | null {
+  return linearEstimateToComplexityLevel(estimate);
+}
+
+function myr(estimate: number | null): number {
+  const level = complexity(estimate);
+  return level ? estimateToAmount(level, "MYR") : 0;
 }
 
 /** Shared Linear-derived columns for Transaction/PptPayoutState/etc. */
@@ -653,7 +661,7 @@ export async function seed() {
         latestLinearStateName: LINEAR_STATES[fixtureIssue.stateType].name,
         latestLinearUpdatedAt: completedAt ?? daysAgo(1),
         hasPptLabel: fixtureIssue.labelNames.includes("PPT"),
-        estimate: fixtureIssue.estimate,
+        estimate: complexity(fixtureIssue.estimate),
         userId: fixtureIssue.assigneeId
           ? (userIdByLinearId.get(fixtureIssue.assigneeId) ?? null)
           : null,
@@ -779,12 +787,12 @@ export async function seed() {
       linearIssueStateType: "started",
       linearIssueStateName: "In Progress",
       labels: issue("MYS-203").labelNames,
-      estimate: 2,
+      estimate: complexity(issue("MYS-203").estimate),
       userId: devId,
       assigneeLinearId: PERSONAS.developer.linearId,
       assigneeEmail: PERSONAS.developer.email,
       assigneeName: PERSONAS.developer.name,
-      maxAmount: myr(2),
+      maxAmount: myr(issue("MYS-203").estimate),
       status: "ELIGIBLE",
       period: monthKey(now),
     },
@@ -795,12 +803,12 @@ export async function seed() {
       linearIssueStateType: "completed",
       linearIssueStateName: "Done",
       labels: issue("MYS-231").labelNames,
-      estimate: 4,
+      estimate: complexity(issue("MYS-231").estimate),
       userId: devId,
       assigneeLinearId: PERSONAS.developer.linearId,
       assigneeEmail: PERSONAS.developer.email,
       assigneeName: PERSONAS.developer.name,
-      maxAmount: myr(4),
+      maxAmount: myr(issue("MYS-231").estimate),
       status: "READY_FOR_REVIEW",
       period: monthKey(now),
       completedAt: daysAgo(3),
@@ -812,12 +820,12 @@ export async function seed() {
       linearIssueStateType: "completed",
       linearIssueStateName: "Done",
       labels: issue("MYS-232").labelNames,
-      estimate: 4,
+      estimate: complexity(issue("MYS-232").estimate),
       userId: devId,
       assigneeLinearId: PERSONAS.developer.linearId,
       assigneeEmail: PERSONAS.developer.email,
       assigneeName: PERSONAS.developer.name,
-      maxAmount: myr(4),
+      maxAmount: myr(issue("MYS-232").estimate),
       approvedAmount: 80,
       status: "APPROVED",
       period: monthKey(now),
@@ -833,12 +841,12 @@ export async function seed() {
       linearIssueStateType: "completed",
       linearIssueStateName: "Done",
       labels: issue("MYS-233").labelNames,
-      estimate: 1,
+      estimate: complexity(issue("MYS-233").estimate),
       userId: bala.userId,
       assigneeLinearId: bala.linearId,
       assigneeEmail: bala.email,
       assigneeName: bala.name,
-      maxAmount: myr(1),
+      maxAmount: myr(issue("MYS-233").estimate),
       status: "REJECTED",
       period: monthKey(now),
       completedAt: daysAgo(9),
@@ -853,7 +861,7 @@ export async function seed() {
       linearIssueStateType: "completed",
       linearIssueStateName: "Done",
       labels: issue("MYS-220").labelNames,
-      estimate: 2,
+      estimate: complexity(issue("MYS-220").estimate),
       userId: devId,
       assigneeLinearId: PERSONAS.developer.linearId,
       assigneeEmail: PERSONAS.developer.email,
@@ -916,7 +924,7 @@ export async function seed() {
         assigneeEmail: assignee?.email ?? null,
         assigneeName: assignee?.name ?? null,
         assigneeAtCompletion: fixtureIssue.assigneeId,
-        estimate: fixtureIssue.estimate,
+        estimate: complexity(fixtureIssue.estimate),
         labels: fixtureIssue.labelNames,
         hasPptLabel: fixtureIssue.labelNames.includes("PPT"),
         completed: true,

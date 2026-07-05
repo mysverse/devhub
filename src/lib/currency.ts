@@ -1,5 +1,23 @@
 export type CurrencyCode = "MYR" | "ROBUX";
 
+export type ComplexityLevel = 1 | 2 | 3 | 4 | 5;
+
+const LINEAR_ESTIMATE_TO_COMPLEXITY = new Map<number, ComplexityLevel>([
+  [1, 1],
+  [2, 2],
+  [3, 3],
+  [5, 4],
+  [8, 5],
+]);
+
+const COMPLEXITY_TO_LINEAR_ESTIMATE: Record<ComplexityLevel, number> = {
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 5,
+  5: 8,
+};
+
 const CURRENCY_CONFIG: Record<
   CurrencyCode,
   {
@@ -23,6 +41,33 @@ const CURRENCY_CONFIG: Record<
     fallbackRange: "1,200 - 6,000 Robux",
   },
 };
+
+export function normalizeComplexityLevel(
+  estimate: number | null | undefined,
+): ComplexityLevel | null {
+  if (!Number.isFinite(estimate)) return null;
+  const rounded = Math.round(Number(estimate));
+  if (rounded >= 1 && rounded <= 5) return rounded as ComplexityLevel;
+  return null;
+}
+
+export function linearEstimateToComplexityLevel(
+  estimate: number | null | undefined,
+): ComplexityLevel | null {
+  if (!Number.isFinite(estimate)) return null;
+  const rounded = Math.round(Number(estimate));
+  return (
+    LINEAR_ESTIMATE_TO_COMPLEXITY.get(rounded) ??
+    normalizeComplexityLevel(rounded)
+  );
+}
+
+export function complexityLevelToLinearEstimate(
+  estimate: number | null | undefined,
+): number | null {
+  const level = normalizeComplexityLevel(estimate);
+  return level == null ? null : COMPLEXITY_TO_LINEAR_ESTIMATE[level];
+}
 
 export function getCurrencyForPaymentMethod(method: string): CurrencyCode {
   return method === "ROBUX" ? "ROBUX" : "MYR";

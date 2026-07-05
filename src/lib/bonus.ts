@@ -7,6 +7,7 @@ import {
   type CurrencyCode,
   formatAmount,
   getCurrencyForPaymentMethod,
+  linearEstimateToComplexityLevel,
 } from "@/lib/currency";
 import { IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
@@ -319,7 +320,7 @@ export async function syncBonusCandidateFromLinearSdkIssue(issue: Issue) {
     identifier: issue.identifier,
     title: issue.title,
     url: issue.url,
-    estimate: issue.estimate ?? null,
+    estimate: linearEstimateToComplexityLevel(issue.estimate ?? null),
     completedAt: issueWithCompletedAt.completedAt ?? null,
     state: state
       ? {

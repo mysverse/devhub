@@ -1,4 +1,5 @@
 import type { LinearClient } from "@linear/sdk";
+import { linearEstimateToComplexityLevel } from "@/lib/currency";
 
 export type LinearAssigneeDTO = {
   id: string;
@@ -139,7 +140,7 @@ function issueDto(issue: RawIssueNode): IssueDTO {
     title: issue.title,
     url: issue.url,
     description: issue.description ?? null,
-    estimate: Number.isFinite(issue.estimate) ? (issue.estimate ?? null) : null,
+    estimate: linearEstimateToComplexityLevel(issue.estimate),
     stateType: issue.state?.type ?? "unknown",
     stateName: issue.state?.name ?? "Unknown",
     assignee: assignee(issue),

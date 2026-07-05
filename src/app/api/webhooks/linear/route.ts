@@ -3,10 +3,12 @@ import { revalidateTag } from "next/cache";
 import { NextResponse } from "next/server";
 import { syncBonusCandidateFromLinearIssue } from "@/lib/bonus";
 import { TAGS } from "@/lib/cache-tags";
+import { linearEstimateToComplexityLevel } from "@/lib/currency";
 import { recordIssueCompletionFromLinear } from "@/lib/incentives";
 import {
   evaluatePptIssueFromWebhook,
   handlePptCommentWebhook,
+  shouldEvaluatePptIssueFromWebhook,
 } from "@/lib/ppt-eligibility";
 
 export async function POST(req: Request) {
@@ -34,15 +36,20 @@ export async function POST(req: Request) {
   ) {
     const issueData = payload.data;
     const labels = Array.isArray(issueData.labels) ? issueData.labels : [];
+    const normalizedEstimate = linearEstimateToComplexityLevel(
+      issueData.estimate ?? null,
+    );
 
-    await evaluatePptIssueFromWebhook(issueData);
+    if (await shouldEvaluatePptIssueFromWebhook(issueData)) {
+      await evaluatePptIssueFromWebhook(issueData);
+    }
 
     await syncBonusCandidateFromLinearIssue({
       id: issueData.id,
       identifier: issueData.identifier || null,
       title: issueData.title || null,
       url: issueData.url || null,
-      estimate: issueData.estimate ?? null,
+      estimate: normalizedEstimate,
       completedAt: issueData.completedAt ?? null,
       state: issueData.state
         ? {
@@ -66,7 +73,7 @@ export async function POST(req: Request) {
       identifier: issueData.identifier || null,
       title: issueData.title || null,
       url: issueData.url || null,
-      estimate: issueData.estimate ?? null,
+      estimate: normalizedEstimate,
       completedAt: issueData.completedAt ?? null,
       updatedAt: issueData.updatedAt ?? null,
       archivedAt: issueData.archivedAt ?? null,

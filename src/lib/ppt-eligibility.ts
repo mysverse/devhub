@@ -8,6 +8,7 @@ import {
   type CurrencyCode,
   estimateToAmount,
   getCurrencyForPaymentMethod,
+  linearEstimateToComplexityLevel,
 } from "@/lib/currency";
 import {
   getLinearClient,
@@ -16,6 +17,7 @@ import {
 } from "@/lib/linear";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { initiateAutoPayout } from "@/lib/payout";
+import { shouldEvaluatePptWebhookHint } from "@/lib/ppt-eligibility-gate";
 import prisma from "@/lib/prisma";
 
 const PPT_LABEL = "PPT";
@@ -579,7 +581,7 @@ function issueFromWebhook(issue: PptWebhookIssue): LinearIssueSnapshot {
     identifier: issue.identifier ?? null,
     title: issue.title ?? null,
     url: issue.url ?? null,
-    estimate: issue.estimate ?? null,
+    estimate: linearEstimateToComplexityLevel(issue.estimate ?? null),
     completedAt: coerceDate(issue.completedAt),
     canceledAt: coerceDate(issue.canceledAt),
     archivedAt: coerceDate(issue.archivedAt),
@@ -694,7 +696,7 @@ async function fetchIssueSnapshot(
       identifier: issue.identifier,
       title: issue.title,
       url: issue.url,
-      estimate: issue.estimate ?? null,
+      estimate: linearEstimateToComplexityLevel(issue.estimate ?? null),
       completedAt: issue.completedAt ?? null,
       canceledAt: linearIssue.canceledAt ?? null,
       archivedAt: linearIssue.archivedAt ?? null,
@@ -1808,6 +1810,13 @@ async function handleEligiblePayout(
             reason: "AUTO_PAYOUT_STARTED",
             metadata: { payoutId: payout.id },
           });
+        } else {
+          await notifyAdmins(
+            stateId,
+            snapshot,
+            "TRANSACTION_CREATED",
+            "No automatic payout provider could be started; this payout needs manual review.",
+          );
         }
       } catch (error) {
         console.error("[ppt-eligibility] Auto-payout retry failed:", error);
@@ -1971,13 +1980,22 @@ async function handleEligiblePayout(
   if (withinLimit) {
     try {
       const payout = await initiateAutoPayout(transactionId);
-      await appendEvent({
-        stateId,
-        linearIssueId: snapshot.id,
-        type: "AUTO_PAYOUT_STARTED",
-        reason: "AUTO_PAYOUT_STARTED",
-        metadata: payout ? { payoutId: payout.id } : { payoutId: null },
-      });
+      if (payout) {
+        await appendEvent({
+          stateId,
+          linearIssueId: snapshot.id,
+          type: "AUTO_PAYOUT_STARTED",
+          reason: "AUTO_PAYOUT_STARTED",
+          metadata: { payoutId: payout.id },
+        });
+      } else {
+        await notifyAdmins(
+          stateId,
+          snapshot,
+          "TRANSACTION_CREATED",
+          "No automatic payout provider could be started; this payout needs manual review.",
+        );
+      }
     } catch (error) {
       console.error("[ppt-eligibility] Auto-payout failed:", error);
       await notifyAdmins(
@@ -2047,6 +2065,30 @@ export async function evaluatePptIssueById(
     : undefined;
   const snapshot = await fetchIssueSnapshot(issueId, options.userId, fallback);
   return evaluatePptSnapshot(snapshot, options.trigger ?? "manual");
+}
+
+export async function shouldEvaluatePptIssueFromWebhook(
+  issue: PptWebhookIssue,
+) {
+  const hinted = issueFromWebhook(issue);
+  const previous = await prisma.pptPayoutState.findUnique({
+    where: { linearIssueId: hinted.id },
+    select: {
+      id: true,
+      completionEpisode: true,
+      transactionId: true,
+    },
+  });
+
+  return shouldEvaluatePptWebhookHint({
+    stateType: hinted.state.type,
+    stateName: hinted.state.name,
+    canceledAt: hinted.canceledAt,
+    archivedAt: hinted.archivedAt,
+    trashed: hinted.trashed,
+    previousCompletionEpisode: previous?.completionEpisode ?? null,
+    previousTransactionId: previous?.transactionId ?? null,
+  });
 }
 
 export async function evaluatePptIssueFromWebhook(issue: PptWebhookIssue) {

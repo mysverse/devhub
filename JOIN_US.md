@@ -10,12 +10,12 @@ Here is why you should join us and how our platform supports you every step of t
 
 ## 1. Guaranteed Task Payouts: The Points Payout System (PPT)
 
-Every task you pick up on our **Linear** workspace has an estimate in points. When you complete a task labeled `PPT` (Points Payout System), you are guaranteed a direct payout based on the task's estimate.
+Every task you pick up on our **Linear** workspace has a DevHub complexity level from 1-5. Linear stores those as Fibonacci estimates (`1, 2, 3, 5, 8`), which DevHub maps back to levels (`1, 2, 3, 4, 5`). When you complete a task labeled `PPT` (Points Payout System), you are guaranteed a direct payout based on the normalized complexity level.
 
 - **Choose Your Currency:** Get paid in **Malaysian Ringgit (MYR)** or **Robux** depending on your preference.
 - **Highly Competitive Rates:**
-  - **RM20.00** per estimation point (e.g., a 3-point task = **RM60.00**).
-  - **1,200 Robux** per estimation point (e.g., a 3-point task = **3,600 Robux**).
+  - **RM20.00** per complexity level (e.g., level 3 = **RM60.00**, level 5/XL = **RM100.00**).
+  - **1,200 Robux** per complexity level (e.g., level 3 = **3,600 Robux**, level 5/XL = **6,000 Robux**).
 - **Automatic Weekly Approvals:** Completed PPT tasks are automatically compiled, processed, and paid out weekly through our integrated providers (Billplz, Xendit, FinSys).
 - **Professional Accounting:** View and download transaction slips as PDFs directly from your dashboard for easy record-keeping.
 

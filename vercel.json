@@ -20,6 +20,10 @@
     {
       "path": "/api/cron/incentives-release",
       "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron/ppt-assignment-watch",
+      "schedule": "0 * * * *"
     }
   ]
 }

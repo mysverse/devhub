@@ -53,6 +53,20 @@ const ITEMS: PreferenceItem[] = [
     defaults: { in_app: true, email: false },
   },
   {
+    domain: "ppt_task",
+    type: "STALE_WARNING",
+    title: "PPT activity warning",
+    description: "When an assigned PPT has no visible activity for too long.",
+    defaults: { in_app: true, email: true },
+  },
+  {
+    domain: "ppt_task",
+    type: "AUTO_UNASSIGNED",
+    title: "PPT automatically unassigned",
+    description: "When DevHub releases a stale PPT assignment.",
+    defaults: { in_app: true, email: true },
+  },
+  {
     domain: "ppt_request",
     type: "SUBMITTED",
     title: "Admin: new PPT request",

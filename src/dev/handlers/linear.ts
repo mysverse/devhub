@@ -186,6 +186,33 @@ function rawIssueNode(issue: MockLinearIssue, board = false): Json {
   return node;
 }
 
+function assignmentWatchIssueNode(issue: MockLinearIssue): Json {
+  const state = stateById(issue.stateId);
+  const assignee = issue.assigneeId ? getLinearUser(issue.assigneeId) : null;
+  return {
+    id: issue.id,
+    identifier: issue.identifier,
+    title: issue.title,
+    url: issue.url,
+    description: issue.description,
+    estimate: issue.estimate,
+    createdAt: iso(issue.createdAt),
+    updatedAt: iso(issue.updatedAt),
+    state: { type: state.type, name: state.name },
+    assignee: assignee
+      ? {
+          id: assignee.id,
+          email: assignee.email,
+          name: assignee.name,
+          displayName: assignee.displayName,
+        }
+      : null,
+    labels: { nodes: issue.labelNames.map((name) => ({ name })) },
+    comments: connection(commentNodes(issue)),
+    history: connection(historyNodes(issue)),
+  };
+}
+
 function userNode(linearId: string): Json {
   const user = getLinearUser(linearId);
   return {
@@ -689,6 +716,16 @@ function executeOperation(
         },
       };
     }
+    case "DevHubPptAssignmentWatchIssues": {
+      const filter = inlineFilterFor(operation, variables);
+      return {
+        issues: {
+          nodes: [...state.issues.values()]
+            .filter((issue) => matchesFilter(issue, filter, query))
+            .map((issue) => assignmentWatchIssueNode(issue)),
+        },
+      };
+    }
 
     // Mutations
     case "updateIssue": {
@@ -869,6 +906,12 @@ function inlineFilterFor(
     case "DevHubPptBoardIssues":
       return {
         state: { type: { in: ["backlog", "unstarted", "started"] } },
+        labels: { name: { eq: "PPT" } },
+      };
+    case "DevHubPptAssignmentWatchIssues":
+      return {
+        state: { type: { in: ["backlog", "unstarted", "started"] } },
+        assignee: { null: false },
         labels: { name: { eq: "PPT" } },
       };
     case "DevHubIssuesByIds":

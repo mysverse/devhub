@@ -19,6 +19,8 @@ const BUILT_IN_CHANNEL_DEFAULTS: Record<string, NotificationChannelDefaults> = {
   "ppt_request:REJECTED": { in_app: true, email: true },
   "ppt_task:ASSIGNED_TO_YOU": { in_app: true, email: true },
   "ppt_task:UNCLAIMED_AVAILABLE": { in_app: true, email: false },
+  "ppt_task:STALE_WARNING": { in_app: true, email: true },
+  "ppt_task:AUTO_UNASSIGNED": { in_app: true, email: true },
 };
 
 type EmailOptions = {

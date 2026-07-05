@@ -47,6 +47,8 @@ const TYPE_OVERRIDES: Record<string, Partial<NotificationPresentation>> = {
   "ppt_request:SUBMITTED": { color: "blue", tone: "info" },
   "ppt_task:ASSIGNED_TO_YOU": { color: "green", tone: "positive" },
   "ppt_task:UNCLAIMED_AVAILABLE": { color: "blue", tone: "info" },
+  "ppt_task:STALE_WARNING": { color: "yellow", tone: "warning" },
+  "ppt_task:AUTO_UNASSIGNED": { color: "red", tone: "critical" },
 };
 
 export function notificationPresentation(

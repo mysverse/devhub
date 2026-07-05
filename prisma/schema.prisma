@@ -97,6 +97,7 @@ model UserProfile {
   // Relationships
   transactions            Transaction[]
   pptPayoutStates         PptPayoutState[]        @relation("PptPayoutStateUser")
+  pptAssignmentWatches    PptAssignmentWatch[]    @relation("PptAssignmentWatchUser")
   notificationsReceived   Notification[]         @relation("NotificationRecipient")
   notificationsActed      Notification[]         @relation("NotificationActor")
   notificationPreferences NotificationPreference[]
@@ -598,6 +599,46 @@ enum PptPayoutEventType {
   LINEAR_COMMENTED
   DEVELOPER_NOTIFIED
   ADMIN_ALERT_SENT
+}
+
+enum PptAssignmentWatchStatus {
+  ACTIVE
+  WARNED
+  UNASSIGNED
+  RESOLVED
+}
+
+model PptAssignmentWatch {
+  id                    String                   @id @default(cuid())
+  linearIssueId         String
+  linearIssueIdentifier String?
+  linearIssueTitle      String?
+  linearIssueUrl        String?
+
+  assigneeLinearId String
+  assigneeEmail    String?
+  assigneeName     String?
+  userId           String?
+  user             UserProfile? @relation("PptAssignmentWatchUser", fields: [userId], references: [id], onDelete: SetNull)
+
+  assignedAt     DateTime
+  lastActivityAt DateTime
+  warnedAt       DateTime?
+  unassignedAt   DateTime?
+  status         PptAssignmentWatchStatus @default(ACTIVE)
+  warningCount   Int                      @default(0)
+
+  lastLinearCommentAt   DateTime?
+  lastLinearCommentType String?
+  metadata              Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([linearIssueId, assigneeLinearId])
+  @@index([linearIssueId])
+  @@index([userId, status])
+  @@index([status, lastActivityAt])
 }
 
 // ── Bonus tables ────────────────────────────────────────────────────────────

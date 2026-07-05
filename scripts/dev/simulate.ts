@@ -7,7 +7,8 @@
  *   pnpm simulate billplz [--id <providerPayoutId>|--latest] [--status completed|failed]
  *   pnpm simulate xendit  [--id <disbursementId>|--latest] [--status COMPLETED|FAILED]
  *   pnpm simulate cron <billplz-poll|xendit-poll|kyc-cleanup|incentives-weekly|
- *                       incentives-release|ppt-admin-digest|ppt-eligibility>
+ *                       incentives-release|ppt-admin-digest|ppt-eligibility|
+ *                       ppt-assignment-watch>
  */
 
 import crypto from "node:crypto";
@@ -164,6 +165,7 @@ const CRON_ROUTES = [
   "incentives-release",
   "ppt-admin-digest",
   "ppt-eligibility",
+  "ppt-assignment-watch",
 ];
 
 async function simulateCron(name: string | undefined) {

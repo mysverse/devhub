@@ -17,7 +17,7 @@ async function main() {
     const branchDiff = runCommand(
       "git diff --name-only origin/main...HEAD",
     ).split("\n");
-    const localChanges = runCommand("git status --porcelain")
+    const localChanges = runCommand("git status --porcelain -uall")
       .split("\n")
       .map((line) => line.slice(3).trim());
     changedFiles = [...new Set([...branchDiff, ...localChanges])].filter(

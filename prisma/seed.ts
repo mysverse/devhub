@@ -9,6 +9,7 @@
  * seeds when the User table is empty, or after --reset).
  */
 
+import type { PptAssignmentWatchStatus } from "@prisma/client";
 import {
   type DevLinearIssue,
   daysAgo,
@@ -47,6 +48,10 @@ function monthKey(date: Date): string {
 
 function dateOnlyUtc(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+function hoursAgo(hours: number): Date {
+  return new Date(now.getTime() - hours * 60 * 60 * 1000);
 }
 
 function complexity(estimate: number | null): number | null {
@@ -1610,6 +1615,75 @@ export async function seed() {
       createdAt: daysAgo(6),
       reviewedAt: daysAgo(5),
     },
+  });
+
+  // ── PPT assignment watch fixtures ─────────────────────────────────────────
+  function watchSeed(identifier: string, status: PptAssignmentWatchStatus) {
+    const fixtureIssue = issue(identifier);
+    if (!fixtureIssue.assigneeId) {
+      throw new Error(`${identifier} must be assigned for watch seed data.`);
+    }
+    const assignee = LINEAR_USERS.find(
+      (linearUser) => linearUser.id === fixtureIssue.assigneeId,
+    );
+    return {
+      ...issueColumns(fixtureIssue),
+      assigneeLinearId: fixtureIssue.assigneeId,
+      assigneeEmail: assignee?.email ?? null,
+      assigneeName: assignee?.displayName ?? assignee?.name ?? null,
+      userId: userIdByLinearId.get(fixtureIssue.assigneeId) ?? null,
+      status,
+      assignedAt: daysAgo(fixtureIssue.createdDaysAgo ?? 4),
+      metadata: {
+        title: fixtureIssue.title,
+        description: fixtureIssue.description ?? null,
+        estimate: complexity(fixtureIssue.estimate),
+        stateType: fixtureIssue.stateType,
+        stateName: LINEAR_STATES[fixtureIssue.stateType].name,
+        assigneeLinearId: fixtureIssue.assigneeId,
+      },
+    };
+  }
+  await prisma.pptAssignmentWatch.createMany({
+    data: [
+      {
+        ...watchSeed("MYS-201", "ACTIVE"),
+        lastActivityAt: hoursAgo(16),
+      },
+      {
+        ...watchSeed("MYS-202", "WARNED"),
+        lastActivityAt: hoursAgo(54),
+        warnedAt: hoursAgo(4),
+        warningCount: 1,
+        lastLinearCommentAt: hoursAgo(4),
+        lastLinearCommentType: "warning",
+      },
+      {
+        ...watchSeed("MYS-204", "SNOOZED"),
+        lastActivityAt: hoursAgo(58),
+        warnedAt: hoursAgo(8),
+        warningCount: 1,
+        snoozedUntil: hoursAgo(-36),
+        snoozeReason: "Developer reported active work in Discord.",
+        lastAdminActionAt: hoursAgo(2),
+        lastAdminActionById: adminId,
+        lastAdminActionNote: "Snoozed after checking in with Alex.",
+      },
+      {
+        ...watchSeed("MYS-225", "UNASSIGNED"),
+        lastActivityAt: hoursAgo(76),
+        warnedAt: hoursAgo(28),
+        unassignedAt: hoursAgo(1),
+        warningCount: 1,
+        lastLinearCommentAt: hoursAgo(1),
+        lastLinearCommentType: "unassigned",
+      },
+      {
+        ...watchSeed("MYS-220", "RESOLVED"),
+        lastActivityAt: daysAgo(8),
+      },
+    ],
+    skipDuplicates: true,
   });
 
   // ── Invites & email log ────────────────────────────────────────────────────

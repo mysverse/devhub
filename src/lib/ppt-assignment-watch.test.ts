@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { deriveAssignmentActivity } from "./ppt-assignment-watch-activity";
+import {
+  deriveAssignmentActivity,
+  getAssignmentWatchTiming,
+} from "./ppt-assignment-watch-activity";
+import {
+  hasMeaningfulPptProgress,
+  PPT_PROGRESS_TEMPLATE,
+} from "./ppt-progress";
 
 const assignedAt = new Date("2026-07-01T00:00:00.000Z");
 const previousLastActivityAt = new Date("2026-07-01T01:00:00.000Z");
@@ -90,4 +97,56 @@ test("developer comments reset activity but DevHub watcher comments do not", () 
 
   assert.equal(result.changed, true);
   assert.equal(result.lastActivityAt.toISOString(), "2026-07-03T00:00:00.000Z");
+});
+
+test("assignment watch timing derives warning and unassign deadlines", () => {
+  const timing = getAssignmentWatchTiming({
+    lastActivityAt: new Date("2026-07-01T00:00:00.000Z"),
+    now: new Date("2026-07-02T00:00:00.000Z"),
+    warningHours: 48,
+    unassignHours: 72,
+  });
+
+  assert.equal(timing.warningAt.toISOString(), "2026-07-03T00:00:00.000Z");
+  assert.equal(timing.unassignAt.toISOString(), "2026-07-04T00:00:00.000Z");
+  assert.equal(timing.staleHours, 24);
+  assert.equal(timing.dueWithin24Hours, false);
+});
+
+test("snoozed watches are skipped until the snooze expires", () => {
+  const timing = getAssignmentWatchTiming({
+    status: "SNOOZED",
+    lastActivityAt: new Date("2026-07-01T00:00:00.000Z"),
+    snoozedUntil: new Date("2026-07-03T00:00:00.000Z"),
+    now: new Date("2026-07-02T00:00:00.000Z"),
+    warningHours: 48,
+    unassignHours: 72,
+  });
+
+  assert.equal(timing.isSnoozed, true);
+  assert.equal(timing.dueWithin24Hours, false);
+});
+
+test("expired snoozes resume normal stale timing", () => {
+  const timing = getAssignmentWatchTiming({
+    status: "SNOOZED",
+    lastActivityAt: new Date("2026-07-01T00:00:00.000Z"),
+    snoozedUntil: new Date("2026-07-02T00:00:00.000Z"),
+    now: new Date("2026-07-03T00:00:00.000Z"),
+    warningHours: 48,
+    unassignHours: 72,
+  });
+
+  assert.equal(timing.isSnoozed, false);
+  assert.equal(timing.dueWithin24Hours, true);
+});
+
+test("blank progress template is not meaningful assignment activity", () => {
+  assert.equal(hasMeaningfulPptProgress(PPT_PROGRESS_TEMPLATE), false);
+  assert.equal(
+    hasMeaningfulPptProgress(
+      `${PPT_PROGRESS_TEMPLATE}\nFinished signal wiring.`,
+    ),
+    true,
+  );
 });

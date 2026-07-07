@@ -12,10 +12,12 @@ import {
 import {
   type AssignmentWatchSnapshot,
   deriveAssignmentActivity,
+  getAssignmentWatchTiming,
 } from "@/lib/ppt-assignment-watch-activity";
 import prisma from "@/lib/prisma";
 
-const DEVHUB_COMMENT_MARKER = "<!-- devhub:ppt-assignment-watch -->";
+export const DEVHUB_ASSIGNMENT_WATCH_COMMENT_MARKER =
+  "<!-- devhub:ppt-assignment-watch -->";
 
 type RawLinearClient = LinearClient & {
   client: {
@@ -75,13 +77,18 @@ function coerceDate(value: unknown): Date | null {
   return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function getWarningHours() {
+export function getWarningHours() {
   const configured = Number(process.env.PPT_HOGGING_WARNING_HOURS ?? "48");
   return Number.isFinite(configured) && configured > 0 ? configured : 48;
 }
 
-function getUnassignHours() {
+export function getUnassignHours() {
   const configured = Number(process.env.PPT_HOGGING_UNASSIGN_HOURS ?? "72");
+  return Number.isFinite(configured) && configured > 0 ? configured : 72;
+}
+
+export function getSnoozeHours() {
+  const configured = Number(process.env.PPT_HOGGING_SNOOZE_HOURS ?? "72");
   return Number.isFinite(configured) && configured > 0 ? configured : 72;
 }
 
@@ -296,14 +303,14 @@ function issueTitle(issue: AssignmentWatchIssue) {
 }
 
 function warningComment(issue: AssignmentWatchIssue, staleHours: number) {
-  return `${DEVHUB_COMMENT_MARKER}
+  return `${DEVHUB_ASSIGNMENT_WATCH_COMMENT_MARKER}
 DevHub assignment warning: this PPT has been assigned to ${
     issue.assignee.displayName ?? issue.assignee.name ?? "a developer"
   } for ${Math.floor(staleHours)} hours without visible activity. Please post progress or unassign yourself if you are not actively working on it.`;
 }
 
 function unassignComment(staleHours: number) {
-  return `${DEVHUB_COMMENT_MARKER}
+  return `${DEVHUB_ASSIGNMENT_WATCH_COMMENT_MARKER}
 DevHub automatically unassigned this PPT after ${Math.floor(staleHours)} hours without visible activity so another developer can claim it.`;
 }
 
@@ -475,6 +482,8 @@ async function upsertWatch(issue: AssignmentWatchIssue) {
         ? {
             status: "ACTIVE" as PptAssignmentWatchStatus,
             warnedAt: null,
+            snoozedUntil: null,
+            snoozeReason: null,
           }
         : {}),
     },
@@ -524,7 +533,7 @@ async function unassignIfNeeded(
 
 async function resolveInactiveWatches(activeKeys: Set<string>) {
   const open = await prisma.pptAssignmentWatch.findMany({
-    where: { status: { in: ["ACTIVE", "WARNED"] } },
+    where: { status: { in: ["ACTIVE", "WARNED", "SNOOZED"] } },
     select: { id: true, linearIssueId: true, assigneeLinearId: true },
   });
   let resolved = 0;
@@ -548,7 +557,7 @@ export async function runPptAssignmentWatch() {
     );
   }
 
-  const now = Date.now();
+  const now = new Date();
   const warningHours = getWarningHours();
   const unassignHours = getUnassignHours();
   const issues = await fetchAssignedPptIssues(client);
@@ -563,8 +572,17 @@ export async function runPptAssignmentWatch() {
     const watch = await upsertWatch(issue);
     checked++;
 
-    const staleHours =
-      (now - watch.lastActivityAt.getTime()) / (60 * 60 * 1000);
+    const timing = getAssignmentWatchTiming({
+      lastActivityAt: watch.lastActivityAt,
+      status: watch.status,
+      snoozedUntil: watch.snoozedUntil,
+      now,
+      warningHours,
+      unassignHours,
+    });
+    if (timing.isSnoozed) continue;
+
+    const staleHours = timing.staleHours;
     if (staleHours >= unassignHours) {
       if (await unassignIfNeeded(client, watch, issue, staleHours)) {
         unassigned++;

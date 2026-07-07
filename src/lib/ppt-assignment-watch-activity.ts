@@ -39,6 +39,25 @@ export type AssignmentActivityResult = {
   snapshot: AssignmentWatchSnapshot;
 };
 
+export type AssignmentWatchTimingInput = {
+  lastActivityAt: Date;
+  status?: string | null;
+  snoozedUntil?: Date | null;
+  now?: Date;
+  warningHours: number;
+  unassignHours: number;
+};
+
+export type AssignmentWatchTiming = {
+  warningAt: Date;
+  unassignAt: Date;
+  staleHours: number;
+  hoursUntilWarning: number;
+  hoursUntilUnassign: number;
+  isSnoozed: boolean;
+  dueWithin24Hours: boolean;
+};
+
 export function isDevHubAssignmentWatchComment(body: string) {
   return body.includes(DEVHUB_COMMENT_MARKER);
 }
@@ -104,4 +123,43 @@ export function deriveAssignmentActivity({
   }
 
   return { lastActivityAt, changed, snapshot };
+}
+
+export function getAssignmentWatchTiming({
+  lastActivityAt,
+  status,
+  snoozedUntil,
+  now = new Date(),
+  warningHours,
+  unassignHours,
+}: AssignmentWatchTimingInput): AssignmentWatchTiming {
+  const warningAt = new Date(
+    lastActivityAt.getTime() + warningHours * 60 * 60 * 1000,
+  );
+  const unassignAt = new Date(
+    lastActivityAt.getTime() + unassignHours * 60 * 60 * 1000,
+  );
+  const staleHours =
+    (now.getTime() - lastActivityAt.getTime()) / (60 * 60 * 1000);
+  const hoursUntilWarning =
+    (warningAt.getTime() - now.getTime()) / (60 * 60 * 1000);
+  const hoursUntilUnassign =
+    (unassignAt.getTime() - now.getTime()) / (60 * 60 * 1000);
+  const isSnoozed =
+    status === "SNOOZED" &&
+    Boolean(snoozedUntil && snoozedUntil.getTime() > now.getTime());
+
+  return {
+    warningAt,
+    unassignAt,
+    staleHours,
+    hoursUntilWarning,
+    hoursUntilUnassign,
+    isSnoozed,
+    dueWithin24Hours:
+      !isSnoozed &&
+      status !== "UNASSIGNED" &&
+      status !== "RESOLVED" &&
+      hoursUntilUnassign <= 24,
+  };
 }

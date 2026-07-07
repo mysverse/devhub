@@ -1,6 +1,7 @@
 import type {
   BonusCandidateStatus,
   KycStatus,
+  PptAssignmentWatchStatus,
   PptPayoutStatus,
   PptRequestStatus,
   TxStatus,
@@ -66,6 +67,17 @@ export const PPT_PAYOUT_STATUS: Record<PptPayoutStatus, StatusCopy> = {
   ON_HOLD: { label: "On hold", color: "orange" },
   PAID: { label: "Paid", color: "green" },
   FLAGGED: { label: "Flagged", color: "red" },
+};
+
+export const PPT_ASSIGNMENT_WATCH_STATUS: Record<
+  PptAssignmentWatchStatus,
+  StatusCopy
+> = {
+  ACTIVE: { label: "Active", color: "blue" },
+  WARNED: { label: "Warned", color: "yellow" },
+  SNOOZED: { label: "Snoozed", color: "violet" },
+  UNASSIGNED: { label: "Unassigned", color: "orange" },
+  RESOLVED: { label: "Resolved", color: "gray" },
 };
 
 export const TRANSACTION_STATUS: Record<TxStatus, StatusCopy> = {

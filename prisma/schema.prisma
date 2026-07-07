@@ -604,6 +604,7 @@ enum PptPayoutEventType {
 enum PptAssignmentWatchStatus {
   ACTIVE
   WARNED
+  SNOOZED
   UNASSIGNED
   RESOLVED
 }
@@ -624,12 +625,17 @@ model PptAssignmentWatch {
   assignedAt     DateTime
   lastActivityAt DateTime
   warnedAt       DateTime?
+  snoozedUntil   DateTime?
+  snoozeReason   String?
   unassignedAt   DateTime?
   status         PptAssignmentWatchStatus @default(ACTIVE)
   warningCount   Int                      @default(0)
 
   lastLinearCommentAt   DateTime?
   lastLinearCommentType String?
+  lastAdminActionAt     DateTime?
+  lastAdminActionById   String?
+  lastAdminActionNote   String?
   metadata              Json?
 
   createdAt DateTime @default(now())
@@ -639,6 +645,7 @@ model PptAssignmentWatch {
   @@index([linearIssueId])
   @@index([userId, status])
   @@index([status, lastActivityAt])
+  @@index([status, snoozedUntil])
 }
 
 // ── Bonus tables ────────────────────────────────────────────────────────────

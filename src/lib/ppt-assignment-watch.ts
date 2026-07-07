@@ -155,7 +155,7 @@ async function fetchAssignedPptIssues(client: LinearClient) {
         | {
             id: string;
             body?: string | null;
-            userId?: string | null;
+            user?: { id?: string | null } | null;
             createdAt?: string | null;
             updatedAt?: string | null;
             editedAt?: string | null;
@@ -200,7 +200,7 @@ async function fetchAssignedPptIssues(client: LinearClient) {
             state { type name }
             assignee { id email name displayName }
             labels(first: 50) { nodes { name } }
-            comments(first: 50) { nodes { id body userId createdAt updatedAt editedAt } }
+            comments(first: 50) { nodes { id body user { id } createdAt updatedAt editedAt } }
             history(first: 100) {
               nodes {
                 actorId
@@ -249,7 +249,7 @@ async function fetchAssignedPptIssues(client: LinearClient) {
             {
               id: comment.id,
               body: comment.body ?? "",
-              userId: comment.userId ?? null,
+              userId: comment.user?.id ?? null,
               createdAt,
               updatedAt: coerceDate(comment.updatedAt),
               editedAt: coerceDate(comment.editedAt),

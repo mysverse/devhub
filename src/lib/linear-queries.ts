@@ -1,5 +1,13 @@
 import type { LinearClient } from "@linear/sdk";
 import { linearEstimateToComplexityLevel } from "@/lib/currency";
+import {
+  DEVHUB_ASSIGNED_ACTIVE_ISSUES_QUERY,
+  DEVHUB_ISSUES_BY_IDS_QUERY,
+  DEVHUB_LEADERBOARD_PPT_ISSUES_QUERY,
+  DEVHUB_PPT_BOARD_ISSUES_QUERY,
+  DEVHUB_SUGGESTED_PPTS_QUERY,
+  DEVHUB_TEAM_WORKFLOW_STATES_QUERY,
+} from "@/lib/linear-documents";
 
 export type LinearAssigneeDTO = {
   id: string;
@@ -83,25 +91,6 @@ type RawPptBoardIssueNode = RawIssueNode & {
   children?: { nodes?: { id: string }[] | null } | null;
 };
 
-const ISSUE_FIELDS = `
-  id
-  identifier
-  title
-  url
-  description
-  estimate
-  state { type name }
-  assignee { id name displayName avatarUrl }
-  labels(first: 50) { nodes { name } }
-`;
-
-const PPT_BOARD_ISSUE_FIELDS = `
-  ${ISSUE_FIELDS}
-  project { id name startDate targetDate progress health }
-  team { id name key }
-  children(first: 100) { nodes { id } }
-`;
-
 async function gql<TData, TVariables extends Record<string, unknown>>(
   client: LinearClient,
   query: string,
@@ -176,23 +165,7 @@ export async function fetchLeaderboardIssues(client: LinearClient) {
   const data = await gql<
     { issues: { nodes: RawIssueNode[] } },
     Record<string, never>
-  >(
-    client,
-    `
-      query DevHubLeaderboardPptIssues {
-        issues(
-          first: 100
-          filter: {
-            labels: { name: { eq: "PPT" } }
-            assignee: { null: false }
-          }
-        ) {
-          nodes { ${ISSUE_FIELDS} }
-        }
-      }
-    `,
-    {},
-  );
+  >(client, DEVHUB_LEADERBOARD_PPT_ISSUES_QUERY, {});
 
   return data.issues.nodes.map(issueDto);
 }
@@ -204,23 +177,7 @@ export async function fetchAssignedActiveIssues(
   const data = await gql<
     { issues: { nodes: RawIssueNode[] } },
     { linearId: string }
-  >(
-    client,
-    `
-      query DevHubAssignedActiveIssues($linearId: ID!) {
-        issues(
-          first: 50
-          filter: {
-            assignee: { id: { eq: $linearId } }
-            state: { type: { nin: ["completed", "canceled"] } }
-          }
-        ) {
-          nodes { ${ISSUE_FIELDS} }
-        }
-      }
-    `,
-    { linearId },
-  );
+  >(client, DEVHUB_ASSIGNED_ACTIVE_ISSUES_QUERY, { linearId });
 
   return data.issues.nodes.map(issueDto);
 }
@@ -229,24 +186,7 @@ export async function fetchSuggestedPpts(client: LinearClient) {
   const data = await gql<
     { issues: { nodes: RawIssueNode[] } },
     Record<string, never>
-  >(
-    client,
-    `
-      query DevHubSuggestedPpts {
-        issues(
-          first: 10
-          filter: {
-            assignee: { null: true }
-            state: { type: { in: ["backlog", "unstarted"] } }
-            labels: { name: { eq: "PPT" } }
-          }
-        ) {
-          nodes { ${ISSUE_FIELDS} }
-        }
-      }
-    `,
-    {},
-  );
+  >(client, DEVHUB_SUGGESTED_PPTS_QUERY, {});
 
   return data.issues.nodes
     .map(issueDto)
@@ -257,23 +197,7 @@ export async function fetchPptBoardIssues(client: LinearClient) {
   const data = await gql<
     { issues: { nodes: RawPptBoardIssueNode[] } },
     Record<string, never>
-  >(
-    client,
-    `
-      query DevHubPptBoardIssues {
-        issues(
-          first: 100
-          filter: {
-            state: { type: { in: ["backlog", "unstarted", "started"] } }
-            labels: { name: { eq: "PPT" } }
-          }
-        ) {
-          nodes { ${PPT_BOARD_ISSUE_FIELDS} }
-        }
-      }
-    `,
-    {},
-  );
+  >(client, DEVHUB_PPT_BOARD_ISSUES_QUERY, {});
 
   return data.issues.nodes
     .map(pptBoardIssueDto)
@@ -287,17 +211,10 @@ export async function fetchIssuesByIds(client: LinearClient, ids: string[]) {
   const data = await gql<
     { issues: { nodes: RawIssueNode[] } },
     { ids: string[]; first: number }
-  >(
-    client,
-    `
-      query DevHubIssuesByIds($ids: [ID!]!, $first: Int!) {
-        issues(first: $first, filter: { id: { in: $ids } }) {
-          nodes { ${ISSUE_FIELDS} }
-        }
-      }
-    `,
-    { ids: uniqueIds, first: uniqueIds.length },
-  );
+  >(client, DEVHUB_ISSUES_BY_IDS_QUERY, {
+    ids: uniqueIds,
+    first: uniqueIds.length,
+  });
 
   return data.issues.nodes.map(issueDto);
 }
@@ -315,19 +232,7 @@ export async function fetchTeamWorkflowStates(
       } | null;
     },
     { teamId: string }
-  >(
-    client,
-    `
-      query DevHubTeamWorkflowStates($teamId: String!) {
-        team(id: $teamId) {
-          states(first: 50) {
-            nodes { id name type }
-          }
-        }
-      }
-    `,
-    { teamId },
-  );
+  >(client, DEVHUB_TEAM_WORKFLOW_STATES_QUERY, { teamId });
 
   return data.team?.states.nodes ?? [];
 }

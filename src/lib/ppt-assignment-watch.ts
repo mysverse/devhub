@@ -3,6 +3,7 @@ import type { PptAssignmentWatchStatus, Prisma } from "@prisma/client";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { linearEstimateToComplexityLevel } from "@/lib/currency";
 import { getLinearServiceClient } from "@/lib/linear";
+import { DEVHUB_PPT_ASSIGNMENT_WATCH_ISSUES_QUERY } from "@/lib/linear-documents";
 import {
   EMAIL_CHANNEL,
   IN_APP_CHANNEL,
@@ -178,43 +179,7 @@ async function fetchAssignedPptIssues(client: LinearClient) {
 
   const data = await rawRequest<{ issues: { nodes: RawIssue[] } }>(
     client,
-    `
-      query DevHubPptAssignmentWatchIssues {
-        issues(
-          first: 100
-          filter: {
-            labels: { name: { eq: "PPT" } }
-            assignee: { null: false }
-            state: { type: { in: ["backlog", "unstarted", "started"] } }
-          }
-        ) {
-          nodes {
-            id
-            identifier
-            title
-            url
-            description
-            estimate
-            createdAt
-            updatedAt
-            state { type name }
-            assignee { id email name displayName }
-            labels(first: 50) { nodes { name } }
-            comments(first: 50) { nodes { id body user { id } createdAt updatedAt editedAt } }
-            history(first: 100) {
-              nodes {
-                actorId
-                toAssigneeId
-                fromAssigneeId
-                toStateId
-                fromStateId
-                createdAt
-              }
-            }
-          }
-        }
-      }
-    `,
+    DEVHUB_PPT_ASSIGNMENT_WATCH_ISSUES_QUERY,
   );
 
   return data.issues.nodes.flatMap((issue): AssignmentWatchIssue[] => {

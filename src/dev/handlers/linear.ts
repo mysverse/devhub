@@ -16,6 +16,10 @@ import {
 import { PERSONAS } from "@/dev/fixtures/personas";
 import type { DevHandler } from "@/dev/intercept";
 import { getDevState, type MockLinearIssue, stateById } from "@/dev/state";
+import {
+  formatLinearDocumentValidationErrors,
+  validateLinearGraphqlDocument,
+} from "@/lib/linear-document-validation";
 
 const PLACEHOLDER_PNG = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNsaGj4DwAFhAKAv1oU3gAAAABJRU5ErkJggg==",
@@ -974,6 +978,19 @@ export const handleLinear: DevHandler = async (req, url) => {
     const operation = named?.[1] ?? anonymousRoot?.[1];
     if (!operation) {
       throw unknownOperation("could not parse operation name", query);
+    }
+    if (operation.startsWith("DevHub")) {
+      const validationErrors = validateLinearGraphqlDocument(query);
+      if (validationErrors.length > 0) {
+        return Response.json(
+          {
+            errors: validationErrors.map((error) => ({
+              message: formatLinearDocumentValidationErrors(operation, [error]),
+            })),
+          },
+          { status: 400 },
+        );
+      }
     }
     const data = executeOperation(
       operation,

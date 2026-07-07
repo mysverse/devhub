@@ -15,7 +15,9 @@
     "check": "biome check --write && tsx scripts/dev/check-migrations.ts",
     "check-migrations": "tsx scripts/dev/check-migrations.ts",
     "typecheck": "prisma generate && tsc --noEmit",
-    "test": "tsx --test \"src/**/*.test.ts\"",
+    "test": "pnpm linear:validate && tsx --test \"src/**/*.test.ts\"",
+    "linear:validate": "tsx scripts/linear/validate-documents.ts",
+    "linear:schema:update": "tsx scripts/linear/update-schema.ts",
     "smoke": "tsx scripts/dev/smoke.ts",
     "simulate": "tsx scripts/dev/simulate.ts",
     "repair:ppt-payouts": "tsx scripts/dev/repair-ppt-payouts.ts"
@@ -65,6 +67,7 @@
     "@types/react-dom": "^19.2.3",
     "dotenv": "^17.4.2",
     "dotenv-cli": "^11.0.0",
+    "graphql": "16.14.1",
     "prisma": "^7.8.0",
     "tailwindcss": "^4.3.2",
     "tsx": "^4.23.0",

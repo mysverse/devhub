@@ -15,6 +15,8 @@ pnpm check                  # Run Biome check with auto-fix
 pnpm typecheck              # prisma generate && tsc --noEmit
 pnpm smoke                  # Dev-mode route sweep (requires pnpm dev:mock running)
 pnpm simulate <...>         # Dev-mode webhook/cron simulators (see Dev Mode below)
+pnpm linear:validate        # Validate committed raw Linear GraphQL documents
+pnpm linear:schema:update   # Refresh the committed Linear schema snapshot (needs Linear token)
 pnpm exec prisma validate   # Validate the Prisma schema
 pnpm exec prisma generate   # Regenerate Prisma client after schema changes
 pnpm exec prisma migrate dev # Create/apply development migrations
@@ -84,7 +86,8 @@ runbook: `.claude/skills/dev-mode/SKILL.md`.
 |---|---|
 | New Prisma model or page that needs data | `prisma/seed.ts` (typed against the real client — `pnpm typecheck` catches drift) and the route list in `scripts/dev/smoke.ts` |
 | New outbound HTTP call / external service | handler in `src/dev/handlers/` + ROUTES entry in `src/dev/intercept.ts` (unhandled hosts throw loudly in dev mode) |
-| New Linear SDK query/mutation or raw GraphQL | `src/dev/handlers/linear.ts` (unknown operations throw with the operation name) |
+| New Linear SDK query/mutation | `src/dev/handlers/linear.ts` (unknown operations throw with the operation name) |
+| New raw Linear GraphQL query/mutation | `src/lib/linear-documents.ts`, `LINEAR_GRAPHQL_DOCUMENTS`, and `src/dev/handlers/linear.ts` if mock data changes; run `pnpm linear:validate`. Refresh `scripts/linear/linear.schema.graphql` with `pnpm linear:schema:update` when bumping Linear/API behavior. |
 | New environment variable | a fake value in `.env.mock` — it must enumerate every var so real values never leak into mock runs |
 | New DB rows derived from Linear issues | use ids from `src/dev/fixtures/linear.ts`, the single source of truth shared by the seed, the Linear mock, and the simulators |
 

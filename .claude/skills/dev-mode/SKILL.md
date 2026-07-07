@@ -49,7 +49,7 @@ pnpm simulate linear --issue MYS-201 --action comment    # proof comment webhook
 pnpm simulate linear --issue MYS-220 --action reopen     # reopen a paid issue
 pnpm simulate billplz [--status completed|failed]        # provider webhook → latest PROCESSING payout
 pnpm simulate xendit  [--status COMPLETED|FAILED]
-pnpm simulate cron <billplz-poll|xendit-poll|kyc-cleanup|incentives-weekly|incentives-release|ppt-admin-digest|ppt-eligibility>
+pnpm simulate cron <billplz-poll|xendit-poll|kyc-cleanup|incentives-weekly|incentives-release|ppt-admin-digest|ppt-eligibility|ppt-assignment-watch>
 ```
 
 Full PPT payout lifecycle (verified working): `complete` → `comment` (proof)
@@ -87,7 +87,8 @@ be reached via `/api/dev/reset` + simulate commands instead.
 |---|---|
 | New Prisma model / page needing data | `prisma/seed.ts` (typed — tsc catches drift) + route in `scripts/dev/smoke.ts` |
 | New external HTTP call | handler in `src/dev/handlers/`, ROUTES entry in `src/dev/intercept.ts` (unhandled hosts throw with instructions) |
-| New Linear query/mutation | `src/dev/handlers/linear.ts` (unknown operations throw with the operation name) |
+| New Linear SDK query/mutation | `src/dev/handlers/linear.ts` (unknown operations throw with the operation name) |
+| New raw Linear GraphQL query/mutation | `src/lib/linear-documents.ts`, `LINEAR_GRAPHQL_DOCUMENTS`, and `src/dev/handlers/linear.ts` if mock data changes; run `pnpm linear:validate`. Refresh `scripts/linear/linear.schema.graphql` with `pnpm linear:schema:update` when bumping Linear/API behavior. |
 | New env var | fake value in `.env.mock` (it must enumerate everything so real values can't leak in) |
 | New Linear-derived DB rows | ids from `src/dev/fixtures/linear.ts` — the single source shared by seed, mocks and simulators |
 

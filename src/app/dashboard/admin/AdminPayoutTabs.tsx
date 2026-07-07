@@ -12,6 +12,9 @@ import AdminIncentivesTab, {
   type AdminIncentiveAwardData,
   type IncentiveConfigData,
 } from "./AdminIncentivesTab";
+import AdminPptAssignmentWatchTab, {
+  type AdminPptAssignmentWatchRow,
+} from "./AdminPptAssignmentWatchTab";
 import AdminPptEligibilityTab, {
   type AdminPptEligibilityState,
 } from "./AdminPptEligibilityTab";
@@ -54,6 +57,7 @@ export default function AdminPayoutTabs({
   incentiveConfig,
   incentiveAwards,
   pptEligibilityStates,
+  pptAssignmentWatches,
 }: {
   pending: PayoutTransaction[];
   paid: PayoutTransaction[];
@@ -64,13 +68,18 @@ export default function AdminPayoutTabs({
   incentiveConfig: IncentiveConfigData;
   incentiveAwards: AdminIncentiveAwardData[];
   pptEligibilityStates: AdminPptEligibilityState[];
+  pptAssignmentWatches: AdminPptAssignmentWatchRow[];
 }) {
   const searchParams = useSearchParams();
   const requestedTab = searchParams.get("tab");
+  const attentionWatchCount = pptAssignmentWatches.filter((watch) =>
+    ["WARNED", "UNASSIGNED"].includes(watch.status),
+  ).length;
   const availableTabs = new Set([
     ...(pptRequests.length > 0 ? ["ppt-requests"] : []),
     "bonuses",
     "incentives",
+    "ppt-watch",
     "ppt-eligibility",
     "pending",
     "paid",
@@ -80,13 +89,15 @@ export default function AdminPayoutTabs({
     ? (requestedTab as string)
     : pptRequests.length > 0
       ? "ppt-requests"
-      : pptEligibilityStates.length > 0
-        ? "ppt-eligibility"
-        : bonusCandidates.length > 0
-          ? "bonuses"
-          : incentiveAwards.some((award) => award.status === "HELD")
-            ? "incentives"
-            : "pending";
+      : attentionWatchCount > 0
+        ? "ppt-watch"
+        : pptEligibilityStates.length > 0
+          ? "ppt-eligibility"
+          : bonusCandidates.length > 0
+            ? "bonuses"
+            : incentiveAwards.some((award) => award.status === "HELD")
+              ? "incentives"
+              : "pending";
 
   return (
     <Tabs defaultValue={defaultValue}>
@@ -99,6 +110,9 @@ export default function AdminPayoutTabs({
         <TabsTab value="bonuses">Bonuses ({bonusCandidates.length})</TabsTab>
         <TabsTab value="incentives">
           Incentives ({incentiveAwards.length})
+        </TabsTab>
+        <TabsTab value="ppt-watch">
+          PPT Watch ({pptAssignmentWatches.length})
         </TabsTab>
         <TabsTab value="ppt-eligibility">
           PPT Eligibility ({pptEligibilityStates.length})
@@ -120,6 +134,10 @@ export default function AdminPayoutTabs({
 
       <TabsPanel value="incentives">
         <AdminIncentivesTab config={incentiveConfig} awards={incentiveAwards} />
+      </TabsPanel>
+
+      <TabsPanel value="ppt-watch">
+        <AdminPptAssignmentWatchTab watches={pptAssignmentWatches} />
       </TabsPanel>
 
       <TabsPanel value="ppt-eligibility">

@@ -14,6 +14,8 @@ import { getIncentiveConfig } from "@/lib/incentives";
 import { getLinearClient, getLinearServiceClient } from "@/lib/linear";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
+import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -25,6 +27,7 @@ import type {
   IncentiveConfigData,
 } from "./AdminIncentivesTab";
 import AdminPayoutTabs from "./AdminPayoutTabs";
+import type { AdminPptAssignmentWatchRow } from "./AdminPptAssignmentWatchTab";
 import type { AdminPptEligibilityState } from "./AdminPptEligibilityTab";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
@@ -194,6 +197,9 @@ async function PendingKycBadge() {
 
 async function AdminPageContent() {
   const userId = await requireAdminPage();
+  const recentWatchHistoryCutoff = new Date(
+    Date.now() - 30 * 24 * 60 * 60 * 1000,
+  );
 
   const [
     pendingTransactions,
@@ -205,6 +211,7 @@ async function AdminPageContent() {
     incentiveAwards,
     readyBonusCandidates,
     pptPayoutStates,
+    pptAssignmentWatches,
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: { in: ["PENDING", "ON_HOLD"] } },
@@ -346,6 +353,19 @@ async function AdminPageContent() {
       },
       orderBy: { updatedAt: "desc" },
       take: 50,
+    }),
+    prisma.pptAssignmentWatch.findMany({
+      where: {
+        OR: [
+          { status: { in: ["ACTIVE", "WARNED", "SNOOZED", "UNASSIGNED"] } },
+          { status: "RESOLVED", updatedAt: { gte: recentWatchHistoryCutoff } },
+        ],
+      },
+      include: {
+        user: { include: { user: { select: { name: true, email: true } } } },
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 250,
     }),
   ]);
 
@@ -547,6 +567,93 @@ async function AdminPageContent() {
     ]),
   );
 
+  const assignmentWatchAdminIds = [
+    ...new Set(
+      pptAssignmentWatches
+        .map((watch) => watch.lastAdminActionById)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const assignmentWatchAdminProfiles =
+    assignmentWatchAdminIds.length > 0
+      ? await prisma.userProfile.findMany({
+          where: { id: { in: assignmentWatchAdminIds } },
+          select: {
+            id: true,
+            legalName: true,
+            user: { select: { name: true, email: true } },
+          },
+        })
+      : [];
+  const assignmentWatchAdminNameById = new Map(
+    assignmentWatchAdminProfiles.map((profile) => [
+      profile.id,
+      profile.legalName || profile.user.name || profile.user.email,
+    ]),
+  );
+  const warningHours = getWarningHours();
+  const unassignHours = getUnassignHours();
+  const watchStatusPriority = new Map([
+    ["ACTIVE", 0],
+    ["WARNED", 1],
+    ["SNOOZED", 2],
+    ["UNASSIGNED", 3],
+    ["RESOLVED", 4],
+  ]);
+  const pptAssignmentWatchRows: AdminPptAssignmentWatchRow[] =
+    pptAssignmentWatches
+      .map((watch) => {
+        const timing = getAssignmentWatchTiming({
+          lastActivityAt: watch.lastActivityAt,
+          status: watch.status,
+          snoozedUntil: watch.snoozedUntil,
+          warningHours,
+          unassignHours,
+        });
+        return {
+          id: watch.id,
+          linearIssueId: watch.linearIssueId,
+          linearIssueIdentifier: watch.linearIssueIdentifier,
+          linearIssueTitle: watch.linearIssueTitle,
+          linearIssueUrl: watch.linearIssueUrl,
+          assigneeName: watch.assigneeName,
+          assigneeEmail: watch.assigneeEmail,
+          developerName:
+            watch.user?.legalName ||
+            watch.user?.user.name ||
+            watch.assigneeName ||
+            null,
+          status: watch.status,
+          assignedAt: watch.assignedAt.toISOString(),
+          lastActivityAt: watch.lastActivityAt.toISOString(),
+          warnedAt: watch.warnedAt?.toISOString() ?? null,
+          unassignedAt: watch.unassignedAt?.toISOString() ?? null,
+          snoozedUntil: watch.snoozedUntil?.toISOString() ?? null,
+          snoozeReason: watch.snoozeReason,
+          warningCount: watch.warningCount,
+          warningAt: timing.warningAt.toISOString(),
+          unassignAt: timing.unassignAt.toISOString(),
+          staleHours: timing.staleHours,
+          dueWithin24Hours: timing.dueWithin24Hours,
+          lastAdminActionAt: watch.lastAdminActionAt?.toISOString() ?? null,
+          lastAdminActionByName: watch.lastAdminActionById
+            ? (assignmentWatchAdminNameById.get(watch.lastAdminActionById) ??
+              null)
+            : null,
+          lastAdminActionNote: watch.lastAdminActionNote,
+        };
+      })
+      .sort((left, right) => {
+        const priorityDelta =
+          (watchStatusPriority.get(left.status) ?? 99) -
+          (watchStatusPriority.get(right.status) ?? 99);
+        if (priorityDelta !== 0) return priorityDelta;
+        return (
+          new Date(right.lastActivityAt).getTime() -
+          new Date(left.lastActivityAt).getTime()
+        );
+      });
+
   const pptEligibilityStates: AdminPptEligibilityState[] = pptPayoutStates.map(
     (state) => {
       const nextStep = describePptNextStep(state.status, state.reason);
@@ -610,6 +717,7 @@ async function AdminPageContent() {
         bonusCandidates={bonusCandidates}
         incentiveConfig={incentiveConfigData}
         incentiveAwards={incentiveAwardRows}
+        pptAssignmentWatches={pptAssignmentWatchRows}
         pptEligibilityStates={pptEligibilityStates}
         pptRequests={pendingPptRequests.map(
           (req): PptRequestData => ({

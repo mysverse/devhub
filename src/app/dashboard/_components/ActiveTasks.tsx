@@ -8,6 +8,8 @@ import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
+import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
+import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import ActiveTasksEmptyState from "./ActiveTasksEmptyState";
@@ -105,6 +107,47 @@ export default async function ActiveTasks({
   const pptStateByIssueId = new Map(
     pptStates.map((state) => [state.linearIssueId, state]),
   );
+  const assignmentWatches = await prisma.pptAssignmentWatch.findMany({
+    where: {
+      userId,
+      linearIssueId: {
+        in: assignedIssues.map((issue) => issue.id),
+      },
+      assigneeLinearId: linearId,
+      status: { in: ["ACTIVE", "WARNED", "SNOOZED"] },
+    },
+    select: {
+      linearIssueId: true,
+      status: true,
+      lastActivityAt: true,
+      snoozedUntil: true,
+      warningCount: true,
+    },
+  });
+  const warningHours = getWarningHours();
+  const unassignHours = getUnassignHours();
+  const assignmentWatchByIssueId = new Map(
+    assignmentWatches.map((watch) => {
+      const timing = getAssignmentWatchTiming({
+        lastActivityAt: watch.lastActivityAt,
+        status: watch.status,
+        snoozedUntil: watch.snoozedUntil,
+        warningHours,
+        unassignHours,
+      });
+      return [
+        watch.linearIssueId,
+        {
+          status: watch.status,
+          lastActivityAt: watch.lastActivityAt.toISOString(),
+          warningAt: timing.warningAt.toISOString(),
+          unassignAt: timing.unassignAt.toISOString(),
+          snoozedUntil: watch.snoozedUntil?.toISOString() ?? null,
+          warningCount: watch.warningCount,
+        },
+      ] as const;
+    }),
+  );
 
   return (
     <FadeIn>
@@ -117,6 +160,7 @@ export default async function ActiveTasks({
             );
             const bonus = bonusByIssueId.get(issue.id);
             const pptState = pptStateByIssueId.get(issue.id);
+            const assignmentWatch = assignmentWatchByIssueId.get(issue.id);
             const proofNextStep = pptState
               ? describePptNextStep(pptState.status, pptState.reason).action
               : null;
@@ -147,6 +191,7 @@ export default async function ActiveTasks({
                   proofStatus={pptState?.status ?? null}
                   proofReason={pptState?.reason?.replaceAll("_", " ") ?? null}
                   proofNextStep={proofNextStep}
+                  assignmentWatch={assignmentWatch ?? null}
                 />
               </StaggerItem>
             );

@@ -8,6 +8,7 @@ import {
   CardSection,
   Group,
   Image,
+  Stack,
   Text,
   Title,
   Tooltip,
@@ -18,8 +19,11 @@ import Markdown from "react-markdown";
 import { SPRING } from "@/components/animations";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
+import { PPT_ASSIGNMENT_WATCH_STATUS, statusCopy } from "@/lib/status-copy";
 import ClaimButton from "./ClaimButton";
+import PptProgressButton from "./PptProgressButton";
 import PptProofButton from "./PptProofButton";
+import StatusBadge from "./StatusBadge";
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
   if (!markdown) return null;
@@ -96,6 +100,16 @@ type TaskCardProps = {
   proofStatus?: string | null;
   proofReason?: string | null;
   proofNextStep?: string | null;
+  assignmentWatch?: PptAssignmentWatchCardData | null;
+};
+
+export type PptAssignmentWatchCardData = {
+  status: string;
+  lastActivityAt: string;
+  warningAt: string;
+  unassignAt: string;
+  snoozedUntil: string | null;
+  warningCount: number;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -186,6 +200,70 @@ function TaskPreviewImage({ src, title }: { src: string; title: string }) {
   );
 }
 
+function formatWatchDate(value: string | null) {
+  if (!value) return "-";
+  return new Date(value).toLocaleString();
+}
+
+function AssignmentWatchPanel({
+  issueId,
+  watch,
+}: {
+  issueId: string;
+  watch: PptAssignmentWatchCardData;
+}) {
+  const copy = statusCopy(PPT_ASSIGNMENT_WATCH_STATUS, watch.status);
+  return (
+    <div
+      style={{
+        border: "1px solid var(--mantine-color-default-border)",
+        borderRadius: "var(--mantine-radius-sm)",
+        padding: "var(--mantine-spacing-sm)",
+        background: "var(--mantine-color-dark-7)",
+        marginBottom: "var(--mantine-spacing-sm)",
+      }}
+    >
+      <Stack gap={6}>
+        <Group justify="space-between" align="center">
+          <StatusBadge copy={copy} size="sm" />
+          <PptProgressButton issueId={issueId} compact />
+        </Group>
+        <Group gap="md" align="flex-start">
+          <Stack gap={0}>
+            <Text size="xs" c="dimmed">
+              Last activity
+            </Text>
+            <Text size="xs">{formatWatchDate(watch.lastActivityAt)}</Text>
+          </Stack>
+          <Stack gap={0}>
+            <Text size="xs" c="dimmed">
+              Warning
+            </Text>
+            <Text size="xs">{formatWatchDate(watch.warningAt)}</Text>
+          </Stack>
+          <Stack gap={0}>
+            <Text size="xs" c="dimmed">
+              Unassign
+            </Text>
+            <Text size="xs">{formatWatchDate(watch.unassignAt)}</Text>
+          </Stack>
+        </Group>
+        {watch.snoozedUntil && (
+          <Text size="xs" c="violet">
+            Snoozed until {formatWatchDate(watch.snoozedUntil)}
+          </Text>
+        )}
+        {watch.warningCount > 0 && (
+          <Text size="xs" c="dimmed">
+            {watch.warningCount} stale warning
+            {watch.warningCount === 1 ? "" : "s"} recorded
+          </Text>
+        )}
+      </Stack>
+    </div>
+  );
+}
+
 function TaskCard({
   issueId,
   identifier,
@@ -207,6 +285,7 @@ function TaskCard({
   proofStatus,
   proofReason,
   proofNextStep,
+  assignmentWatch,
 }: TaskCardProps) {
   const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
 
@@ -297,6 +376,9 @@ function TaskCard({
                 </Text>
               )}
             </div>
+          )}
+          {assignmentWatch && (
+            <AssignmentWatchPanel issueId={issueId} watch={assignmentWatch} />
           )}
           <Group justify="space-between" mt="auto">
             <Text fz="sm" c="dimmed">

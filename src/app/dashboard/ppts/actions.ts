@@ -1,12 +1,14 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/auth-utils";
+import { TAGS } from "@/lib/cache-tags";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import {
   evaluatePptIssueById,
   postPptProofComment,
 } from "@/lib/ppt-eligibility";
+import { hasMeaningfulPptProgress } from "@/lib/ppt-progress";
 import prisma from "@/lib/prisma";
 
 export async function getLinearTeams() {
@@ -163,6 +165,71 @@ export async function submitPptProof(issueId: string, body: string) {
     }
     const err = e as Error;
     return { error: err.message || "Failed to submit proof" };
+  }
+}
+
+export async function submitPptProgress(issueId: string, body: string) {
+  const { userId } = await getSession();
+  if (!userId) return { error: "Unauthorized" };
+
+  const progressBody = body.trim();
+  if (!hasMeaningfulPptProgress(progressBody)) {
+    return { error: "Add a meaningful progress update before posting." };
+  }
+
+  try {
+    const profile = await prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { linearId: true },
+    });
+    if (!profile?.linearId) {
+      return { error: "Link your Linear account before posting progress." };
+    }
+
+    const watch = await prisma.pptAssignmentWatch.findUnique({
+      where: {
+        linearIssueId_assigneeLinearId: {
+          linearIssueId: issueId,
+          assigneeLinearId: profile.linearId,
+        },
+      },
+      select: { id: true, status: true },
+    });
+    if (
+      !watch ||
+      watch.status === "UNASSIGNED" ||
+      watch.status === "RESOLVED"
+    ) {
+      return { error: "This PPT is not currently watched as your assignment." };
+    }
+
+    await withLinearFallback(userId, async (client) => {
+      await client.createComment({ issueId, body: progressBody });
+    });
+
+    await prisma.pptAssignmentWatch.update({
+      where: { id: watch.id },
+      data: {
+        status: "ACTIVE",
+        lastActivityAt: new Date(),
+        warnedAt: null,
+        snoozedUntil: null,
+        snoozeReason: null,
+      },
+    });
+
+    updateTag(TAGS.userIssues(profile.linearId));
+    updateTag(TAGS.workspacePpts);
+    revalidatePath("/dashboard");
+    revalidatePath("/dashboard/ppts");
+    revalidatePath("/dashboard/admin");
+    return { success: true };
+  } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      return { error: "reauth_required", reauth: true };
+    }
+    const err = e as Error;
+    return { error: err.message || "Failed to post progress update" };
   }
 }
 

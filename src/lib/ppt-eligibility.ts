@@ -2,11 +2,14 @@ import type { Prisma } from "@prisma/client";
 import { createElement } from "react";
 import PptPayoutAdminAlert from "@/emails/PptPayoutAdminAlert";
 import PptPayoutBlocked from "@/emails/PptPayoutBlocked";
+import TransactionAwaitingReview from "@/emails/TransactionAwaitingReview";
+import { awardAchievement } from "@/lib/achievements";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
-import { isWithinCreditLimit } from "@/lib/credit-limit";
+import { isWithinCreditLimit, WEEKLY_CREDIT_LIMITS } from "@/lib/credit-limit";
 import {
   type CurrencyCode,
   estimateToAmount,
+  formatAmount,
   getCurrencyForPaymentMethod,
   linearEstimateToComplexityLevel,
 } from "@/lib/currency";
@@ -17,59 +20,24 @@ import {
 } from "@/lib/linear";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { initiateAutoPayout } from "@/lib/payout";
+import { PROOF_TAG } from "@/lib/payout-policy";
+import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { shouldEvaluatePptWebhookHint } from "@/lib/ppt-eligibility-gate";
+import {
+  describePptNextStep as describePptNextStepBase,
+  formatReason,
+  getActionForReason as getActionForReasonBase,
+  type PptReason,
+  type PptStatus,
+} from "@/lib/ppt-reason-copy";
 import prisma from "@/lib/prisma";
 
 const PPT_LABEL = "PPT";
-const PROOF_TAG = "#ppt-proof";
 const DEVELOPER_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
 const PROOF_LOOKBACK_DAYS = 7;
 
-export type PptReason =
-  | "MISSING_PPT_LABEL"
-  | "PPT_LABEL_REMOVED"
-  | "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING"
-  | "PAID_ISSUE_LABEL_REMOVED"
-  | "NOT_COMPLETED"
-  | "ISSUE_CANCELED"
-  | "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING"
-  | "PAID_ISSUE_CANCELED"
-  | "ISSUE_ARCHIVED_OR_TRASHED"
-  | "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING"
-  | "PAID_ISSUE_ARCHIVED"
-  | "MISSING_ESTIMATE"
-  | "MISSING_ASSIGNEE"
-  | "NO_LINKED_USER"
-  | "MISSING_PROOF"
-  | "PROOF_RESET_BY_QUESTION"
-  | "PAID_ISSUE_NEEDS_REVIEW"
-  | "WAITING_STABILITY"
-  | "DUPLICATE_TRANSACTION"
-  | "APPROVED_BONUS_EXISTS"
-  | "LINEAR_API_ERROR"
-  | "REOPENED_BEFORE_PAYOUT"
-  | "REOPENED_DURING_PAYOUT_PROCESSING"
-  | "PAID_ISSUE_REOPENED"
-  | "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK"
-  | "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING"
-  | "PAID_ISSUE_REASSIGNED"
-  | "ESTIMATE_CHANGED_RECALCULATED"
-  | "ESTIMATE_CHANGED_DURING_PROCESSING"
-  | "PAID_ISSUE_ESTIMATE_CHANGED"
-  | "STALE_LINEAR_WEBHOOK"
-  | "READY_FOR_PAYOUT"
-  | "TRANSACTION_CREATED"
-  | "AUTO_PAYOUT_STARTED";
-
-export type PptStatus =
-  | "BLOCKED"
-  | "NEEDS_PROOF"
-  | "WAITING_STABILITY"
-  | "READY_FOR_PAYOUT"
-  | "TRANSACTION_PENDING"
-  | "ON_HOLD"
-  | "PAID"
-  | "FLAGGED";
+export type { PptReason, PptStatus } from "@/lib/ppt-reason-copy";
+export { formatReason } from "@/lib/ppt-reason-copy";
 
 export type PptEventType =
   | "COMPLETED_DETECTED"
@@ -196,204 +164,29 @@ function coerceDate(value: unknown): Date | null {
 }
 
 function getStabilityMinutes() {
-  const configured = Number(process.env.PPT_STABILITY_MINUTES ?? "60");
-  if (!Number.isFinite(configured) || configured < 0) return 60;
-  return configured;
+  return getResolvedPayoutPolicy().stabilityMinutes;
 }
 
 function getIssueTitle(snapshot: LinearIssueSnapshot) {
   return snapshot.title || snapshot.identifier || "PPT task";
 }
 
-function formatReason(reason: PptReason | null | undefined) {
-  const copy: Record<PptReason, string> = {
-    MISSING_PPT_LABEL: "The issue does not have the PPT label.",
-    PPT_LABEL_REMOVED:
-      "The PPT label was removed after DevHub started tracking payout eligibility.",
-    PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING:
-      "The PPT label was removed while a payout provider was already processing payment.",
-    PAID_ISSUE_LABEL_REMOVED:
-      "The PPT label was removed after DevHub had already marked the payout paid.",
-    NOT_COMPLETED: "The issue is not currently in a completed Linear state.",
-    ISSUE_CANCELED: "The Linear issue was canceled before payout was released.",
-    ISSUE_CANCELED_DURING_PAYOUT_PROCESSING:
-      "The issue was canceled while a payout provider was already processing payment.",
-    PAID_ISSUE_CANCELED:
-      "The issue was canceled after DevHub had already marked the payout paid.",
-    ISSUE_ARCHIVED_OR_TRASHED:
-      "The Linear issue was archived or moved to trash before payout was released.",
-    ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING:
-      "The issue was archived or trashed while a payout provider was already processing payment.",
-    PAID_ISSUE_ARCHIVED:
-      "The issue was archived or trashed after DevHub had already marked the payout paid.",
-    MISSING_ESTIMATE: "The issue does not have a complexity estimate.",
-    MISSING_ASSIGNEE: "The issue is not assigned to a developer.",
-    NO_LINKED_USER:
-      "The Linear assignee is not linked to a DevHub developer profile.",
-    MISSING_PROOF: "A recent #ppt-proof comment from the assignee is required.",
-    PROOF_RESET_BY_QUESTION:
-      "A follow-up question was asked after completion, so fresh proof is required.",
-    PAID_ISSUE_NEEDS_REVIEW:
-      "The issue changed after payout was paid and needs admin review.",
-    WAITING_STABILITY:
-      "The task needs to remain completed for the payout stability window.",
-    DUPLICATE_TRANSACTION:
-      "A payout transaction already exists for this Linear issue.",
-    APPROVED_BONUS_EXISTS:
-      "This issue already has an approved bonus payout candidate.",
-    LINEAR_API_ERROR:
-      "DevHub could not verify the latest Linear comments or history.",
-    REOPENED_BEFORE_PAYOUT:
-      "The issue was moved out of Done before payout was released.",
-    REOPENED_DURING_PAYOUT_PROCESSING:
-      "The issue reopened while a payout provider was already processing payment.",
-    PAID_ISSUE_REOPENED:
-      "The issue reopened after DevHub had already marked the payout paid.",
-    ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK:
-      "The assignee changed after DevHub had already prepared this payout.",
-    ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING:
-      "The assignee changed while a payout provider was already processing payment.",
-    PAID_ISSUE_REASSIGNED:
-      "The issue was reassigned after DevHub had already marked the payout paid.",
-    ESTIMATE_CHANGED_RECALCULATED:
-      "The estimate changed, so DevHub recalculated the unpaid payout.",
-    ESTIMATE_CHANGED_DURING_PROCESSING:
-      "The estimate changed while a payout provider was already processing payment.",
-    PAID_ISSUE_ESTIMATE_CHANGED:
-      "The estimate changed after DevHub had already marked the payout paid.",
-    STALE_LINEAR_WEBHOOK:
-      "DevHub ignored an older Linear webhook because newer issue state is already recorded.",
-    READY_FOR_PAYOUT: "The issue is ready for payout.",
-    TRANSACTION_CREATED: "A payout transaction was created.",
-    AUTO_PAYOUT_STARTED: "Automatic payout was started.",
-  };
-  return reason ? copy[reason] : "PPT payout eligibility changed.";
-}
-
+/** Env-aware wrapper for server call sites; client components import the base
+ * from ppt-reason-copy.ts and thread the resolved stability window as a prop. */
 export function getActionForReason(reason: PptReason | null | undefined) {
-  if (reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION") {
-    return "Reply in Linear or use DevHub with #ppt-proof, what changed, proof links/screenshots, where it is implemented, and verification notes.";
-  }
-  if (reason === "WAITING_STABILITY") {
-    return `Keep the issue in Done for ${getStabilityMinutes()} minutes. DevHub will check again automatically.`;
-  }
-  if (reason === "REOPENED_BEFORE_PAYOUT") {
-    return "Move the issue back to Done only when it is truly complete, then submit fresh #ppt-proof.";
-  }
-  if (
-    reason === "PPT_LABEL_REMOVED" ||
-    reason === "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING" ||
-    reason === "PAID_ISSUE_LABEL_REMOVED"
-  ) {
-    return "Restore the PPT label only if this issue should be payable. DevHub will require a fresh eligibility check before payout.";
-  }
-  if (
-    reason === "ISSUE_CANCELED" ||
-    reason === "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING" ||
-    reason === "PAID_ISSUE_CANCELED" ||
-    reason === "ISSUE_ARCHIVED_OR_TRASHED" ||
-    reason === "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING" ||
-    reason === "PAID_ISSUE_ARCHIVED"
-  ) {
-    return "Restore/reopen the Linear issue only if it is valid work, move it to Done again, and submit fresh #ppt-proof.";
-  }
-  if (
-    reason === "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK" ||
-    reason === "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING" ||
-    reason === "PAID_ISSUE_REASSIGNED"
-  ) {
-    return "The current assignee must submit fresh #ppt-proof before DevHub can release or resume payout.";
-  }
-  if (
-    reason === "ESTIMATE_CHANGED_RECALCULATED" ||
-    reason === "ESTIMATE_CHANGED_DURING_PROCESSING" ||
-    reason === "PAID_ISSUE_ESTIMATE_CHANGED"
-  ) {
-    return "Admins have been notified. Unpaid payouts are recalculated before release; paid or processing payouts require admin review.";
-  }
-  if (reason === "NO_LINKED_USER") {
-    return "Link your Linear account in DevHub settings or contact an admin.";
-  }
-  if (reason === "MISSING_ESTIMATE") {
-    return "Ask an admin or task owner to add the Linear estimate.";
-  }
-  if (reason === "READY_FOR_PAYOUT") {
-    return "DevHub will create or route the payout automatically.";
-  }
-  if (
-    reason === "TRANSACTION_CREATED" ||
-    reason === "AUTO_PAYOUT_STARTED" ||
-    reason === "DUPLICATE_TRANSACTION"
-  ) {
-    return "DevHub is already tracking this payout. No developer action is needed.";
-  }
-  return "Open the task and follow the DevHub payout guidance.";
+  return getActionForReasonBase(reason, {
+    stabilityMinutes: getStabilityMinutes(),
+  });
 }
 
+/** Env-aware wrapper for server call sites; see getActionForReason. */
 export function describePptNextStep(
   status: PptStatus | string | null | undefined,
   reason: PptReason | string | null | undefined,
-): {
-  owner: "developer" | "admin" | "automatic";
-  action: string | null;
-} {
-  const pptStatus = status as PptStatus | null | undefined;
-  const pptReason = reason as PptReason | null | undefined;
-
-  if (pptStatus === "PAID") {
-    return { owner: "automatic", action: null };
-  }
-
-  const developerReasons = new Set<PptReason>([
-    "MISSING_PROOF",
-    "PROOF_RESET_BY_QUESTION",
-    "MISSING_ESTIMATE",
-    "MISSING_ASSIGNEE",
-    "NO_LINKED_USER",
-    "PPT_LABEL_REMOVED",
-    "REOPENED_BEFORE_PAYOUT",
-  ]);
-  const adminReasons = new Set<PptReason>([
-    "PAID_ISSUE_LABEL_REMOVED",
-    "PPT_LABEL_REMOVED_DURING_PAYOUT_PROCESSING",
-    "PAID_ISSUE_CANCELED",
-    "ISSUE_CANCELED_DURING_PAYOUT_PROCESSING",
-    "PAID_ISSUE_ARCHIVED",
-    "ISSUE_ARCHIVED_DURING_PAYOUT_PROCESSING",
-    "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
-    "ASSIGNEE_CHANGED_DURING_PAYOUT_PROCESSING",
-    "PAID_ISSUE_REASSIGNED",
-    "ESTIMATE_CHANGED_DURING_PROCESSING",
-    "PAID_ISSUE_ESTIMATE_CHANGED",
-    "DUPLICATE_TRANSACTION",
-    "APPROVED_BONUS_EXISTS",
-    "LINEAR_API_ERROR",
-  ]);
-  const automaticReasons = new Set<PptReason>([
-    "WAITING_STABILITY",
-    "READY_FOR_PAYOUT",
-    "TRANSACTION_CREATED",
-    "AUTO_PAYOUT_STARTED",
-    "DUPLICATE_TRANSACTION",
-  ]);
-
-  const owner =
-    pptStatus === "FLAGGED" || (pptReason && adminReasons.has(pptReason))
-      ? "admin"
-      : pptReason && developerReasons.has(pptReason)
-        ? "developer"
-        : pptReason && automaticReasons.has(pptReason)
-          ? "automatic"
-          : pptStatus === "WAITING_STABILITY" ||
-              pptStatus === "READY_FOR_PAYOUT" ||
-              pptStatus === "TRANSACTION_PENDING"
-            ? "automatic"
-            : "admin";
-
-  return {
-    owner,
-    action: pptReason ? getActionForReason(pptReason) : null,
-  };
+) {
+  return describePptNextStepBase(status, reason, {
+    stabilityMinutes: getStabilityMinutes(),
+  });
 }
 
 function shouldShowProofTemplate(reason: PptReason) {
@@ -985,7 +778,7 @@ async function notifyDeveloper(
     type,
     title,
     message,
-    href: "/dashboard/ppts",
+    href: `/dashboard/ppts#task-${snapshot.id}`,
     entityType: "ppt_payout_state",
     entityId: stateId,
     payload: {
@@ -1955,15 +1748,15 @@ async function handleEligiblePayout(
     });
   }
 
-  if (userId) {
+  if (userId && withinLimit) {
     await notify({
       userId,
       domain: "ppt",
       type: "READY",
       title: snapshot.identifier ?? getIssueTitle(snapshot),
       message:
-        "Your PPT payout is ready and has been sent to the payout queue.",
-      href: "/dashboard/ppts",
+        "Your PPT payout was created and is being sent automatically — it's within your weekly credit limit.",
+      href: `/dashboard/ppts#task-${snapshot.id}`,
       entityType: "ppt_payout_state",
       entityId: stateId,
       payload: {
@@ -1974,6 +1767,48 @@ async function handleEligiblePayout(
       },
       dedupeKey: `ppt:ready:${userId}:${stateId}`,
       channels: [IN_APP_CHANNEL],
+    });
+  } else if (userId && !withinLimit) {
+    // Tell the developer the truth about over-limit payouts — previously only
+    // admins learned why these sat in PENDING.
+    const linkedUser = await prisma.userProfile.findUnique({
+      where: { id: userId },
+      include: { user: { select: { email: true, name: true } } },
+    });
+    const limit = WEEKLY_CREDIT_LIMITS[currency] ?? 0;
+    await notify({
+      userId,
+      domain: "payment",
+      type: "AWAITING_REVIEW",
+      title: snapshot.identifier ?? getIssueTitle(snapshot),
+      message: `Your payout of ${formatAmount(amount, currency)} was created but is past this week's ${formatAmount(limit, currency)} auto-approval limit, so an admin will release it manually. It is not lost — limits reset every Monday (UTC).`,
+      href: "/dashboard/transactions",
+      entityType: "transaction",
+      entityId: transactionId,
+      payload: {
+        stateId,
+        transactionId,
+        identifier: snapshot.identifier,
+        issueTitle: getIssueTitle(snapshot),
+      },
+      dedupeKey: `payment:awaiting_review:${userId}:${transactionId}`,
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      email: linkedUser?.user.email
+        ? {
+            to: linkedUser.user.email,
+            subject: `Payout awaiting review: ${snapshot.identifier ?? getIssueTitle(snapshot)}`,
+            category: "payment_awaiting_review",
+            idempotencyKey: `payment:awaiting_review:${transactionId}`,
+            react: createElement(TransactionAwaitingReview, {
+              userName:
+                linkedUser.legalName || linkedUser.user.name || "developer",
+              issueIdentifier: snapshot.identifier,
+              issueTitle: getIssueTitle(snapshot),
+              amountLabel: formatAmount(amount, currency),
+              limitLabel: formatAmount(limit, currency),
+            }),
+          }
+        : undefined,
     });
   }
 
@@ -2448,7 +2283,7 @@ async function evaluatePptSnapshot(
     title: snapshot.identifier ?? getIssueTitle(snapshot),
     message:
       "Your proof was accepted. DevHub is checking the stability window.",
-    href: "/dashboard/ppts",
+    href: `/dashboard/ppts#task-${snapshot.id}`,
     entityType: "ppt_payout_state",
     entityId: base.id,
     payload: {
@@ -2459,6 +2294,9 @@ async function evaluatePptSnapshot(
     },
     dedupeKey: `ppt:proof-accepted:${linkedUser.id}:${base.id}:${proof.id}`,
     channels: [IN_APP_CHANNEL],
+  });
+  await awardAchievement(linkedUser.id, "FIRST_PROOF", {
+    issueId: snapshot.id,
   });
 
   const completedAt = base.completedAt ?? snapshot.completedAt ?? new Date();

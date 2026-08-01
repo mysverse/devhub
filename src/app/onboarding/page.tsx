@@ -8,6 +8,7 @@ import {
   getRobuxPayoutAvailability,
   getSetupIntegrationAvailability,
 } from "@/lib/integration-availability";
+import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import OnboardingFlow from "./OnboardingFlow";
@@ -75,6 +76,7 @@ async function OnboardingContent() {
       documentTemplates={documentTemplates}
       integrationAvailability={getSetupIntegrationAvailability()}
       robuxPayoutAvailability={getRobuxPayoutAvailability()}
+      policy={getResolvedPayoutPolicy()}
     />
   );
 }

@@ -30,10 +30,13 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  CircleDollarSign,
   FileSignature,
   Link2,
   PartyPopper,
   Sparkles,
+  Timer,
+  TrendingUp,
   User,
   Wallet,
 } from "lucide-react";
@@ -51,6 +54,7 @@ import {
 } from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
+import { formatAmount, getRateMultiplier } from "@/lib/currency";
 import type {
   IntegrationAvailability,
   SetupIntegrationAvailability,
@@ -59,6 +63,11 @@ import {
   DUITNOW_INSTITUTIONS,
   isBillplzSupported,
 } from "@/lib/payment-validation";
+import {
+  DEFAULT_PAYOUT_POLICY,
+  type PayoutPolicy,
+  WEEKLY_CREDIT_LIMITS,
+} from "@/lib/payout-policy";
 import { completeOnboarding } from "./actions";
 
 type DocumentTemplate = {
@@ -76,6 +85,8 @@ type Props = {
   documentTemplates: DocumentTemplate[];
   integrationAvailability: SetupIntegrationAvailability;
   robuxPayoutAvailability: IntegrationAvailability;
+  /** Resolved server-side; drives the earning-model education copy. */
+  policy?: PayoutPolicy;
 };
 
 export default function OnboardingFlow({
@@ -87,6 +98,7 @@ export default function OnboardingFlow({
   documentTemplates,
   integrationAvailability,
   robuxPayoutAvailability,
+  policy = DEFAULT_PAYOUT_POLICY,
 }: Props) {
   const router = useRouter();
   const [active, setActive] = useState(0);
@@ -159,7 +171,7 @@ export default function OnboardingFlow({
       toast.error("Please agree to all documents to continue.");
       return;
     }
-    setActive((a) => Math.min(a + 1, 4));
+    setActive((a) => Math.min(a + 1, 5));
   }
 
   function prevStep() {
@@ -268,6 +280,11 @@ export default function OnboardingFlow({
         <StepperStep
           label="Agreements"
           icon={<FileSignature size={16} />}
+          completedIcon={<CheckCircle2 size={16} />}
+        />
+        <StepperStep
+          label="How You Earn"
+          icon={<CircleDollarSign size={16} />}
           completedIcon={<CheckCircle2 size={16} />}
         />
         <StepperStep
@@ -555,8 +572,102 @@ export default function OnboardingFlow({
           </Card>
         )}
 
-        {/* Step 4: Payment Method */}
+        {/* Step 4: How You Earn — the earning model in four skimmable cards */}
         {active === 4 && (
+          <Card withBorder radius="md" padding="xl">
+            <Title order={3} mb="xs">
+              How You Earn
+            </Title>
+            <Text c="dimmed" mb="xl">
+              The four things worth knowing before your first task. The full
+              guide lives under Help once you&apos;re in.
+            </Text>
+            <Stack gap="md">
+              <Card withBorder radius="md" padding="md" style={cardStyle}>
+                <Group gap="sm" wrap="nowrap" align="flex-start">
+                  <CircleDollarSign
+                    size={20}
+                    color="var(--mantine-color-blue-4)"
+                  />
+                  <Stack gap={4}>
+                    <Text fw={700} fz="sm">
+                      PPTs are paid tasks
+                    </Text>
+                    <Text fz="sm" c="dimmed">
+                      Tasks labeled PPT on the board pay per complexity point:{" "}
+                      {formatAmount(getRateMultiplier("MYR"), "MYR")}/point in
+                      MYR or {formatAmount(getRateMultiplier("ROBUX"), "ROBUX")}
+                      /point in Robux, 1&ndash;5 points per task. Claim one and
+                      it&apos;s yours instantly.
+                    </Text>
+                  </Stack>
+                </Group>
+              </Card>
+
+              <Card withBorder radius="md" padding="md" style={cardStyle}>
+                <Group gap="sm" wrap="nowrap" align="flex-start">
+                  <FileSignature
+                    size={20}
+                    color="var(--mantine-color-blue-4)"
+                  />
+                  <Stack gap={4}>
+                    <Text fw={700} fz="sm">
+                      Proof unlocks payment
+                    </Text>
+                    <Text fz="sm" c="dimmed">
+                      When a task is Done, post a <strong>#ppt-proof</strong>{" "}
+                      comment (what changed, links or screenshots, how it was
+                      verified). The task then stays Done for a short stability
+                      window &mdash; and payment is created automatically.
+                    </Text>
+                  </Stack>
+                </Group>
+              </Card>
+
+              <Card withBorder radius="md" padding="md" style={cardStyle}>
+                <Group gap="sm" wrap="nowrap" align="flex-start">
+                  <Timer size={20} color="var(--mantine-color-blue-4)" />
+                  <Stack gap={4}>
+                    <Text fw={700} fz="sm">
+                      Claimed tasks stay active
+                    </Text>
+                    <Text fz="sm" c="dimmed">
+                      So work never gets stuck: {policy.warnHours}h without
+                      visible activity brings a reminder, {policy.unassignHours}
+                      h returns the task to the board (you can reclaim it).
+                      Progress notes reset the timer; blocked tasks can be
+                      paused; releasing a task you won&apos;t get to is always
+                      fine.
+                    </Text>
+                  </Stack>
+                </Group>
+              </Card>
+
+              <Card withBorder radius="md" padding="md" style={cardStyle}>
+                <Group gap="sm" wrap="nowrap" align="flex-start">
+                  <TrendingUp size={20} color="var(--mantine-color-blue-4)" />
+                  <Stack gap={4}>
+                    <Text fw={700} fz="sm">
+                      Limits &amp; extras
+                    </Text>
+                    <Text fz="sm" c="dimmed">
+                      Up to {formatAmount(WEEKLY_CREDIT_LIMITS.MYR, "MYR")} (or{" "}
+                      {formatAmount(WEEKLY_CREDIT_LIMITS.ROBUX, "ROBUX")}) per
+                      week pays out automatically; anything above waits for an
+                      admin and is never lost. On top of PPTs:{" "}
+                      <strong>incentives</strong> (automatic weekly rewards) and{" "}
+                      <strong>bonuses</strong> (monthly, admin-reviewed, never
+                      guaranteed).
+                    </Text>
+                  </Stack>
+                </Group>
+              </Card>
+            </Stack>
+          </Card>
+        )}
+
+        {/* Step 5: Payment Method */}
+        {active === 5 && (
           <Card withBorder radius="md" padding="xl">
             <Title order={3} mb="xs">
               Payment Preferences
@@ -597,6 +708,14 @@ export default function OnboardingFlow({
                   },
                 ]}
               />
+
+              <Alert color="blue" variant="light">
+                Your payment method sets your dashboard currency and rate: Robux
+                pays {formatAmount(getRateMultiplier("ROBUX"), "ROBUX")} per
+                point; every other method pays{" "}
+                {formatAmount(getRateMultiplier("MYR"), "MYR")} per point in
+                MYR. You can change this any time in HR Settings.
+              </Alert>
 
               {!robuxPaymentsAvailable && (
                 <Alert
@@ -759,7 +878,7 @@ export default function OnboardingFlow({
           <div />
         )}
 
-        {active < 4 ? (
+        {active < 5 ? (
           <Button onClick={nextStep} rightSection={<ArrowRight size={14} />}>
             Next
           </Button>

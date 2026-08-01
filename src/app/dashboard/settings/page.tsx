@@ -100,7 +100,10 @@ async function SettingsContent() {
         </StaggerItem>
 
         <StaggerItem>
-          <NotificationPreferences preferences={notificationPreferences} />
+          <NotificationPreferences
+            preferences={notificationPreferences}
+            isAdmin={hasAdminAccess(userProfile)}
+          />
         </StaggerItem>
 
         {requiresKycForAutoPayout(userProfile.bankName) && (

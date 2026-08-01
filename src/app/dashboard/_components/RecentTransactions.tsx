@@ -21,11 +21,13 @@ import type { ReactNode } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import LinkAnchor from "@/components/LinkAnchor";
+import StatusBadge from "@/components/StatusBadge";
 import { formatBonusPeriod } from "@/lib/bonus";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 import { statusCopy, TRANSACTION_STATUS } from "@/lib/status-copy";
+import { explainTransaction } from "@/lib/transaction-explain";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 import styles from "./RecentTransactions.module.css";
 
@@ -122,6 +124,10 @@ function EmptyTransactions() {
 export default async function RecentTransactions({ userId }: Props) {
   const rows = await prisma.transaction.findMany({
     where: { userId },
+    include: {
+      payout: true,
+      pptPayoutState: { select: { status: true, reason: true } },
+    },
     orderBy: { createdAt: "desc" },
     take: 10,
   });
@@ -133,8 +139,8 @@ export default async function RecentTransactions({ userId }: Props) {
         subtitle="Latest 10 payouts and pending entries"
         icon={<Receipt size={16} />}
         action={
-          <LinkAnchor href="/dashboard/bonuses" fz="sm" fw={500}>
-            View all bonuses &rarr;
+          <LinkAnchor href="/dashboard/transactions" fz="sm" fw={500}>
+            View all transactions &rarr;
           </LinkAnchor>
         }
       />
@@ -149,6 +155,8 @@ export default async function RecentTransactions({ userId }: Props) {
                 const title = getTransactionTitle(tx);
                 const currency = toCurrencyCode(tx.currency);
                 const sourceMeta = getSourceMeta(tx.source);
+                const explanation =
+                  tx.status === "PAID" ? null : explainTransaction(tx);
 
                 return (
                   <StaggerItem key={tx.id}>
@@ -207,13 +215,10 @@ export default async function RecentTransactions({ userId }: Props) {
                               {sourceMeta.label}
                             </Badge>
                           )}
-                          <Badge
-                            variant="light"
-                            color={statusMeta.color}
+                          <StatusBadge
+                            copy={statusCopy(TRANSACTION_STATUS, tx.status)}
                             size="xs"
-                          >
-                            {tx.status}
-                          </Badge>
+                          />
                           <Text fz="xs" c="dimmed">
                             {tx.createdAt.toLocaleDateString("en-US", {
                               month: "short",
@@ -222,6 +227,14 @@ export default async function RecentTransactions({ userId }: Props) {
                             })}
                           </Text>
                         </Group>
+                        {explanation && (
+                          <Text fz="xs" c="dimmed">
+                            {explanation.headline}
+                            {tx.status === "REJECTED" && explanation.detail
+                              ? ` ${explanation.detail}`
+                              : ""}
+                          </Text>
+                        )}
                       </Stack>
                       <Stack gap={2} align="flex-end">
                         <Text fw={700} fz="sm" c={statusMeta.amountColor}>

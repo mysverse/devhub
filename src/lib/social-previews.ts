@@ -110,6 +110,22 @@ export const socialPreviews: readonly SocialPreview[] = [
     matchSubpaths: true,
   },
   {
+    path: "/dashboard/transactions",
+    title: "Transactions",
+    description:
+      "Your full DevHub payout history with the status and reason for every payment.",
+    label: "Transactions",
+    matchSubpaths: true,
+  },
+  {
+    path: "/dashboard/help",
+    title: "Help & Guide",
+    description:
+      "How earning works on DevHub: PPTs, proof, payouts, bonuses, and incentives.",
+    label: "Help",
+    matchSubpaths: true,
+  },
+  {
     path: "/dashboard/notifications",
     title: "Notifications",
     description: "Your DevHub in-app notification history.",

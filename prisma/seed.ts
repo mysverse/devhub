@@ -1659,15 +1659,15 @@ export async function seed() {
         lastLinearCommentType: "warning",
       },
       {
-        ...watchSeed("MYS-204", "SNOOZED"),
+        ...watchSeed("MYS-204", "BLOCKED"),
         lastActivityAt: hoursAgo(58),
         warnedAt: hoursAgo(8),
         warningCount: 1,
-        snoozedUntil: hoursAgo(-36),
-        snoozeReason: "Developer reported active work in Discord.",
-        lastAdminActionAt: hoursAgo(2),
-        lastAdminActionById: adminId,
-        lastAdminActionNote: "Snoozed after checking in with Alex.",
+        selfBlockedAt: hoursAgo(6),
+        selfBlockReason: "WAITING_REVIEW",
+        selfBlockNote: "Waiting for the junction kit design review.",
+        selfBlockExpiresAt: hoursAgo(-66),
+        selfBlockCount: 1,
       },
       {
         ...watchSeed("MYS-225", "UNASSIGNED"),
@@ -1681,6 +1681,75 @@ export async function seed() {
       {
         ...watchSeed("MYS-220", "RESOLVED"),
         lastActivityAt: daysAgo(8),
+        reassignedFromLinearId: null,
+        reassignReason: null,
+      },
+    ],
+    skipDuplicates: true,
+  });
+
+  // Watch event history so the admin drawer, board chips, and developer
+  // timeline all render with data under dev:mock.
+  const seededWatches = await prisma.pptAssignmentWatch.findMany({
+    select: { id: true, linearIssueId: true, status: true },
+  });
+  const watchByIssue = new Map(
+    seededWatches.map((watch) => [watch.linearIssueId, watch]),
+  );
+  const watchEventSeeds = [
+    { identifier: "MYS-201", type: "CLAIMED" as const, at: hoursAgo(16) },
+    { identifier: "MYS-202", type: "CLAIMED" as const, at: hoursAgo(60) },
+    { identifier: "MYS-202", type: "WARNED" as const, at: hoursAgo(4) },
+    { identifier: "MYS-204", type: "CLAIMED" as const, at: hoursAgo(70) },
+    {
+      identifier: "MYS-204",
+      type: "BLOCKED" as const,
+      at: hoursAgo(6),
+      note: "Waiting for the junction kit design review.",
+    },
+    { identifier: "MYS-225", type: "CLAIMED" as const, at: hoursAgo(80) },
+    { identifier: "MYS-225", type: "WARNED" as const, at: hoursAgo(28) },
+    {
+      identifier: "MYS-225",
+      type: "AUTO_UNASSIGNED" as const,
+      at: hoursAgo(1),
+    },
+  ];
+  for (const eventSeed of watchEventSeeds) {
+    const fixtureIssue = issue(eventSeed.identifier);
+    const watch = watchByIssue.get(fixtureIssue.id);
+    if (!watch) continue;
+    await prisma.pptAssignmentWatchEvent.create({
+      data: {
+        watchId: watch.id,
+        linearIssueId: fixtureIssue.id,
+        type: eventSeed.type,
+        note: eventSeed.note ?? null,
+        createdAt: eventSeed.at,
+      },
+    });
+  }
+
+  // ── Achievements (veteran developer persona) ──────────────────────────────
+  await prisma.developerAchievement.createMany({
+    data: [
+      {
+        userId: devId,
+        key: "FIRST_CLAIM",
+        earnedAt: daysAgo(200),
+        seenAt: daysAgo(200),
+      },
+      {
+        userId: devId,
+        key: "FIRST_PROOF",
+        earnedAt: daysAgo(198),
+        seenAt: daysAgo(198),
+      },
+      {
+        userId: devId,
+        key: "FIRST_PAYOUT",
+        earnedAt: daysAgo(197),
+        seenAt: daysAgo(197),
       },
     ],
     skipDuplicates: true,

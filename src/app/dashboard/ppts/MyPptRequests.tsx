@@ -1,4 +1,5 @@
 import {
+  Anchor,
   Badge,
   Card,
   Group,
@@ -11,22 +12,39 @@ import {
   TableTr,
   Text,
   Title,
-  Tooltip,
 } from "@mantine/core";
 import { FadeIn } from "@/components/animations";
+import LinkAnchor from "@/components/LinkAnchor";
 import StatusBadge from "@/components/StatusBadge";
+import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 import { PPT_REQUEST_STATUS, statusCopy } from "@/lib/status-copy";
 
-export default async function MyPptRequests({ userId }: { userId: string }) {
-  const requests = await prisma.pptRequest.findMany({
-    where: { requesterId: userId },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-  });
+const PAGE_SIZE = 10;
 
-  if (requests.length === 0) return null;
+export default async function MyPptRequests({
+  userId,
+  currency = "MYR",
+  page = 1,
+}: {
+  userId: string;
+  currency?: CurrencyCode;
+  page?: number;
+}) {
+  const [total, requests] = await Promise.all([
+    prisma.pptRequest.count({ where: { requesterId: userId } }),
+    prisma.pptRequest.findMany({
+      where: { requesterId: userId },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+  ]);
+
+  if (total === 0) return null;
+
+  const pageCount = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <FadeIn>
@@ -59,17 +77,29 @@ export default async function MyPptRequests({ userId }: { userId: string }) {
                             New
                           </Badge>
                         )}
-                        <Text fz="sm" truncate="end" maw={250}>
-                          {req.linearIssueTitle}
-                        </Text>
+                        {req.linearIssueUrl ? (
+                          <Anchor
+                            href={req.linearIssueUrl}
+                            target="_blank"
+                            fz="sm"
+                            truncate="end"
+                            maw={250}
+                          >
+                            {req.linearIssueTitle}
+                          </Anchor>
+                        ) : (
+                          <Text fz="sm" truncate="end" maw={250}>
+                            {req.linearIssueTitle}
+                          </Text>
+                        )}
                       </Group>
                     </TableTd>
                     <TableTd>
                       <Text fz="sm">
                         {req.requestedEstimate} &middot;{" "}
                         {formatAmount(
-                          estimateToAmount(req.requestedEstimate, "MYR"),
-                          "MYR",
+                          estimateToAmount(req.requestedEstimate, currency),
+                          currency,
                         )}
                       </Text>
                     </TableTd>
@@ -83,19 +113,27 @@ export default async function MyPptRequests({ userId }: { userId: string }) {
                       </Text>
                     </TableTd>
                     <TableTd>
-                      {req.status === "REJECTED" && req.rejectionReason ? (
-                        <Tooltip label={req.rejectionReason}>
-                          <StatusBadge
-                            size="sm"
-                            copy={statusCopy(PPT_REQUEST_STATUS, req.status)}
-                          />
-                        </Tooltip>
-                      ) : (
+                      <Stack gap={4}>
                         <StatusBadge
                           size="sm"
                           copy={statusCopy(PPT_REQUEST_STATUS, req.status)}
                         />
-                      )}
+                        {req.status === "REJECTED" && (
+                          <Text fz="xs" c="red" maw={280}>
+                            {req.rejectionReason ??
+                              "No reason recorded — you can adjust and re-submit, or ask an admin."}
+                          </Text>
+                        )}
+                        {req.status === "APPROVED" && req.linearIssueUrl && (
+                          <Anchor
+                            href={req.linearIssueUrl}
+                            target="_blank"
+                            fz="xs"
+                          >
+                            Now live in Linear &rarr;
+                          </Anchor>
+                        )}
+                      </Stack>
                     </TableTd>
                     <TableTd>
                       <Text fz="sm" c="dimmed">
@@ -111,6 +149,34 @@ export default async function MyPptRequests({ userId }: { userId: string }) {
             </Table>
           </div>
         </Card>
+        {pageCount > 1 && (
+          <Group justify="space-between">
+            <Text fz="sm" c="dimmed">
+              Page {page} of {pageCount} &middot; {total} request
+              {total === 1 ? "" : "s"}
+            </Text>
+            <Group gap="xs">
+              {page > 1 && (
+                <LinkAnchor
+                  href={`/dashboard/ppts?requestsPage=${page - 1}`}
+                  fz="sm"
+                  fw={600}
+                >
+                  &larr; Newer
+                </LinkAnchor>
+              )}
+              {page < pageCount && (
+                <LinkAnchor
+                  href={`/dashboard/ppts?requestsPage=${page + 1}`}
+                  fz="sm"
+                  fw={600}
+                >
+                  Older &rarr;
+                </LinkAnchor>
+              )}
+            </Group>
+          </Group>
+        )}
       </Stack>
     </FadeIn>
   );

@@ -16,11 +16,16 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
+import type { ClaimButtonContext } from "@/components/ClaimButton";
 import EmptyState from "@/components/EmptyState";
+import InfoTip from "@/components/InfoTip";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
+import StatCard from "@/components/StatCard";
+import type { TaskAssignmentInfo } from "@/components/TaskCard";
 import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
+import { getClaimContext } from "@/lib/claim-context";
 import type { CurrencyCode } from "@/lib/currency";
 import {
   estimateToAmount,
@@ -31,9 +36,15 @@ import {
 import { getPptBoardIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { PptBoardIssueDTO } from "@/lib/linear-queries";
+import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
+import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
+import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
+import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { ensureUserProfile } from "@/lib/user-profile";
+import ActiveTasks from "../_components/ActiveTasks";
 import MyPptRequests from "./MyPptRequests";
+import PptBoardHelpDrawer from "./PptBoardHelpDrawer";
 import PptRequestButton from "./PptRequestButton";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/ppts");
@@ -48,7 +59,19 @@ type EnrichedIssue = {
   assigneeAvatarUrl: string | null;
   isAssignedToViewer: boolean;
   subIssueCount: number;
+  assignmentInfo: TaskAssignmentInfo | null;
+  recentlyReleasedByViewer: boolean;
 };
+
+function agoLabel(from: Date, now: Date) {
+  const hours = Math.max(
+    0,
+    Math.floor((now.getTime() - from.getTime()) / (60 * 60 * 1000)),
+  );
+  if (hours < 1) return "just now";
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
 type ProjectInfo = {
   name: string;
@@ -201,10 +224,12 @@ function IssueGrid({
   items,
   hideProject,
   currency,
+  claimContext,
 }: {
   items: EnrichedIssue[];
   hideProject?: boolean;
   currency: CurrencyCode;
+  claimContext: ClaimButtonContext;
 }) {
   return (
     <StaggerContainer>
@@ -226,6 +251,9 @@ function IssueGrid({
               subIssueCount={item.subIssueCount}
               variant="full"
               currency={currency}
+              claimContext={claimContext}
+              assignmentInfo={item.assignmentInfo}
+              recentlyReleasedByViewer={item.recentlyReleasedByViewer}
             />
           </StaggerItem>
         ))}
@@ -238,10 +266,12 @@ function TeamSection({
   teamName,
   items,
   currency,
+  claimContext,
 }: {
   teamName: string;
   items: EnrichedIssue[];
   currency: CurrencyCode;
+  claimContext: ClaimButtonContext;
 }) {
   return (
     <section>
@@ -251,7 +281,11 @@ function TeamSection({
           {items.length} task{items.length !== 1 && "s"}
         </Badge>
       </Group>
-      <IssueGrid items={items} currency={currency} />
+      <IssueGrid
+        items={items}
+        currency={currency}
+        claimContext={claimContext}
+      />
     </section>
   );
 }
@@ -260,10 +294,12 @@ function ProjectSection({
   info,
   items,
   currency,
+  claimContext,
 }: {
   info: ProjectInfo;
   items: EnrichedIssue[];
   currency: CurrencyCode;
+  claimContext: ClaimButtonContext;
 }) {
   const totalPayout = items.reduce(
     (s, i) =>
@@ -278,7 +314,12 @@ function ProjectSection({
         totalPayout={totalPayout}
         currency={currency}
       />
-      <IssueGrid items={items} hideProject currency={currency} />
+      <IssueGrid
+        items={items}
+        hideProject
+        currency={currency}
+        claimContext={claimContext}
+      />
     </section>
   );
 }
@@ -287,10 +328,12 @@ async function PPTList({
   userId,
   currentLinearId,
   currency,
+  claimContext,
 }: {
   userId: string;
   currentLinearId: string | null;
   currency: CurrencyCode;
+  claimContext: ClaimButtonContext;
 }) {
   let issues: PptBoardIssueDTO[] = [];
   try {
@@ -306,41 +349,124 @@ async function PPTList({
 
   if (issues.length === 0) {
     return (
-      <EmptyState description="No available PPTs at the moment. Check back later!" />
+      <EmptyState
+        title="No open PPTs right now"
+        description="New tasks appear here the moment they're approved — you'll also get a notification when one opens up. Working on something that should be paid? Use the Request PPT button above."
+      />
     );
   }
 
   const projectMap = new Map<string, ProjectInfo>();
 
-  const enriched: EnrichedIssue[] = await Promise.all(
-    issues.map(async (issue) => {
-      const project = issue.project;
-      const team = issue.team;
-      const assignee = issue.assignee;
-
-      if (project && !projectMap.has(project.id)) {
-        projectMap.set(project.id, {
-          name: project.name,
-          startDate: project.startDate,
-          targetDate: project.targetDate,
-          progress: project.progress,
-          health: project.health,
-        });
-      }
-
-      return {
-        issue,
-        projectId: project?.id ?? null,
-        projectName: project?.name ?? null,
-        teamName: team?.name ?? null,
-        teamKey: team?.key ?? "other",
-        assigneeName: assignee ? assignee.displayName || assignee.name : null,
-        assigneeAvatarUrl: assignee?.avatarUrl ?? null,
-        isAssignedToViewer: assignee?.id === currentLinearId,
-        subIssueCount: issue.subIssueCount,
-      };
-    }),
+  // Soft workload visibility: join board issues to their assignment watches so
+  // assigned cards can show "claimed Xd ago · last activity Yd ago" honestly,
+  // and recently auto-released tasks show a reclaim hint to their previous
+  // assignee.
+  const now = new Date();
+  const watchRows = await prisma.pptAssignmentWatch.findMany({
+    where: {
+      linearIssueId: { in: issues.map((issue) => issue.id) },
+      status: { in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED", "UNASSIGNED"] },
+    },
+    select: {
+      linearIssueId: true,
+      assigneeLinearId: true,
+      userId: true,
+      status: true,
+      assignedAt: true,
+      lastActivityAt: true,
+      snoozedUntil: true,
+      selfBlockReason: true,
+      selfBlockExpiresAt: true,
+      unassignedAt: true,
+    },
+  });
+  const watchByKey = new Map(
+    watchRows.map((watch) => [
+      `${watch.linearIssueId}:${watch.assigneeLinearId}`,
+      watch,
+    ]),
   );
+  const recentlyReleasedIssueIds = new Set(
+    watchRows
+      .filter(
+        (watch) =>
+          watch.userId === userId &&
+          watch.status === "UNASSIGNED" &&
+          watch.unassignedAt &&
+          now.getTime() - watch.unassignedAt.getTime() < 24 * 60 * 60 * 1000,
+      )
+      .map((watch) => watch.linearIssueId),
+  );
+
+  const enriched: EnrichedIssue[] = issues.map((issue) => {
+    const project = issue.project;
+    const team = issue.team;
+    const assignee = issue.assignee;
+
+    if (project && !projectMap.has(project.id)) {
+      projectMap.set(project.id, {
+        name: project.name,
+        startDate: project.startDate,
+        targetDate: project.targetDate,
+        progress: project.progress,
+        health: project.health,
+      });
+    }
+
+    let assignmentInfo: TaskAssignmentInfo | null = null;
+    const watch = assignee
+      ? watchByKey.get(`${issue.id}:${assignee.id}`)
+      : undefined;
+    if (watch && assignee && assignee.id !== currentLinearId) {
+      const timing = getAssignmentWatchTiming({
+        lastActivityAt: watch.lastActivityAt,
+        status: watch.status,
+        snoozedUntil: watch.snoozedUntil,
+        selfBlockExpiresAt: watch.selfBlockExpiresAt,
+        now,
+        warningHours: claimContext.warnHours,
+        unassignHours: claimContext.unassignHours,
+      });
+      if (timing.isBlocked) {
+        assignmentInfo = {
+          label: `Blocked — ${
+            watch.selfBlockReason
+              ? (SELF_BLOCK_REASON_LABELS[
+                  watch.selfBlockReason
+                ]?.toLowerCase() ?? "waiting on someone")
+              : "waiting on someone"
+          }`,
+          tone: "orange",
+        };
+      } else if (watch.status !== "UNASSIGNED") {
+        assignmentInfo = {
+          label: `Claimed ${agoLabel(watch.assignedAt, now)} · last activity ${agoLabel(watch.lastActivityAt, now)}`,
+          tone:
+            timing.hoursUntilUnassign <= 12
+              ? "orange"
+              : timing.staleHours >= claimContext.warnHours
+                ? "yellow"
+                : "gray",
+        };
+      }
+    }
+
+    return {
+      issue,
+      projectId: project?.id ?? null,
+      projectName: project?.name ?? null,
+      teamName: team?.name ?? null,
+      teamKey: team?.key ?? "other",
+      assigneeName: assignee ? assignee.displayName || assignee.name : null,
+      assigneeAvatarUrl: assignee?.avatarUrl ?? null,
+      isAssignedToViewer: assignee?.id === currentLinearId,
+      subIssueCount: issue.subIssueCount,
+      assignmentInfo,
+      recentlyReleasedByViewer:
+        !assignee && recentlyReleasedIssueIds.has(issue.id),
+    };
+  });
 
   // Split into issues with projects vs team-only
   const withProject = enriched.filter((i) => i.projectId);
@@ -463,6 +589,7 @@ async function PPTList({
               info={group.info}
               items={group.items}
               currency={currency}
+              claimContext={claimContext}
             />
           ))}
         </Stack>
@@ -477,6 +604,7 @@ async function PPTList({
               teamName={group.teamName}
               items={group.items}
               currency={currency}
+              claimContext={claimContext}
             />
           ))}
         </Stack>
@@ -485,24 +613,46 @@ async function PPTList({
   );
 }
 
-export default function PPTsPage() {
+export default function PPTsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ requestsPage?: string }>;
+}) {
   return (
     <PageContainer>
       <PageHeader
         title="PPT Board"
-        subtitle="Find available tasks labeled as PPT (Pay Per Task). Claim a task to earn its payout."
+        subtitle={
+          <Stack gap={6}>
+            <Text c="dimmed">
+              Find available tasks labeled as PPT (Pay Per Task). Claim a task
+              to earn its payout.
+            </Text>
+            <PptBoardHelpDrawer policy={getResolvedPayoutPolicy()} />
+          </Stack>
+        }
         action={<PptRequestButton />}
       />
       <Suspense fallback={<PPTSkeleton />}>
-        <PPTsPageContent />
+        <PPTsPageContent searchParams={searchParams} />
       </Suspense>
     </PageContainer>
   );
 }
 
-async function PPTsPageContent() {
+async function PPTsPageContent({
+  searchParams,
+}: {
+  searchParams: Promise<{ requestsPage?: string }>;
+}) {
   const { userId, user } = await getSession();
   if (!userId) redirect("/");
+
+  const params = await searchParams;
+  const requestsPage = Math.max(
+    1,
+    Number.parseInt(params.requestsPage ?? "1", 10) || 1,
+  );
 
   const userProfile = await ensureUserProfile({
     userId,
@@ -512,19 +662,54 @@ async function PPTsPageContent() {
   const userCurrency = getCurrencyForPaymentMethod(
     userProfile?.paymentMethod ?? "PAYPAL",
   );
+  const claimContext = await getClaimContext(userId);
 
   return (
     <Stack gap="xl">
+      {claimContext.activeCount > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
+          <StatCard
+            label={
+              <Group gap={4} wrap="nowrap" component="span">
+                My active PPTs
+                <InfoTip term="assignmentWatch" />
+              </Group>
+            }
+            value={claimContext.activeCount}
+            hint={`Tasks you've claimed that aren't done — each has a ${claimContext.unassignHours}h activity timer`}
+          />
+        </SimpleGrid>
+      )}
+
+      {userProfile?.linearId && (
+        <Suspense>
+          <ActiveTasks
+            linearId={userProfile.linearId}
+            userId={userId}
+            currency={userCurrency}
+            heading="Your active PPTs"
+            subtitle="Payout progress for the tasks you've claimed"
+            showBoardLink={false}
+            hideWhenEmpty
+          />
+        </Suspense>
+      )}
+
       <Suspense fallback={<PPTSkeleton />}>
         <PPTList
           userId={userId}
           currentLinearId={userProfile?.linearId ?? null}
           currency={userCurrency}
+          claimContext={claimContext}
         />
       </Suspense>
 
       <Suspense>
-        <MyPptRequests userId={userId} />
+        <MyPptRequests
+          userId={userId}
+          currency={userCurrency}
+          page={requestsPage}
+        />
       </Suspense>
     </Stack>
   );

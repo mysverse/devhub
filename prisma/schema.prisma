@@ -94,6 +94,10 @@ model UserProfile {
   // Auto-payout opt-in for ewallet methods (requires KYC)
   autoPayoutEnabled Boolean @default(false)
 
+  // Getting-started checklist: completion is DERIVED from real data (claims,
+  // proofs, payouts); only the dismissal is persisted.
+  gettingStartedDismissedAt DateTime?
+
   // Relationships
   transactions            Transaction[]
   pptPayoutStates         PptPayoutState[]        @relation("PptPayoutStateUser")
@@ -119,6 +123,24 @@ model UserProfile {
   projectAssignmentsMade  ProjectMembership[]     @relation("ProjectAssignmentActor")
   accessSyncLogs          AccessSyncLog[]         @relation("AccessSyncUser")
   accessSyncActions       AccessSyncLog[]         @relation("AccessSyncActor")
+  achievements            DeveloperAchievement[]  @relation("DeveloperAchievementUser")
+}
+
+// Persisted, peer-visible recognition. Keys live in src/lib/achievements.ts
+// and reward completion/delivery — never raw claim volume. The unique
+// constraint makes awarding idempotent across webhook + cron paths.
+model DeveloperAchievement {
+  id       String      @id @default(cuid())
+  userId   String
+  user     UserProfile @relation("DeveloperAchievementUser", fields: [userId], references: [id], onDelete: Cascade)
+  key      String
+  earnedAt DateTime    @default(now())
+  // Gates one-time celebrations (e.g. first-payout confetti fires once).
+  seenAt   DateTime?
+  meta     Json?
+
+  @@unique([userId, key])
+  @@index([userId, earnedAt])
 }
 
 model Invite {
@@ -605,6 +627,7 @@ enum PptAssignmentWatchStatus {
   ACTIVE
   WARNED
   SNOOZED
+  BLOCKED
   UNASSIGNED
   RESOLVED
 }
@@ -631,12 +654,32 @@ model PptAssignmentWatch {
   status         PptAssignmentWatchStatus @default(ACTIVE)
   warningCount   Int                      @default(0)
 
+  // Self-service "I'm blocked" state: pauses the stale clock, time-boxed via
+  // selfBlockExpiresAt, auto-expires back to ACTIVE. selfBlockCount is
+  // per-assignment (reset on new assignment) and drives the soft guardrail of
+  // admin visibility at 2+.
+  selfBlockedAt      DateTime?
+  selfBlockReason    PptSelfBlockReason?
+  selfBlockNote      String?
+  selfBlockExpiresAt DateTime?
+  selfBlockCount     Int                 @default(0)
+
+  releasedBySelfAt DateTime?
+  // Prevents repeat idle nudges within one activity window.
+  idleNudgedAt     DateTime?
+  // Takeover provenance ("Reassign to me"): who previously held the task and
+  // the required reason the taker gave.
+  reassignedFromLinearId String?
+  reassignReason         String?
+
   lastLinearCommentAt   DateTime?
   lastLinearCommentType String?
   lastAdminActionAt     DateTime?
   lastAdminActionById   String?
   lastAdminActionNote   String?
   metadata              Json?
+
+  events PptAssignmentWatchEvent[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -646,6 +689,49 @@ model PptAssignmentWatch {
   @@index([userId, status])
   @@index([status, lastActivityAt])
   @@index([status, snoozedUntil])
+  @@index([status, selfBlockExpiresAt])
+}
+
+// Audit trail for assignment-watch mechanics: claims, releases, takeovers,
+// nudges, blocks, and admin actions. Powers the developer-visible history and
+// the admin per-developer rollups.
+model PptAssignmentWatchEvent {
+  id            String             @id @default(cuid())
+  watchId       String
+  watch         PptAssignmentWatch @relation(fields: [watchId], references: [id], onDelete: Cascade)
+  linearIssueId String
+  type          PptWatchEventType
+  actorUserId   String?
+  note          String?
+  metadata      Json?
+  createdAt     DateTime           @default(now())
+
+  @@index([watchId, createdAt])
+  @@index([linearIssueId])
+  @@index([type, createdAt])
+}
+
+enum PptSelfBlockReason {
+  WAITING_REVIEW
+  WAITING_ASSETS
+  WAITING_DEPENDENCY
+  OTHER
+}
+
+enum PptWatchEventType {
+  CLAIMED
+  RELEASED
+  REASSIGNED_TAKEN
+  REASSIGNED_AWAY
+  IDLE_NUDGE
+  WARNED
+  AUTO_UNASSIGNED
+  BLOCKED
+  UNBLOCKED
+  BLOCK_EXPIRED
+  ADMIN_SNOOZE
+  ADMIN_ACTIVATE
+  ADMIN_FORCE_UNASSIGN
 }
 
 // ── Bonus tables ────────────────────────────────────────────────────────────

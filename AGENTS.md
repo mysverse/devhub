@@ -14,6 +14,7 @@ pnpm lint                   # Run Biome lint with auto-fix
 pnpm check                  # Run Biome check with auto-fix
 pnpm typecheck              # prisma generate && tsc --noEmit
 pnpm smoke                  # Dev-mode route sweep (requires pnpm dev:mock running)
+pnpm visual                 # Playwright layout checks + screenshots (requires pnpm dev:mock running)
 pnpm simulate <...>         # Dev-mode webhook/cron simulators (see Dev Mode below)
 pnpm linear:validate        # Validate committed raw Linear GraphQL documents
 pnpm linear:schema:update   # Refresh the committed Linear schema snapshot (needs Linear token)
@@ -76,6 +77,14 @@ runbook: `.claude/skills/dev-mode/SKILL.md`.
 - `pnpm dev:mock:reset` wipes and re-seeds; `pnpm simulate
   linear|billplz|xendit|cron` fires signed webhooks/crons that exercise the
   real verification code paths.
+- `pnpm visual` (script: `scripts/dev/visual.ts`) drives Playwright Chromium
+  over every key page at mobile/tablet/laptop/desktop widths, writes
+  screenshots to `screenshots/` (gitignored), and fails on layout breakage:
+  horizontal page overflow, or header content wrapping/overflowing the fixed
+  60px bar (the failure mode when the top nav gains too many links). One-time
+  setup: `pnpm exec playwright install chromium`. Run it after touching the
+  dashboard shell, nav, or any page-level layout; pass a route prefix to
+  scope it (`pnpm visual /dashboard/ppts`).
 - Restart `pnpm dev:mock` after editing `src/dev/**` or
   `src/instrumentation.ts` — the fetch interceptor installs once at boot and
   HMR does not reliably reload it.

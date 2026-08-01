@@ -2,6 +2,10 @@ export type NotificationPresentation = {
   heading: string;
   color: string;
   tone: "positive" | "warning" | "critical" | "info";
+  /** Short human label for the specific event, shown as a chip in toasts and
+   * the inbox. Optional — surfaces must hide the chip when absent rather than
+   * falling back to the raw type string. */
+  typeLabel?: string;
 };
 
 const DOMAIN_COPY: Record<string, NotificationPresentation> = {
@@ -22,33 +26,142 @@ const DOMAIN_COPY: Record<string, NotificationPresentation> = {
     color: "yellow",
     tone: "warning",
   },
+  recognition: { heading: "Nice work", color: "teal", tone: "positive" },
 };
 
-const TYPE_OVERRIDES: Record<string, Partial<NotificationPresentation>> = {
-  "ppt:BLOCKED": { color: "red", tone: "critical" },
-  "ppt:HELD": { color: "yellow", tone: "warning" },
-  "ppt:READY": { color: "green", tone: "positive" },
-  "ppt:PROOF_ACCEPTED": { color: "green", tone: "positive" },
-  "ppt:PAID_REOPENED": { color: "red", tone: "critical" },
-  "incentive:INCENTIVE_DISPUTED": { color: "orange", tone: "warning" },
-  "welcome_pack:REJECTED": { color: "red", tone: "critical" },
-  "welcome_pack:CANCELLED": { color: "gray", tone: "warning" },
-  "welcome_pack:ADMIN_CANCELLED": { color: "gray", tone: "warning" },
-  "welcome_pack:APPROVED": { color: "green", tone: "positive" },
-  "welcome_pack:SHIPPED": { color: "indigo", tone: "positive" },
-  "welcome_pack:DELIVERED": { color: "green", tone: "positive" },
-  "welcome_pack:DELAYED": { color: "orange", tone: "warning" },
-  "payment:PROCESSED": { color: "green", tone: "positive" },
-  "payment:REJECTED": { color: "red", tone: "critical" },
-  "kyc:APPROVED": { color: "green", tone: "positive" },
-  "kyc:REJECTED": { color: "red", tone: "critical" },
-  "ppt_request:APPROVED": { color: "green", tone: "positive" },
-  "ppt_request:REJECTED": { color: "red", tone: "critical" },
-  "ppt_request:SUBMITTED": { color: "blue", tone: "info" },
-  "ppt_task:ASSIGNED_TO_YOU": { color: "green", tone: "positive" },
-  "ppt_task:UNCLAIMED_AVAILABLE": { color: "blue", tone: "info" },
-  "ppt_task:STALE_WARNING": { color: "yellow", tone: "warning" },
-  "ppt_task:AUTO_UNASSIGNED": { color: "red", tone: "critical" },
+export const TYPE_OVERRIDES: Record<
+  string,
+  Partial<NotificationPresentation>
+> = {
+  "ppt:BLOCKED": {
+    color: "red",
+    tone: "critical",
+    typeLabel: "Payout blocked",
+  },
+  "ppt:HELD": { color: "yellow", tone: "warning", typeLabel: "Payout held" },
+  "ppt:READY": { color: "green", tone: "positive", typeLabel: "Payout ready" },
+  "ppt:PROOF_ACCEPTED": {
+    color: "green",
+    tone: "positive",
+    typeLabel: "Proof accepted",
+  },
+  "ppt:PAID_REOPENED": {
+    color: "red",
+    tone: "critical",
+    typeLabel: "Paid task reopened",
+  },
+  "incentive:INCENTIVE_DISPUTED": {
+    color: "orange",
+    tone: "warning",
+    typeLabel: "Updated by admin",
+  },
+  "welcome_pack:REJECTED": {
+    color: "red",
+    tone: "critical",
+    typeLabel: "Rejected",
+  },
+  "welcome_pack:CANCELLED": {
+    color: "gray",
+    tone: "warning",
+    typeLabel: "Cancelled",
+  },
+  "welcome_pack:ADMIN_CANCELLED": {
+    color: "gray",
+    tone: "warning",
+    typeLabel: "Cancelled",
+  },
+  "welcome_pack:APPROVED": {
+    color: "green",
+    tone: "positive",
+    typeLabel: "Approved",
+  },
+  "welcome_pack:SHIPPED": {
+    color: "indigo",
+    tone: "positive",
+    typeLabel: "Shipped",
+  },
+  "welcome_pack:DELIVERED": {
+    color: "green",
+    tone: "positive",
+    typeLabel: "Delivered",
+  },
+  "welcome_pack:DELAYED": {
+    color: "orange",
+    tone: "warning",
+    typeLabel: "Delayed",
+  },
+  "payment:PROCESSED": {
+    color: "green",
+    tone: "positive",
+    typeLabel: "Payment sent",
+  },
+  "payment:AWAITING_REVIEW": {
+    color: "yellow",
+    tone: "warning",
+    typeLabel: "Awaiting review",
+  },
+  "payment:REJECTED": {
+    color: "red",
+    tone: "critical",
+    typeLabel: "Payment rejected",
+  },
+  "kyc:APPROVED": { color: "green", tone: "positive", typeLabel: "Approved" },
+  "kyc:REJECTED": { color: "red", tone: "critical", typeLabel: "Rejected" },
+  "ppt_request:APPROVED": {
+    color: "green",
+    tone: "positive",
+    typeLabel: "Approved",
+  },
+  "ppt_request:REJECTED": {
+    color: "red",
+    tone: "critical",
+    typeLabel: "Rejected",
+  },
+  "ppt_request:SUBMITTED": {
+    color: "blue",
+    tone: "info",
+    typeLabel: "Submitted",
+  },
+  "ppt_task:ASSIGNED_TO_YOU": {
+    color: "green",
+    tone: "positive",
+    typeLabel: "Assigned to you",
+  },
+  "ppt_task:UNCLAIMED_AVAILABLE": {
+    color: "blue",
+    tone: "info",
+    typeLabel: "Open to claim",
+  },
+  "ppt_task:STALE_WARNING": {
+    color: "yellow",
+    tone: "warning",
+    typeLabel: "Activity reminder",
+  },
+  "ppt_task:AUTO_UNASSIGNED": {
+    color: "orange",
+    tone: "warning",
+    typeLabel: "Returned to board",
+  },
+  "ppt_task:IDLE_NUDGE": {
+    color: "blue",
+    tone: "info",
+    typeLabel: "Gentle nudge",
+  },
+  "ppt_task:BLOCK_EXPIRED": {
+    color: "blue",
+    tone: "info",
+    typeLabel: "Block ended",
+  },
+  "ppt_task:BLOCKED_REPORTED": {
+    color: "yellow",
+    tone: "warning",
+    typeLabel: "Needs unblocking",
+  },
+  "ppt_task:REASSIGNED_AWAY": {
+    color: "orange",
+    tone: "warning",
+    typeLabel: "Taken over",
+  },
 };
 
 export function notificationPresentation(

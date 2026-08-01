@@ -45,7 +45,7 @@ function NotificationToast({
 }: {
   notification: AppNotification;
 }) {
-  const { Icon, color, heading } = notificationVisual(
+  const { Icon, color, heading, typeLabel } = notificationVisual(
     notification.domain,
     notification.type,
   );
@@ -59,9 +59,11 @@ function NotificationToast({
             <Text size="sm" fw={700}>
               {heading}
             </Text>
-            <Badge size="xs" variant="light" color={color}>
-              {notification.type.replaceAll("_", " ").toLowerCase()}
-            </Badge>
+            {typeLabel && (
+              <Badge size="xs" variant="light" color={color}>
+                {typeLabel}
+              </Badge>
+            )}
           </Group>
           <Text size="sm" fw={600} lineClamp={1}>
             {notification.title}

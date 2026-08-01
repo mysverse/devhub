@@ -3,6 +3,7 @@ import type React from "react";
 import { createElement } from "react";
 import NotificationEmail from "@/emails/NotificationEmail";
 import { sendEmail } from "@/lib/email";
+import { catalogChannelDefaults } from "@/lib/notifications/catalog";
 import prisma from "@/lib/prisma";
 
 export const IN_APP_CHANNEL = "in_app";
@@ -13,15 +14,10 @@ export type NotificationChannelDefaults = Partial<
   Record<NotificationChannel, boolean>
 >;
 
-const BUILT_IN_CHANNEL_DEFAULTS: Record<string, NotificationChannelDefaults> = {
-  "ppt_request:SUBMITTED": { in_app: true, email: true },
-  "ppt_request:APPROVED": { in_app: true, email: true },
-  "ppt_request:REJECTED": { in_app: true, email: true },
-  "ppt_task:ASSIGNED_TO_YOU": { in_app: true, email: true },
-  "ppt_task:UNCLAIMED_AVAILABLE": { in_app: true, email: false },
-  "ppt_task:STALE_WARNING": { in_app: true, email: true },
-  "ppt_task:AUTO_UNASSIGNED": { in_app: true, email: true },
-};
+// Channel defaults come from the notification catalog so the settings UI,
+// help page, and engine can never disagree.
+const BUILT_IN_CHANNEL_DEFAULTS: Record<string, NotificationChannelDefaults> =
+  catalogChannelDefaults();
 
 type EmailOptions = {
   to?: string | null;

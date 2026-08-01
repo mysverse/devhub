@@ -1,15 +1,10 @@
 import type { CurrencyCode } from "./currency";
+import { WEEKLY_CREDIT_LIMITS } from "./payout-policy";
 import prisma from "./prisma";
 
-/**
- * Weekly credit limits per currency.
- * Transactions within these limits are auto-approved.
- * Set to 0 to disable auto-approval for a currency.
- */
-export const WEEKLY_CREDIT_LIMITS: Record<CurrencyCode, number> = {
-  MYR: 100,
-  ROBUX: 6000, // Complexity level 5 at 1,200 Robux each
-};
+// The limit values live in payout-policy.ts (the client-safe single source of
+// truth for explained numbers); re-exported here for existing importers.
+export { WEEKLY_CREDIT_LIMITS } from "./payout-policy";
 
 /**
  * Returns the start (Monday 00:00:00 UTC) and end (Sunday 23:59:59.999 UTC)

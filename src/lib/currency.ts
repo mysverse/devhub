@@ -73,6 +73,12 @@ export function getCurrencyForPaymentMethod(method: string): CurrencyCode {
   return method === "ROBUX" ? "ROBUX" : "MYR";
 }
 
+/** Per-point payout rate for a currency. The only sanctioned way to show a
+ * rate in copy — never hardcode 20/1200 at a call site. */
+export function getRateMultiplier(currency: CurrencyCode): number {
+  return CURRENCY_CONFIG[currency].multiplier;
+}
+
 export function estimateToAmount(
   estimate: number,
   currency: CurrencyCode,

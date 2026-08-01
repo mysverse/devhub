@@ -7,7 +7,7 @@ export default function ActiveTasksEmptyState() {
     <EmptyState
       icon={<Sparkles size={26} />}
       title="No active tasks yet"
-      description="Pick up a PPT from the board to start earning. Tasks you claim will show up here."
+      description="Claim a PPT from the board and it shows up here with its payout progress, activity timer, and next step."
       action={
         <LinkButton
           href="/dashboard/ppts"

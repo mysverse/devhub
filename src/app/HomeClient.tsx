@@ -81,8 +81,9 @@ export default function HomeClient({ linearAvailability }: Props) {
             </StaggerItem>
             <StaggerItem>
               <Text size="lg" c="dimmed" mb="xl">
-                Track your PPTs, manage your payments, and find new tasks on our
-                Linear board.
+                Claim paid tasks, watch every payout explain itself, and get
+                paid automatically — DevHub handles the whole loop from claim to
+                payment.
               </Text>
             </StaggerItem>
 

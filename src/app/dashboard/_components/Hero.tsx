@@ -8,6 +8,7 @@ import {
   getBankDisplayName,
   getPaymentMethodLabel,
 } from "@/lib/payment-validation";
+import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import prisma from "@/lib/prisma";
 import HeroPrimary from "./HeroPrimary";
 
@@ -133,7 +134,6 @@ export default async function Hero({
   const databasePendingBalance = transactionTotals
     .filter((tx) => tx.status === "PENDING" && tx.source === "PPT")
     .reduce((sum, tx) => sum + (tx._sum.amount ?? 0), 0);
-  const pendingAmount = databasePendingBalance + activePptPendingAmount;
   const totalEarned = transactionTotals
     .filter((tx) => tx.status === "PAID")
     .reduce((sum, tx) => sum + (tx._sum.amount ?? 0), 0);
@@ -159,7 +159,8 @@ export default async function Hero({
     <HeroPrimary
       firstName={firstName}
       currency={currency}
-      pendingAmount={pendingAmount}
+      pendingTransactionsAmount={databasePendingBalance}
+      estimatedActiveAmount={activePptPendingAmount}
       activeTaskCount={count}
       totalEarned={totalEarned}
       approvedBonusBalance={approvedBonusBalance}
@@ -173,6 +174,7 @@ export default async function Hero({
       )}
       isPaymentMethodSet={isPaymentMethodSet(userProfile)}
       todayLabel={todayLabel}
+      policy={getResolvedPayoutPolicy()}
     />
   );
 }

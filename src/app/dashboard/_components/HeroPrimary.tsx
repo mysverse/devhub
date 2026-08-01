@@ -20,15 +20,20 @@ import {
   StaggerContainer,
   StaggerItem,
 } from "@/components/animations";
+import InfoTip from "@/components/InfoTip";
 import LinkAnchor from "@/components/LinkAnchor";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
+import type { PayoutPolicy } from "@/lib/payout-policy";
 import HelpDrawer from "./HelpDrawer";
 
 type Props = {
   firstName: string;
   currency: CurrencyCode;
-  pendingAmount: number;
+  /** PENDING PPT transactions — payment created, not yet sent. */
+  pendingTransactionsAmount: number;
+  /** Estimated value of active (not yet completed) claimed tasks. */
+  estimatedActiveAmount: number;
   activeTaskCount: number;
   totalEarned: number;
   approvedBonusBalance: number;
@@ -40,6 +45,7 @@ type Props = {
   paymentMethodCurrency: CurrencyCode;
   isPaymentMethodSet: boolean;
   todayLabel: string;
+  policy: PayoutPolicy;
 };
 
 function AnimatedAmount({
@@ -103,7 +109,8 @@ function AnimatedAmount({
 export default function HeroPrimary({
   firstName,
   currency,
-  pendingAmount,
+  pendingTransactionsAmount,
+  estimatedActiveAmount,
   activeTaskCount,
   totalEarned,
   approvedBonusBalance,
@@ -115,7 +122,9 @@ export default function HeroPrimary({
   paymentMethodCurrency,
   isPaymentMethodSet,
   todayLabel,
+  policy,
 }: Props) {
+  const pendingAmount = pendingTransactionsAmount + estimatedActiveAmount;
   const usagePct = weeklyLimit > 0 ? (weeklyUsed / weeklyLimit) * 100 : 0;
   const progressColor =
     usagePct >= 100 ? "red" : usagePct >= 70 ? "yellow" : "green";
@@ -179,9 +188,12 @@ export default function HeroPrimary({
                     <Text fz="sm" tt="uppercase" fw={700} c="blue.3">
                       Hi, {firstName}
                     </Text>
-                    <Text fz="sm" c="dimmed">
-                      Money in motion &middot; {todayLabel}
-                    </Text>
+                    <Group gap={4} wrap="nowrap">
+                      <Text fz="sm" c="dimmed">
+                        Projected earnings &middot; {todayLabel}
+                      </Text>
+                      <InfoTip label="Payments already created but not yet sent, plus the estimated value of tasks you've claimed but not finished. Not money in your account yet." />
+                    </Group>
                   </Stack>
                 </StaggerItem>
                 <StaggerItem>
@@ -198,16 +210,24 @@ export default function HeroPrimary({
                     </Text>
                   ) : (
                     <Text fz="md" c="gray.4">
-                      across{" "}
                       <Text component="span" fw={600} c="gray.1">
-                        {activeTaskCount}
+                        {formatAmount(pendingTransactionsAmount, currency)}
                       </Text>{" "}
-                      active task{activeTaskCount === 1 ? "" : "s"}
+                      awaiting payout &middot;{" "}
+                      <Text component="span" fw={600} c="gray.1">
+                        {formatAmount(estimatedActiveAmount, currency)}
+                      </Text>{" "}
+                      estimated from {activeTaskCount} active task
+                      {activeTaskCount === 1 ? "" : "s"}
                     </Text>
                   )}
                 </StaggerItem>
                 <StaggerItem>
-                  <HelpDrawer currency={currency} weeklyLimit={weeklyLimit} />
+                  <HelpDrawer
+                    currency={currency}
+                    weeklyLimit={weeklyLimit}
+                    policy={policy}
+                  />
                 </StaggerItem>
               </Stack>
             </StaggerContainer>
@@ -247,7 +267,7 @@ export default function HeroPrimary({
                               leftSection={<Sparkles size={10} />}
                             >
                               +{formatAmount(approvedBonusBalance, currency)}{" "}
-                              bonus pending
+                              bonus approved &mdash; payment queued
                             </Badge>
                           </LinkAnchor>
                         )}
@@ -270,9 +290,12 @@ export default function HeroPrimary({
                       ]}
                     />
                     <Stack gap={2} style={{ minWidth: 0 }}>
-                      <Text fz="xs" tt="uppercase" fw={700} c="dimmed">
-                        Weekly credit
-                      </Text>
+                      <Group gap={4} wrap="nowrap">
+                        <Text fz="xs" tt="uppercase" fw={700} c="dimmed">
+                          Weekly credit
+                        </Text>
+                        <InfoTip term="weeklyCredit" />
+                      </Group>
                       <Text fz="sm" fw={700}>
                         {formatAmount(weeklyUsed, currency)} /{" "}
                         {formatAmount(weeklyLimit, currency)}

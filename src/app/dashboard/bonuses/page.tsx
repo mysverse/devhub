@@ -1,4 +1,8 @@
 import {
+  Accordion,
+  AccordionControl,
+  AccordionItem,
+  AccordionPanel,
   Anchor,
   Badge,
   Card,
@@ -22,7 +26,12 @@ import { getSession } from "@/lib/auth-utils";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
-import { BONUS_CANDIDATE_STATUS, statusCopy } from "@/lib/status-copy";
+import {
+  BONUS_CANDIDATE_STATUS,
+  statusCopy,
+  TRANSACTION_STATUS,
+} from "@/lib/status-copy";
+import BonusesHelpDrawer from "./BonusesHelpDrawer";
 import RefreshBonusesButton from "./RefreshBonusesButton";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/bonuses");
@@ -123,10 +132,14 @@ function BonusCandidateCard({
 
         {candidate.status === "APPROVED" && candidate.transaction && (
           <Text size="sm" c="dimmed">
-            Payout {candidate.transaction.status.toLowerCase()}
+            Payout{" "}
+            {statusCopy(
+              TRANSACTION_STATUS,
+              candidate.transaction.status,
+            ).label.toLowerCase()}
             {candidate.transaction.paidAt
               ? ` on ${candidate.transaction.paidAt.toLocaleDateString()}`
-              : ""}
+              : " — grouped into the next monthly bonus payment"}
           </Text>
         )}
 
@@ -181,7 +194,15 @@ export default function BonusesPage() {
     <PageContainer>
       <PageHeader
         title="Bonuses"
-        subtitle="Non-guaranteed monthly payouts for eligible non-PPT Linear work."
+        subtitle={
+          <Stack gap={6}>
+            <Text c="dimmed">
+              Non-guaranteed monthly payouts for eligible non-PPT Linear work.
+              Admins decide final amounts at a monthly review.
+            </Text>
+            <BonusesHelpDrawer />
+          </Stack>
+        }
         action={<RefreshBonusesButton />}
       />
       <Suspense fallback={<PageSkeleton withHeader={false} />}>
@@ -195,7 +216,7 @@ async function BonusesContent() {
   const { userId } = await getSession();
   if (!userId) redirect("/");
 
-  const [candidates, approvedTransactions] = await Promise.all([
+  const [candidates, approvedTransactions, ineligible] = await Promise.all([
     prisma.bonusCandidate.findMany({
       where: {
         userId,
@@ -218,6 +239,18 @@ async function BonusesContent() {
         status: { in: ["PENDING", "PAID"] },
       },
       select: { amount: true, currency: true, status: true },
+    }),
+    prisma.bonusCandidate.findMany({
+      where: { userId, status: "INELIGIBLE" },
+      select: {
+        id: true,
+        linearIssueIdentifier: true,
+        linearIssueTitle: true,
+        linearIssueUrl: true,
+        ineligibilityReason: true,
+      },
+      orderBy: { updatedAt: "desc" },
+      take: 25,
     }),
   ]);
 
@@ -248,6 +281,7 @@ async function BonusesContent() {
               amount: candidate.maxAmount,
             })),
           )}
+          hint="Maximum possible — not guaranteed"
         />
         <StatCard
           label="In Review"
@@ -257,6 +291,7 @@ async function BonusesContent() {
               amount: candidate.maxAmount,
             })),
           )}
+          hint="Awaiting the monthly admin review"
         />
         <StatCard
           label="Approved"
@@ -266,6 +301,7 @@ async function BonusesContent() {
               amount: transaction.amount,
             })),
           )}
+          hint="Confirmed — payment queued"
         />
         <StatCard
           label="Paid Bonuses"
@@ -275,16 +311,17 @@ async function BonusesContent() {
               amount: transaction.amount,
             })),
           )}
+          hint="Sent to your payout method"
         />
       </SimpleGrid>
 
       <CandidateGrid
         title="Potential"
         candidates={active}
-        empty="No active bonus candidates right now."
+        empty="No active bonus candidates right now. Assigned non-PPT tasks with an estimate qualify automatically."
       />
       <CandidateGrid
-        title="Ready for Review"
+        title="In Review"
         candidates={ready}
         empty="No completed bonus work is waiting for admin review."
       />
@@ -293,6 +330,61 @@ async function BonusesContent() {
         candidates={history}
         empty="No reviewed bonus items yet."
       />
+
+      {ineligible.length > 0 && (
+        <Accordion variant="separated" radius="md">
+          <AccordionItem value="ineligible">
+            <AccordionControl>
+              <Text fw={600}>
+                Not eligible ({ineligible.length}) — why some tasks are excluded
+              </Text>
+            </AccordionControl>
+            <AccordionPanel>
+              <Stack gap="xs">
+                <Text fz="xs" c="dimmed">
+                  These assigned tasks don&apos;t currently qualify for a bonus.
+                  Fixing the listed reason (for example, adding an estimate)
+                  makes a task eligible on the next refresh.
+                </Text>
+                {ineligible.map((candidate) => (
+                  <Group
+                    key={candidate.id}
+                    gap="xs"
+                    wrap="nowrap"
+                    align="flex-start"
+                  >
+                    {candidate.linearIssueIdentifier && (
+                      <Badge size="xs" variant="light" color="gray">
+                        {candidate.linearIssueIdentifier}
+                      </Badge>
+                    )}
+                    <Stack gap={0} style={{ minWidth: 0 }}>
+                      {candidate.linearIssueUrl ? (
+                        <Anchor
+                          href={candidate.linearIssueUrl}
+                          target="_blank"
+                          fz="sm"
+                          truncate="end"
+                        >
+                          {candidate.linearIssueTitle || "Untitled issue"}
+                        </Anchor>
+                      ) : (
+                        <Text fz="sm" truncate="end">
+                          {candidate.linearIssueTitle || "Untitled issue"}
+                        </Text>
+                      )}
+                      <Text fz="xs" c="dimmed">
+                        {candidate.ineligibilityReason ??
+                          "Doesn't meet the current bonus criteria."}
+                      </Text>
+                    </Stack>
+                  </Group>
+                ))}
+              </Stack>
+            </AccordionPanel>
+          </AccordionItem>
+        </Accordion>
+      )}
     </Stack>
   );
 }

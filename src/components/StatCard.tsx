@@ -13,7 +13,7 @@ import type { AnimateNumberProps } from "motion-plus/react";
 import { AnimatedNumber } from "@/components/animations";
 
 type StatCardProps = {
-  label: string;
+  label: React.ReactNode;
   /** Preformatted value (e.g. formatAmount output). Ignored if animateValue is set. */
   value?: React.ReactNode;
   /** Numeric value rendered via AnimatedNumber (animates on change). */

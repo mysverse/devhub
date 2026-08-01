@@ -62,6 +62,12 @@ export type AdminPptAssignmentWatchRow = {
   unassignAt: string;
   staleHours: number;
   dueWithin24Hours: boolean;
+  selfBlockCount: number;
+  selfBlockReasonLabel: string | null;
+  selfBlockNote: string | null;
+  selfBlockExpiresAt: string | null;
+  releasedBySelfAt: string | null;
+  reassignReason: string | null;
   lastAdminActionAt: string | null;
   lastAdminActionByName: string | null;
   lastAdminActionNote: string | null;
@@ -103,7 +109,9 @@ function formatHours(hours: number) {
 }
 
 function isOpenStatus(status: string) {
-  return ["ACTIVE", "WARNED", "SNOOZED", "UNASSIGNED"].includes(status);
+  return ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED", "UNASSIGNED"].includes(
+    status,
+  );
 }
 
 function SummaryCard({
@@ -132,7 +140,7 @@ export default function AdminPptAssignmentWatchTab({
 }: {
   watches: AdminPptAssignmentWatchRow[];
 }) {
-  const [mode, setMode] = useState<"open" | "history">("open");
+  const [mode, setMode] = useState<"open" | "history" | "developers">("open");
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<{
     action: WatchAction;
@@ -145,14 +153,64 @@ export default function AdminPptAssignmentWatchTab({
     const open = watches.filter((watch) => isOpenStatus(watch.status));
     return {
       active: open.filter((watch) =>
-        ["ACTIVE", "WARNED", "SNOOZED"].includes(watch.status),
+        ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED"].includes(watch.status),
       ).length,
       warned: watches.filter((watch) => watch.status === "WARNED").length,
+      blocked: watches.filter((watch) => watch.status === "BLOCKED").length,
       snoozed: watches.filter((watch) => watch.status === "SNOOZED").length,
       unassigned: watches.filter((watch) => watch.status === "UNASSIGNED")
         .length,
       dueSoon: open.filter((watch) => watch.dueWithin24Hours).length,
     };
+  }, [watches]);
+
+  const developerRollup = useMemo(() => {
+    type Rollup = {
+      key: string;
+      name: string;
+      email: string | null;
+      activeCount: number;
+      oldestAssignedAt: string | null;
+      warnings: number;
+      blocks: number;
+      selfReleases: number;
+      takeovers: number;
+    };
+    const byDeveloper = new Map<string, Rollup>();
+    for (const watch of watches) {
+      const key = watch.assigneeEmail ?? watch.developerName ?? watch.id;
+      const entry = byDeveloper.get(key) ?? {
+        key,
+        name: watch.developerName ?? watch.assigneeName ?? "Unknown developer",
+        email: watch.assigneeEmail,
+        activeCount: 0,
+        oldestAssignedAt: null,
+        warnings: 0,
+        blocks: 0,
+        selfReleases: 0,
+        takeovers: 0,
+      };
+      const isActive = ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED"].includes(
+        watch.status,
+      );
+      if (isActive) {
+        entry.activeCount++;
+        if (
+          !entry.oldestAssignedAt ||
+          watch.assignedAt < entry.oldestAssignedAt
+        ) {
+          entry.oldestAssignedAt = watch.assignedAt;
+        }
+      }
+      entry.warnings += watch.warningCount;
+      entry.blocks += watch.selfBlockCount;
+      if (watch.releasedBySelfAt) entry.selfReleases++;
+      if (watch.reassignReason) entry.takeovers++;
+      byDeveloper.set(key, entry);
+    }
+    return [...byDeveloper.values()].sort(
+      (a, b) => b.activeCount - a.activeCount || b.warnings - a.warnings,
+    );
   }, [watches]);
 
   const visibleRows = useMemo(() => {
@@ -210,9 +268,10 @@ export default function AdminPptAssignmentWatchTab({
 
   return (
     <Stack gap="md">
-      <SimpleGrid cols={{ base: 2, md: 5 }} spacing="sm">
+      <SimpleGrid cols={{ base: 2, md: 6 }} spacing="sm">
         <SummaryCard label="Watched" value={summary.active} color="blue" />
         <SummaryCard label="Warned" value={summary.warned} color="yellow" />
+        <SummaryCard label="Blocked" value={summary.blocked} color="orange" />
         <SummaryCard label="Snoozed" value={summary.snoozed} color="violet" />
         <SummaryCard
           label="Unassigned"
@@ -225,10 +284,13 @@ export default function AdminPptAssignmentWatchTab({
       <Group justify="space-between" align="center">
         <SegmentedControl
           value={mode}
-          onChange={(value) => setMode(value as "open" | "history")}
+          onChange={(value) =>
+            setMode(value as "open" | "history" | "developers")
+          }
           data={[
             { label: "Open", value: "open" },
             { label: "History", value: "history" },
+            { label: "By developer", value: "developers" },
           ]}
         />
         <TextInput
@@ -240,140 +302,219 @@ export default function AdminPptAssignmentWatchTab({
         />
       </Group>
 
-      <Card withBorder radius="md" padding={0}>
-        <ScrollArea>
-          <Table miw={1180} verticalSpacing="sm" highlightOnHover>
-            <TableThead>
-              <TableTr>
-                <TableTh>Status</TableTh>
-                <TableTh>Issue</TableTh>
-                <TableTh>Assignee</TableTh>
-                <TableTh>Assigned</TableTh>
-                <TableTh>Last Activity</TableTh>
-                <TableTh>Stale Age</TableTh>
-                <TableTh>Warn At</TableTh>
-                <TableTh>Unassign At</TableTh>
-                <TableTh>Snoozed Until</TableTh>
-                <TableTh>Warnings</TableTh>
-                <TableTh>Actions</TableTh>
-              </TableTr>
-            </TableThead>
-            <TableTbody>
-              {visibleRows.map((row) => {
-                const status = statusCopy(
-                  PPT_ASSIGNMENT_WATCH_STATUS,
-                  row.status,
-                );
-                const actionsDisabled =
-                  row.status === "UNASSIGNED" || row.status === "RESOLVED";
-                return (
-                  <TableTr key={row.id}>
-                    <TableTd>
-                      <Stack gap={4}>
-                        <StatusBadge copy={status} size="sm" />
-                        {row.dueWithin24Hours && (
-                          <Badge size="xs" color="red" variant="light">
-                            Due soon
-                          </Badge>
-                        )}
-                      </Stack>
-                    </TableTd>
-                    <TableTd>
-                      <Stack gap={2}>
-                        <Group gap="xs" wrap="nowrap">
-                          <Text fw={700} lineClamp={1}>
-                            {issueTitle(row)}
-                          </Text>
-                          {row.linearIssueUrl && (
-                            <Anchor href={row.linearIssueUrl} target="_blank">
-                              <ExternalLink size={14} />
-                            </Anchor>
-                          )}
-                        </Group>
-                        <Text size="xs" c="dimmed">
-                          {row.linearIssueId}
-                        </Text>
-                      </Stack>
-                    </TableTd>
+      {mode === "developers" && (
+        <Card withBorder radius="md" padding={0}>
+          <ScrollArea>
+            <Table miw={760} verticalSpacing="sm" highlightOnHover>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Developer</TableTh>
+                  <TableTh>Active tasks</TableTh>
+                  <TableTh>Oldest active claim</TableTh>
+                  <TableTh>Warnings</TableTh>
+                  <TableTh>Blocks</TableTh>
+                  <TableTh>Self-releases</TableTh>
+                  <TableTh>Takeovers</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
+                {developerRollup.map((entry) => (
+                  <TableTr key={entry.key}>
                     <TableTd>
                       <Stack gap={2}>
                         <Text size="sm" fw={600}>
-                          {row.developerName ||
-                            row.assigneeName ||
-                            "Unknown developer"}
+                          {entry.name}
                         </Text>
                         <Text size="xs" c="dimmed">
-                          {row.assigneeEmail ?? "-"}
+                          {entry.email ?? "-"}
                         </Text>
                       </Stack>
                     </TableTd>
-                    <TableTd>{formatDate(row.assignedAt)}</TableTd>
-                    <TableTd>{formatDate(row.lastActivityAt)}</TableTd>
                     <TableTd>
-                      <Text size="sm" fw={600}>
-                        {formatHours(row.staleHours)}
-                      </Text>
+                      <Badge
+                        variant="light"
+                        color={
+                          entry.activeCount >= 5
+                            ? "orange"
+                            : entry.activeCount >= 3
+                              ? "yellow"
+                              : "blue"
+                        }
+                      >
+                        {entry.activeCount}
+                      </Badge>
                     </TableTd>
-                    <TableTd>{formatDate(row.warningAt)}</TableTd>
-                    <TableTd>{formatDate(row.unassignAt)}</TableTd>
-                    <TableTd>
-                      <Stack gap={2}>
-                        <Text size="sm">{formatDate(row.snoozedUntil)}</Text>
-                        {row.snoozeReason && (
-                          <Text size="xs" c="dimmed" lineClamp={2}>
-                            {row.snoozeReason}
-                          </Text>
-                        )}
-                      </Stack>
-                    </TableTd>
-                    <TableTd>{row.warningCount}</TableTd>
-                    <TableTd>
-                      <Group gap={4} wrap="nowrap">
-                        <Tooltip label="Force unassign">
-                          <ActionIcon
-                            variant="subtle"
-                            color="orange"
-                            disabled={actionsDisabled}
-                            onClick={() => openAction("force-unassign", row)}
-                          >
-                            <UserX size={16} />
-                          </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Snooze 72h">
-                          <ActionIcon
-                            variant="subtle"
-                            color="violet"
-                            disabled={actionsDisabled}
-                            onClick={() => openAction("snooze", row)}
-                          >
-                            <PauseCircle size={16} />
-                          </ActionIcon>
-                        </Tooltip>
-                        <Tooltip label="Mark active">
-                          <ActionIcon
-                            variant="subtle"
-                            color="blue"
-                            disabled={actionsDisabled}
-                            onClick={() => openAction("mark-active", row)}
-                          >
-                            <RotateCcw size={16} />
-                          </ActionIcon>
-                        </Tooltip>
-                      </Group>
-                    </TableTd>
+                    <TableTd>{formatDate(entry.oldestAssignedAt)}</TableTd>
+                    <TableTd>{entry.warnings}</TableTd>
+                    <TableTd>{entry.blocks}</TableTd>
+                    <TableTd>{entry.selfReleases}</TableTd>
+                    <TableTd>{entry.takeovers}</TableTd>
                   </TableTr>
-                );
-              })}
-            </TableTbody>
-          </Table>
-        </ScrollArea>
-        {visibleRows.length === 0 && (
-          <Stack align="center" py="xl" gap="xs">
-            <Bell size={20} />
-            <Text c="dimmed">No assignment watches match this view.</Text>
-          </Stack>
-        )}
-      </Card>
+                ))}
+              </TableTbody>
+            </Table>
+          </ScrollArea>
+          {developerRollup.length === 0 && (
+            <Stack align="center" py="xl" gap="xs">
+              <Bell size={20} />
+              <Text c="dimmed">No watch data yet.</Text>
+            </Stack>
+          )}
+        </Card>
+      )}
+
+      {mode !== "developers" && (
+        <Card withBorder radius="md" padding={0}>
+          <ScrollArea>
+            <Table miw={1180} verticalSpacing="sm" highlightOnHover>
+              <TableThead>
+                <TableTr>
+                  <TableTh>Status</TableTh>
+                  <TableTh>Issue</TableTh>
+                  <TableTh>Assignee</TableTh>
+                  <TableTh>Assigned</TableTh>
+                  <TableTh>Last Activity</TableTh>
+                  <TableTh>Stale Age</TableTh>
+                  <TableTh>Warn At</TableTh>
+                  <TableTh>Unassign At</TableTh>
+                  <TableTh>Snoozed Until</TableTh>
+                  <TableTh>Warnings</TableTh>
+                  <TableTh>Actions</TableTh>
+                </TableTr>
+              </TableThead>
+              <TableTbody>
+                {visibleRows.map((row) => {
+                  const status = statusCopy(
+                    PPT_ASSIGNMENT_WATCH_STATUS,
+                    row.status,
+                  );
+                  const actionsDisabled =
+                    row.status === "UNASSIGNED" || row.status === "RESOLVED";
+                  return (
+                    <TableTr key={row.id}>
+                      <TableTd>
+                        <Stack gap={4}>
+                          <StatusBadge copy={status} size="sm" />
+                          {row.dueWithin24Hours && (
+                            <Badge size="xs" color="red" variant="light">
+                              Due soon
+                            </Badge>
+                          )}
+                          {row.status === "BLOCKED" && (
+                            <Text size="xs" c="orange.4" lineClamp={2}>
+                              {row.selfBlockReasonLabel ?? "Blocked"}
+                              {row.selfBlockNote
+                                ? ` — ${row.selfBlockNote}`
+                                : ""}
+                              {row.selfBlockExpiresAt
+                                ? ` (until ${formatDate(row.selfBlockExpiresAt)})`
+                                : ""}
+                            </Text>
+                          )}
+                          {row.selfBlockCount >= 2 && (
+                            <Badge size="xs" color="yellow" variant="light">
+                              {row.selfBlockCount}× blocked
+                            </Badge>
+                          )}
+                        </Stack>
+                      </TableTd>
+                      <TableTd>
+                        <Stack gap={2}>
+                          <Group gap="xs" wrap="nowrap">
+                            <Text fw={700} lineClamp={1}>
+                              {issueTitle(row)}
+                            </Text>
+                            {row.linearIssueUrl && (
+                              <Anchor href={row.linearIssueUrl} target="_blank">
+                                <ExternalLink size={14} />
+                              </Anchor>
+                            )}
+                          </Group>
+                          <Text size="xs" c="dimmed">
+                            {row.linearIssueId}
+                          </Text>
+                        </Stack>
+                      </TableTd>
+                      <TableTd>
+                        <Stack gap={2}>
+                          <Text size="sm" fw={600}>
+                            {row.developerName ||
+                              row.assigneeName ||
+                              "Unknown developer"}
+                          </Text>
+                          <Text size="xs" c="dimmed">
+                            {row.assigneeEmail ?? "-"}
+                          </Text>
+                        </Stack>
+                      </TableTd>
+                      <TableTd>{formatDate(row.assignedAt)}</TableTd>
+                      <TableTd>{formatDate(row.lastActivityAt)}</TableTd>
+                      <TableTd>
+                        <Text size="sm" fw={600}>
+                          {formatHours(row.staleHours)}
+                        </Text>
+                      </TableTd>
+                      <TableTd>{formatDate(row.warningAt)}</TableTd>
+                      <TableTd>{formatDate(row.unassignAt)}</TableTd>
+                      <TableTd>
+                        <Stack gap={2}>
+                          <Text size="sm">{formatDate(row.snoozedUntil)}</Text>
+                          {row.snoozeReason && (
+                            <Text size="xs" c="dimmed" lineClamp={2}>
+                              {row.snoozeReason}
+                            </Text>
+                          )}
+                        </Stack>
+                      </TableTd>
+                      <TableTd>{row.warningCount}</TableTd>
+                      <TableTd>
+                        <Group gap={4} wrap="nowrap">
+                          <Tooltip label="Force unassign">
+                            <ActionIcon
+                              variant="subtle"
+                              color="orange"
+                              disabled={actionsDisabled}
+                              onClick={() => openAction("force-unassign", row)}
+                            >
+                              <UserX size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Snooze 72h">
+                            <ActionIcon
+                              variant="subtle"
+                              color="violet"
+                              disabled={actionsDisabled}
+                              onClick={() => openAction("snooze", row)}
+                            >
+                              <PauseCircle size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                          <Tooltip label="Mark active">
+                            <ActionIcon
+                              variant="subtle"
+                              color="blue"
+                              disabled={actionsDisabled}
+                              onClick={() => openAction("mark-active", row)}
+                            >
+                              <RotateCcw size={16} />
+                            </ActionIcon>
+                          </Tooltip>
+                        </Group>
+                      </TableTd>
+                    </TableTr>
+                  );
+                })}
+              </TableTbody>
+            </Table>
+          </ScrollArea>
+          {visibleRows.length === 0 && (
+            <Stack align="center" py="xl" gap="xs">
+              <Bell size={20} />
+              <Text c="dimmed">No assignment watches match this view.</Text>
+            </Stack>
+          )}
+        </Card>
+      )}
 
       <Modal
         opened={Boolean(selected)}

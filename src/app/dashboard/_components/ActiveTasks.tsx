@@ -8,9 +8,10 @@ import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
-import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
+import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
+import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
-import { describePptNextStep } from "@/lib/ppt-eligibility";
+import { describePptNextStep, formatReason } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
 import ActiveTasksEmptyState from "./ActiveTasksEmptyState";
 import DashboardSectionHeader from "./DashboardSectionHeader";
@@ -19,12 +20,22 @@ type Props = {
   linearId: string;
   userId: string;
   currency: CurrencyCode;
+  heading?: string;
+  subtitle?: string;
+  /** Hide the "View PPT Board" link when already rendered on the board. */
+  showBoardLink?: boolean;
+  /** Render nothing when there are no active tasks (used on the board). */
+  hideWhenEmpty?: boolean;
 };
 
 export default async function ActiveTasks({
   linearId,
   userId,
   currency,
+  heading = "Active Tasks",
+  subtitle = "Your work in progress",
+  showBoardLink = true,
+  hideWhenEmpty = false,
 }: Props) {
   let assignedIssues: IssueDTO[] = [];
   let linearError: string | null = null;
@@ -39,8 +50,8 @@ export default async function ActiveTasks({
 
   const header = (
     <DashboardSectionHeader
-      title="Active Tasks"
-      subtitle="Your work in progress"
+      title={heading}
+      subtitle={subtitle}
       icon={<Zap size={16} />}
       badge={
         assignedIssues.length > 0 ? (
@@ -50,9 +61,11 @@ export default async function ActiveTasks({
         ) : undefined
       }
       action={
-        <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
-          View PPT Board &rarr;
-        </LinkAnchor>
+        showBoardLink ? (
+          <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
+            View PPT Board &rarr;
+          </LinkAnchor>
+        ) : undefined
       }
     />
   );
@@ -67,6 +80,7 @@ export default async function ActiveTasks({
   }
 
   if (assignedIssues.length === 0) {
+    if (hideWhenEmpty) return null;
     return (
       <>
         {header}
@@ -114,7 +128,7 @@ export default async function ActiveTasks({
         in: assignedIssues.map((issue) => issue.id),
       },
       assigneeLinearId: linearId,
-      status: { in: ["ACTIVE", "WARNED", "SNOOZED"] },
+      status: { in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED"] },
     },
     select: {
       linearIssueId: true,
@@ -122,18 +136,20 @@ export default async function ActiveTasks({
       lastActivityAt: true,
       snoozedUntil: true,
       warningCount: true,
+      selfBlockReason: true,
+      selfBlockExpiresAt: true,
     },
   });
-  const warningHours = getWarningHours();
-  const unassignHours = getUnassignHours();
+  const policy = getResolvedPayoutPolicy();
   const assignmentWatchByIssueId = new Map(
     assignmentWatches.map((watch) => {
       const timing = getAssignmentWatchTiming({
         lastActivityAt: watch.lastActivityAt,
         status: watch.status,
         snoozedUntil: watch.snoozedUntil,
-        warningHours,
-        unassignHours,
+        selfBlockExpiresAt: watch.selfBlockExpiresAt,
+        warningHours: policy.warnHours,
+        unassignHours: policy.unassignHours,
       });
       return [
         watch.linearIssueId,
@@ -144,6 +160,12 @@ export default async function ActiveTasks({
           unassignAt: timing.unassignAt.toISOString(),
           snoozedUntil: watch.snoozedUntil?.toISOString() ?? null,
           warningCount: watch.warningCount,
+          isPaused: timing.isPaused,
+          selfBlockReasonLabel: watch.selfBlockReason
+            ? (SELF_BLOCK_REASON_LABELS[watch.selfBlockReason] ?? null)
+            : null,
+          selfBlockExpiresAt: watch.selfBlockExpiresAt?.toISOString() ?? null,
+          selfBlockHours: policy.selfBlockHours,
         },
       ] as const;
     }),
@@ -161,8 +183,8 @@ export default async function ActiveTasks({
             const bonus = bonusByIssueId.get(issue.id);
             const pptState = pptStateByIssueId.get(issue.id);
             const assignmentWatch = assignmentWatchByIssueId.get(issue.id);
-            const proofNextStep = pptState
-              ? describePptNextStep(pptState.status, pptState.reason).action
+            const nextStep = pptState
+              ? describePptNextStep(pptState.status, pptState.reason)
               : null;
             const bonusCurrency = bonus?.currency === "ROBUX" ? "ROBUX" : "MYR";
             const earningsText = hasPptLabel
@@ -178,21 +200,26 @@ export default async function ActiveTasks({
 
             return (
               <StaggerItem key={issue.id}>
-                <TaskCard
-                  issueId={issue.id}
-                  identifier={issue.identifier}
-                  title={issue.title}
-                  url={issue.url}
-                  estimate={issue.estimate}
-                  variant="active"
-                  currency={currency}
-                  earningsText={earningsText}
-                  isPpt={hasPptLabel}
-                  proofStatus={pptState?.status ?? null}
-                  proofReason={pptState?.reason?.replaceAll("_", " ") ?? null}
-                  proofNextStep={proofNextStep}
-                  assignmentWatch={assignmentWatch ?? null}
-                />
+                <div id={`task-${issue.id}`}>
+                  <TaskCard
+                    issueId={issue.id}
+                    identifier={issue.identifier}
+                    title={issue.title}
+                    url={issue.url}
+                    estimate={issue.estimate}
+                    variant="active"
+                    currency={currency}
+                    earningsText={earningsText}
+                    isPpt={hasPptLabel}
+                    proofStatus={pptState?.status ?? null}
+                    proofReason={
+                      pptState?.reason ? formatReason(pptState.reason) : null
+                    }
+                    proofNextStep={nextStep?.action ?? null}
+                    proofOwner={nextStep?.owner ?? null}
+                    assignmentWatch={assignmentWatch ?? null}
+                  />
+                </div>
               </StaggerItem>
             );
           })}

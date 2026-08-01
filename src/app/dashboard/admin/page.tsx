@@ -14,6 +14,7 @@ import { getIncentiveConfig } from "@/lib/incentives";
 import { getLinearClient, getLinearServiceClient } from "@/lib/linear";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
@@ -357,7 +358,11 @@ async function AdminPageContent() {
     prisma.pptAssignmentWatch.findMany({
       where: {
         OR: [
-          { status: { in: ["ACTIVE", "WARNED", "SNOOZED", "UNASSIGNED"] } },
+          {
+            status: {
+              in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED", "UNASSIGNED"],
+            },
+          },
           { status: "RESOLVED", updatedAt: { gte: recentWatchHistoryCutoff } },
         ],
       },
@@ -596,9 +601,10 @@ async function AdminPageContent() {
   const watchStatusPriority = new Map([
     ["ACTIVE", 0],
     ["WARNED", 1],
-    ["SNOOZED", 2],
-    ["UNASSIGNED", 3],
-    ["RESOLVED", 4],
+    ["BLOCKED", 2],
+    ["SNOOZED", 3],
+    ["UNASSIGNED", 4],
+    ["RESOLVED", 5],
   ]);
   const pptAssignmentWatchRows: AdminPptAssignmentWatchRow[] =
     pptAssignmentWatches
@@ -607,6 +613,7 @@ async function AdminPageContent() {
           lastActivityAt: watch.lastActivityAt,
           status: watch.status,
           snoozedUntil: watch.snoozedUntil,
+          selfBlockExpiresAt: watch.selfBlockExpiresAt,
           warningHours,
           unassignHours,
         });
@@ -635,6 +642,14 @@ async function AdminPageContent() {
           unassignAt: timing.unassignAt.toISOString(),
           staleHours: timing.staleHours,
           dueWithin24Hours: timing.dueWithin24Hours,
+          selfBlockCount: watch.selfBlockCount,
+          selfBlockReasonLabel: watch.selfBlockReason
+            ? (SELF_BLOCK_REASON_LABELS[watch.selfBlockReason] ?? null)
+            : null,
+          selfBlockNote: watch.selfBlockNote,
+          selfBlockExpiresAt: watch.selfBlockExpiresAt?.toISOString() ?? null,
+          releasedBySelfAt: watch.releasedBySelfAt?.toISOString() ?? null,
+          reassignReason: watch.reassignReason,
           lastAdminActionAt: watch.lastAdminActionAt?.toISOString() ?? null,
           lastAdminActionByName: watch.lastAdminActionById
             ? (assignmentWatchAdminNameById.get(watch.lastAdminActionById) ??

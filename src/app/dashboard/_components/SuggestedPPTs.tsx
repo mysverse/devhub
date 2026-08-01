@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import { Carousel } from "motion-plus/react";
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
+import { getClaimContext } from "@/lib/claim-context";
 import type { CurrencyCode } from "@/lib/currency";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
@@ -22,6 +23,8 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
     resolveLinearFetchError(e, "/dashboard", "suggested PPTs");
     return null;
   }
+
+  const claimContext = await getClaimContext(userId);
 
   if (issues.length === 0) return null;
 
@@ -52,6 +55,7 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
               description={issue.description}
               variant="compact"
               currency={currency}
+              claimContext={claimContext}
             />
           ))}
       />

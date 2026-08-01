@@ -19,10 +19,18 @@ import Markdown from "react-markdown";
 import { SPRING } from "@/components/animations";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
-import { PPT_ASSIGNMENT_WATCH_STATUS, statusCopy } from "@/lib/status-copy";
-import ClaimButton from "./ClaimButton";
+import { PPT_OWNER_COPY, type PptNextStepOwner } from "@/lib/ppt-reason-copy";
+import {
+  PPT_ASSIGNMENT_WATCH_STATUS,
+  PPT_PAYOUT_STATUS,
+  statusCopy,
+} from "@/lib/status-copy";
+import AssignmentCountdownBanner from "./AssignmentCountdownBanner";
+import BlockedTaskButton from "./BlockedTaskButton";
+import ClaimButton, { type ClaimButtonContext } from "./ClaimButton";
 import PptProgressButton from "./PptProgressButton";
 import PptProofButton from "./PptProofButton";
+import ReleaseTaskButton from "./ReleaseTaskButton";
 import StatusBadge from "./StatusBadge";
 
 function extractFirstImage(markdown: string | null | undefined): string | null {
@@ -98,9 +106,23 @@ type TaskCardProps = {
   earningsColor?: string;
   isPpt?: boolean;
   proofStatus?: string | null;
+  /** Plain-language reason from formatReason() — never a raw enum. */
   proofReason?: string | null;
   proofNextStep?: string | null;
+  /** Who the next step is waiting on, from describePptNextStep(). */
+  proofOwner?: PptNextStepOwner | null;
   assignmentWatch?: PptAssignmentWatchCardData | null;
+  /** Workload + policy context for the pre-claim commitment modal. */
+  claimContext?: ClaimButtonContext | null;
+  /** Ambient "claimed Xd ago · last activity Yd ago" chip for assigned cards. */
+  assignmentInfo?: TaskAssignmentInfo | null;
+  /** Viewer recently held this now-unassigned task — show a reclaim hint. */
+  recentlyReleasedByViewer?: boolean;
+};
+
+export type TaskAssignmentInfo = {
+  label: string;
+  tone: "gray" | "yellow" | "orange";
 };
 
 export type PptAssignmentWatchCardData = {
@@ -110,6 +132,10 @@ export type PptAssignmentWatchCardData = {
   unassignAt: string;
   snoozedUntil: string | null;
   warningCount: number;
+  isPaused: boolean;
+  selfBlockReasonLabel: string | null;
+  selfBlockExpiresAt: string | null;
+  selfBlockHours: number;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -207,12 +233,25 @@ function formatWatchDate(value: string | null) {
 
 function AssignmentWatchPanel({
   issueId,
+  identifier,
   watch,
 }: {
   issueId: string;
+  identifier: string;
   watch: PptAssignmentWatchCardData;
 }) {
   const copy = statusCopy(PPT_ASSIGNMENT_WATCH_STATUS, watch.status);
+  const isBlocked = watch.status === "BLOCKED";
+  const pausedLabel = isBlocked
+    ? `Timer paused — blocked${watch.selfBlockReasonLabel ? ` (${watch.selfBlockReasonLabel})` : ""}${
+        watch.selfBlockExpiresAt
+          ? `, auto-resumes ${formatWatchDate(watch.selfBlockExpiresAt)}`
+          : ""
+      }`
+    : watch.snoozedUntil
+      ? `Timer paused by an admin until ${formatWatchDate(watch.snoozedUntil)}`
+      : null;
+
   return (
     <div
       style={{
@@ -223,40 +262,39 @@ function AssignmentWatchPanel({
         marginBottom: "var(--mantine-spacing-sm)",
       }}
     >
-      <Stack gap={6}>
+      <Stack gap={8}>
         <Group justify="space-between" align="center">
           <StatusBadge copy={copy} size="sm" />
-          <PptProgressButton issueId={issueId} compact />
+          <Group gap={4}>
+            <PptProgressButton issueId={issueId} compact />
+            <BlockedTaskButton
+              issueId={issueId}
+              isBlocked={isBlocked}
+              selfBlockHours={watch.selfBlockHours}
+              compact
+            />
+            <ReleaseTaskButton
+              issueId={issueId}
+              identifier={identifier}
+              compact
+            />
+          </Group>
         </Group>
-        <Group gap="md" align="flex-start">
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">
-              Last activity
-            </Text>
-            <Text size="xs">{formatWatchDate(watch.lastActivityAt)}</Text>
-          </Stack>
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">
-              Warning
-            </Text>
-            <Text size="xs">{formatWatchDate(watch.warningAt)}</Text>
-          </Stack>
-          <Stack gap={0}>
-            <Text size="xs" c="dimmed">
-              Unassign
-            </Text>
-            <Text size="xs">{formatWatchDate(watch.unassignAt)}</Text>
-          </Stack>
-        </Group>
-        {watch.snoozedUntil && (
-          <Text size="xs" c="violet">
-            Snoozed until {formatWatchDate(watch.snoozedUntil)}
-          </Text>
-        )}
+        <AssignmentCountdownBanner
+          lastActivityAt={watch.lastActivityAt}
+          warningAt={watch.warningAt}
+          unassignAt={watch.unassignAt}
+          isPaused={watch.isPaused}
+          pausedLabel={pausedLabel}
+        />
+        <Text size="xs" c="dimmed">
+          Last activity {formatWatchDate(watch.lastActivityAt)} — progress
+          notes, state changes, and edits all reset the timer.
+        </Text>
         {watch.warningCount > 0 && (
           <Text size="xs" c="dimmed">
-            {watch.warningCount} stale warning
-            {watch.warningCount === 1 ? "" : "s"} recorded
+            {watch.warningCount} activity reminder
+            {watch.warningCount === 1 ? "" : "s"} so far
           </Text>
         )}
       </Stack>
@@ -285,9 +323,14 @@ function TaskCard({
   proofStatus,
   proofReason,
   proofNextStep,
+  proofOwner,
   assignmentWatch,
+  claimContext,
+  assignmentInfo,
+  recentlyReleasedByViewer,
 }: TaskCardProps) {
   const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
+  const estimateLabel = estimate ? formatEstimate(estimate, currency) : null;
 
   if (variant === "compact") {
     return (
@@ -319,7 +362,11 @@ function TaskCard({
           </div>
           <Group justify="space-between" mt="auto" align="center">
             <LinearIcon url={url} />
-            <ClaimButton issueId={issueId} />
+            <ClaimButton
+              issueId={issueId}
+              claimContext={claimContext}
+              estimateLabel={estimateLabel}
+            />
           </Group>
         </Card>
       </HoverLift>
@@ -327,19 +374,11 @@ function TaskCard({
   }
 
   if (variant === "active") {
-    const proofBadge =
-      proofStatus === "NEEDS_PROOF"
-        ? { label: "Needs proof", color: "yellow" }
-        : proofStatus === "WAITING_STABILITY"
-          ? { label: "Waiting stability", color: "blue" }
-          : proofStatus === "ON_HOLD"
-            ? { label: "On hold: reopened", color: "orange" }
-            : proofStatus === "READY_FOR_PAYOUT" ||
-                proofStatus === "TRANSACTION_PENDING"
-              ? { label: "Ready for payout", color: "green" }
-              : proofStatus === "FLAGGED"
-                ? { label: "Admin review", color: "red" }
-                : null;
+    const proofCopy =
+      proofStatus && proofStatus !== "PAID"
+        ? statusCopy(PPT_PAYOUT_STATUS, proofStatus)
+        : null;
+    const ownerCopy = proofOwner ? PPT_OWNER_COPY[proofOwner] : null;
 
     return (
       <HoverLift>
@@ -358,18 +397,20 @@ function TaskCard({
           <Text fw={600} lineClamp={1} mb="md">
             {title}
           </Text>
-          {proofBadge && (
+          {proofCopy && (
             <div style={{ marginBottom: "var(--mantine-spacing-sm)" }}>
-              <Tooltip label={proofReason || proofBadge.label}>
-                <Badge
-                  variant="light"
-                  color={proofBadge.color}
+              <Group gap={6}>
+                <StatusBadge
+                  copy={proofCopy}
+                  hint={proofReason ?? undefined}
                   size="sm"
-                  style={{ alignSelf: "flex-start" }}
-                >
-                  {proofBadge.label}
-                </Badge>
-              </Tooltip>
+                />
+                {ownerCopy && (
+                  <Badge variant="outline" color={ownerCopy.color} size="sm">
+                    {ownerCopy.label}
+                  </Badge>
+                )}
+              </Group>
               {proofNextStep && (
                 <Text size="xs" c="dimmed" mt={6} style={{ lineHeight: 1.45 }}>
                   {proofNextStep}
@@ -378,7 +419,11 @@ function TaskCard({
             </div>
           )}
           {assignmentWatch && (
-            <AssignmentWatchPanel issueId={issueId} watch={assignmentWatch} />
+            <AssignmentWatchPanel
+              issueId={issueId}
+              identifier={identifier}
+              watch={assignmentWatch}
+            />
           )}
           <Group justify="space-between" mt="auto">
             <Text fz="sm" c="dimmed">
@@ -436,6 +481,31 @@ function TaskCard({
           </Text>
         </Group>
 
+        {(assignmentInfo || recentlyReleasedByViewer) && (
+          <Group gap="xs" mb="xs">
+            {assignmentInfo && (
+              <Badge
+                variant="light"
+                color={assignmentInfo.tone}
+                size="xs"
+                style={{ textTransform: "none" }}
+              >
+                {assignmentInfo.label}
+              </Badge>
+            )}
+            {recentlyReleasedByViewer && (
+              <Badge
+                variant="light"
+                color="teal"
+                size="xs"
+                style={{ textTransform: "none" }}
+              >
+                You recently worked on this &mdash; reclaim?
+              </Badge>
+            )}
+          </Group>
+        )}
+
         <Title order={4} size="h5" lineClamp={2} mb="xs">
           {title}
         </Title>
@@ -469,7 +539,12 @@ function TaskCard({
                 Yours
               </Badge>
             ) : (
-              <ClaimButton issueId={issueId} assigneeName={assigneeName} />
+              <ClaimButton
+                issueId={issueId}
+                assigneeName={assigneeName}
+                claimContext={claimContext}
+                estimateLabel={estimateLabel}
+              />
             )}
           </Group>
         </Group>

@@ -9,6 +9,7 @@ import {
   notifyWithPreferences,
 } from "@/lib/notifications";
 import {
+  appendWatchEvent,
   DEVHUB_ASSIGNMENT_WATCH_COMMENT_MARKER,
   getSnoozeHours,
 } from "@/lib/ppt-assignment-watch";
@@ -71,6 +72,13 @@ export async function snoozePptAssignmentWatch(id: string, note: string) {
         lastAdminActionNote: adminNote,
       },
     });
+    await appendWatchEvent({
+      watchId: watch.id,
+      linearIssueId: watch.linearIssueId,
+      type: "ADMIN_SNOOZE",
+      actorUserId: adminId,
+      note: adminNote,
+    });
     revalidateWatchSurfaces();
     return { success: true };
   } catch (error) {
@@ -102,10 +110,21 @@ export async function markPptAssignmentWatchActive(id: string, note: string) {
         warnedAt: null,
         snoozedUntil: null,
         snoozeReason: null,
+        selfBlockedAt: null,
+        selfBlockReason: null,
+        selfBlockNote: null,
+        selfBlockExpiresAt: null,
         lastAdminActionAt: now,
         lastAdminActionById: adminId,
         lastAdminActionNote: adminNote,
       },
+    });
+    await appendWatchEvent({
+      watchId: watch.id,
+      linearIssueId: watch.linearIssueId,
+      type: "ADMIN_ACTIVATE",
+      actorUserId: adminId,
+      note: adminNote,
     });
     revalidateWatchSurfaces();
     return { success: true };
@@ -192,6 +211,13 @@ Admin note: ${adminNote}`,
         lastAdminActionById: adminId,
         lastAdminActionNote: adminNote,
       },
+    });
+    await appendWatchEvent({
+      watchId: watch.id,
+      linearIssueId: watch.linearIssueId,
+      type: "ADMIN_FORCE_UNASSIGN",
+      actorUserId: adminId,
+      note: adminNote,
     });
     revalidateWatchSurfaces();
     return { success: true };

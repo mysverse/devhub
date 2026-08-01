@@ -43,6 +43,7 @@ export type AssignmentWatchTimingInput = {
   lastActivityAt: Date;
   status?: string | null;
   snoozedUntil?: Date | null;
+  selfBlockExpiresAt?: Date | null;
   now?: Date;
   warningHours: number;
   unassignHours: number;
@@ -55,6 +56,10 @@ export type AssignmentWatchTiming = {
   hoursUntilWarning: number;
   hoursUntilUnassign: number;
   isSnoozed: boolean;
+  /** Developer marked themselves blocked; the stale clock is paused. */
+  isBlocked: boolean;
+  /** Snoozed or blocked — the stale clock is not running. */
+  isPaused: boolean;
   dueWithin24Hours: boolean;
 };
 
@@ -129,6 +134,7 @@ export function getAssignmentWatchTiming({
   lastActivityAt,
   status,
   snoozedUntil,
+  selfBlockExpiresAt,
   now = new Date(),
   warningHours,
   unassignHours,
@@ -148,6 +154,10 @@ export function getAssignmentWatchTiming({
   const isSnoozed =
     status === "SNOOZED" &&
     Boolean(snoozedUntil && snoozedUntil.getTime() > now.getTime());
+  const isBlocked =
+    status === "BLOCKED" &&
+    Boolean(selfBlockExpiresAt && selfBlockExpiresAt.getTime() > now.getTime());
+  const isPaused = isSnoozed || isBlocked;
 
   return {
     warningAt,
@@ -156,8 +166,10 @@ export function getAssignmentWatchTiming({
     hoursUntilWarning,
     hoursUntilUnassign,
     isSnoozed,
+    isBlocked,
+    isPaused,
     dueWithin24Hours:
-      !isSnoozed &&
+      !isPaused &&
       status !== "UNASSIGNED" &&
       status !== "RESOLVED" &&
       hoursUntilUnassign <= 24,

@@ -29,3 +29,33 @@ export function resolveLinearFetchError(
   console.error(`Linear fetch failed${context ? ` (${context})` : ""}:`, error);
   return LINEAR_FETCH_ERROR_MESSAGE;
 }
+
+/**
+ * Map a failed Linear mutation (claim, release, comment) to a user-facing
+ * message for a server action's error return. Never surface the raw SDK
+ * `error.message` — it leaks GraphQL internals and reads as a crash. Callers
+ * log the raw error themselves before mapping.
+ */
+export function describeLinearMutationError(
+  error: unknown,
+  fallback: string,
+): string {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  if (message.includes("not found") || message.includes("does not exist")) {
+    return "This task no longer exists in Linear. Refresh the board and try again.";
+  }
+  if (
+    message.includes("permission") ||
+    message.includes("forbidden") ||
+    message.includes("not allowed") ||
+    message.includes("unauthorized")
+  ) {
+    return "Your Linear account doesn't have permission for this — reconnect Linear from settings or ask an admin.";
+  }
+  if (message.includes("rate limit") || message.includes("ratelimit")) {
+    return "Linear is rate-limiting requests right now. Try again in a minute.";
+  }
+  return fallback;
+}

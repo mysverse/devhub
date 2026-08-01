@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import PaymentProcessed from "@/emails/PaymentProcessed";
 import PaymentRejected from "@/emails/PaymentRejected";
+import { awardAchievement } from "@/lib/achievements";
 import { requireAdmin } from "@/lib/authz";
 import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
@@ -157,6 +158,11 @@ export async function markTransactionAsPaid(transactionId: string) {
 
     revalidatePath("/dashboard/admin");
     await markIncentiveAwardsPaidForTransaction(transactionId);
+    if (transaction.source === "PPT") {
+      await awardAchievement(transaction.userId, "FIRST_PAYOUT", {
+        transactionId,
+      });
+    }
 
     // Send payment confirmation email with PDF slip
     try {

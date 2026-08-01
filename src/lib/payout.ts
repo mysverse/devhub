@@ -1,4 +1,5 @@
 import { sendPaymentConfirmation } from "@/app/dashboard/admin/actions";
+import { awardAchievement } from "@/lib/achievements";
 import { createPaymentOrder } from "@/lib/billplz";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
@@ -65,6 +66,14 @@ export async function handlePayoutCompletion(
       `[payout] Transaction ${transactionId} already moved from PENDING, skipping email`,
     );
     return false;
+  }
+
+  const paidTx = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    select: { userId: true, source: true },
+  });
+  if (paidTx?.source === "PPT") {
+    await awardAchievement(paidTx.userId, "FIRST_PAYOUT", { transactionId });
   }
 
   try {

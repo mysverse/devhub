@@ -10,6 +10,10 @@ import { cacheLife, cacheTag } from "next/cache";
 import { cache, createElement } from "react";
 import IncentiveAdminDigest from "@/emails/IncentiveAdminDigest";
 import IncentiveEarned from "@/emails/IncentiveEarned";
+import {
+  awardAchievement,
+  awardCompletionMilestones,
+} from "@/lib/achievements";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
 import {
@@ -627,6 +631,7 @@ export async function recordIssueCompletionFromLinear(
 
     if (transitionedIntoCompleted && completion.userId) {
       await evaluateMilestones(completion.userId);
+      await awardCompletionMilestones(completion.userId);
     }
 
     return completion;
@@ -1204,6 +1209,9 @@ export async function evaluateWeeklyIncentives(
         config,
         config.activatedAt,
       );
+      if (streakWeeks >= 4) {
+        await awardAchievement(row.userId, "STREAK_4", { streakWeeks });
+      }
       if (streakWeeks > 0 && streakWeeks % config.streakThresholdWeeks === 0) {
         const award = await createIncentiveAward({
           userId: row.userId,

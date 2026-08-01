@@ -23,10 +23,28 @@ const DOCUMENT_FILES: Record<string, string> = {
 
 export const REQUIRED_DOCUMENTS = ["COI", "NDA"] as const;
 
+// Informational guides rendered on help pages. Deliberately separate from
+// DOCUMENT_FILES, which drives the legal signing flow — guides are never
+// signable.
+const GUIDE_FILES: Record<string, string> = {
+  EARNING: "earning-guide.md",
+};
+
 export function getDocumentTemplate(type: string): DocumentTemplate {
   const fileName = DOCUMENT_FILES[type];
   if (!fileName) {
     throw new Error(`Unknown document type: ${type}`);
+  }
+  const filePath = path.join(process.cwd(), "src", "documents", fileName);
+  const raw = fs.readFileSync(filePath, "utf-8");
+  const { data, content } = matter(raw);
+  return { meta: data as DocumentMeta, content: content.trim() };
+}
+
+export function getGuideTemplate(type: string): DocumentTemplate {
+  const fileName = GUIDE_FILES[type];
+  if (!fileName) {
+    throw new Error(`Unknown guide type: ${type}`);
   }
   const filePath = path.join(process.cwd(), "src", "documents", fileName);
   const raw = fs.readFileSync(filePath, "utf-8");

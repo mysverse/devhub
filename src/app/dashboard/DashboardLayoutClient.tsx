@@ -35,10 +35,12 @@ type NavLink = { href: string; label: string };
 const BASE_LINKS: NavLink[] = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/ppts", label: "PPT Board" },
+  { href: "/dashboard/transactions", label: "Transactions" },
   { href: "/dashboard/bonuses", label: "Bonuses" },
   { href: "/dashboard/settings", label: "HR Settings" },
   { href: "/dashboard/documents", label: "Documents" },
   { href: "/dashboard/welcome-pack", label: "Welcome Pack" },
+  { href: "/dashboard/help", label: "Help" },
 ];
 
 const ADMIN_LINK: NavLink = { href: "/dashboard/admin", label: "Admin" };

@@ -19,7 +19,7 @@ import {
   UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { LogOut } from "lucide-react";
+import { FileText, LogOut, Package } from "lucide-react";
 import { motion } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -32,16 +32,27 @@ import { signOut, useSession } from "@/lib/auth-client";
 
 type NavLink = { href: string; label: string };
 
-const BASE_LINKS: NavLink[] = [
+// Links in the top bar. Keep this list short enough that the widest case
+// (admin, ~1000px viewport) fits on ONE row — the header is a fixed 60px bar
+// and wrapped items render on top of the page content. `pnpm visual` asserts
+// this; run it after adding a link.
+const PRIMARY_LINKS: NavLink[] = [
   { href: "/dashboard", label: "Overview" },
   { href: "/dashboard/ppts", label: "PPT Board" },
   { href: "/dashboard/transactions", label: "Transactions" },
   { href: "/dashboard/bonuses", label: "Bonuses" },
   { href: "/dashboard/settings", label: "HR Settings" },
-  { href: "/dashboard/documents", label: "Documents" },
-  { href: "/dashboard/welcome-pack", label: "Welcome Pack" },
   { href: "/dashboard/help", label: "Help" },
 ];
+
+// Lower-frequency destinations live in the avatar menu on desktop (and in the
+// full mobile navbar).
+const MENU_LINKS: NavLink[] = [
+  { href: "/dashboard/documents", label: "Documents" },
+  { href: "/dashboard/welcome-pack", label: "Welcome Pack" },
+];
+
+const ALL_LINKS: NavLink[] = [...PRIMARY_LINKS, ...MENU_LINKS];
 
 const ADMIN_LINK: NavLink = { href: "/dashboard/admin", label: "Admin" };
 
@@ -162,7 +173,7 @@ function DesktopNavLinks({ links }: { links: NavLink[] }) {
 function DesktopNavLinksFallback() {
   return (
     <>
-      {BASE_LINKS.map((link) => (
+      {PRIMARY_LINKS.map((link) => (
         <DesktopNavLink key={link.href} link={link} active={false} />
       ))}
     </>
@@ -177,7 +188,7 @@ function DesktopNavLinksWithAdmin({
   const isAdmin = use(adminPromise);
   return (
     <DesktopNavLinks
-      links={isAdmin ? [...BASE_LINKS, ADMIN_LINK] : BASE_LINKS}
+      links={isAdmin ? [...PRIMARY_LINKS, ADMIN_LINK] : PRIMARY_LINKS}
     />
   );
 }
@@ -208,7 +219,7 @@ function MobileNavLinks({
 function MobileNavLinksFallback({ onNavigate }: { onNavigate: () => void }) {
   return (
     <>
-      {BASE_LINKS.map((link) => (
+      {ALL_LINKS.map((link) => (
         <MobileNavLink
           key={link.href}
           link={link}
@@ -230,7 +241,7 @@ function MobileNavLinksWithAdmin({
   const isAdmin = use(adminPromise);
   return (
     <MobileNavLinks
-      links={isAdmin ? [...BASE_LINKS, ADMIN_LINK] : BASE_LINKS}
+      links={isAdmin ? [...ALL_LINKS, ADMIN_LINK] : ALL_LINKS}
       onNavigate={onNavigate}
     />
   );
@@ -253,19 +264,19 @@ export default function DashboardLayoutClient({
         header={{ height: 60 }}
         navbar={{
           width: 300,
-          breakpoint: "sm",
+          breakpoint: "md",
           collapsed: { desktop: true, mobile: !opened },
         }}
         padding="md"
       >
         <AppShellHeader>
           <Container size="lg" h="100%">
-            <Group h="100%" px="md" justify="space-between">
-              <Group>
+            <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+              <Group wrap="nowrap">
                 <Burger
                   opened={opened}
                   onClick={toggle}
-                  hiddenFrom="sm"
+                  hiddenFrom="md"
                   size="sm"
                 />
                 <Link
@@ -282,7 +293,7 @@ export default function DashboardLayoutClient({
                 </Link>
               </Group>
 
-              <Group gap={4} visibleFrom="sm">
+              <Group gap={4} visibleFrom="md" wrap="nowrap">
                 <Suspense fallback={<DesktopNavLinksFallback />}>
                   <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
                 </Suspense>
@@ -309,6 +320,22 @@ export default function DashboardLayoutClient({
                     <MenuLabel>
                       {session?.user?.name ?? session?.user?.email}
                     </MenuLabel>
+                    {MENU_LINKS.map((link) => (
+                      <MenuItem
+                        key={link.href}
+                        component={Link}
+                        href={link.href}
+                        leftSection={
+                          link.href === "/dashboard/documents" ? (
+                            <FileText size={14} />
+                          ) : (
+                            <Package size={14} />
+                          )
+                        }
+                      >
+                        {link.label}
+                      </MenuItem>
+                    ))}
                     <MenuItem
                       leftSection={<LogOut size={14} />}
                       onClick={async () => {

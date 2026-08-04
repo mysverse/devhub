@@ -63,14 +63,16 @@ to diagnose:
   schema. Keep that ordering; prerenders defer all DB IO, so the build never
   needs the new schema. Deploys run the same `build` script as local runs on
   purpose — put build steps in `package.json`, not in `vercel.json`.
-- **Native modules loaded by dlopen must be traced in explicitly.** sharp's
-  prebuilt binding reaches `libvips-cpp.so.*` through an RPATH rather than an
-  import, so build tracing bundles `sharp.node` and silently drops the
-  library — the route then 500s in production with `ERR_DLOPEN_FAILED:
-  libvips-cpp.so.<version>: cannot open shared object file` while working
-  fine locally, where `node_modules` still holds the file. `next.config.ts`
-  force-includes it via `outputFileTracingIncludes` for the routes in
-  `SHARP_ROUTES`; **add any new route that reaches sharp to that list.**
+- **Keep `sharp` pinned to the version Next depends on.** sharp's prebuilt
+  binding reaches `libvips-cpp.so.*` through an RPATH rather than an import,
+  so tracing only bundles the library when it recognises sharp's package
+  layout — which it does for the release Next ships (0.34.x, `next`'s own
+  optional dependency) but not for 0.35.x, whose binding hides behind an
+  `index.cjs` indirection. On 0.35.x every route touching an image 500s in
+  production with `ERR_DLOPEN_FAILED: libvips-cpp.so.<version>: cannot open
+  shared object file`, while working fine locally where `node_modules` still
+  holds the file. Check with `pnpm why sharp` before bumping it; matching
+  Next also keeps a single copy in the tree.
   `pnpm check-traces` (part of `pnpm build`) fails the build if a bundle
   carries the binding without the matching libvips.
 

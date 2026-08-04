@@ -62,6 +62,16 @@ to diagnose:
   so a broken build can no longer leave production running old code against
   a newly migrated schema. Keep that ordering; prerenders defer all DB IO,
   so the build never needs the new schema.
+- **Native modules loaded by dlopen must be traced in explicitly.** sharp's
+  prebuilt binding reaches `libvips-cpp.so.*` through an RPATH rather than an
+  import, so build tracing bundles `sharp.node` and silently drops the
+  library — the route then 500s in production with `ERR_DLOPEN_FAILED:
+  libvips-cpp.so.<version>: cannot open shared object file` while working
+  fine locally, where `node_modules` still holds the file. `next.config.ts`
+  force-includes it via `outputFileTracingIncludes` for the routes in
+  `SHARP_ROUTES`; **add any new route that reaches sharp to that list.**
+  `pnpm check-traces` (part of `pnpm build`) fails the build if a bundle
+  carries the binding without the matching libvips.
 
 ## Dev Mode (mock environment)
 

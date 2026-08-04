@@ -75,6 +75,12 @@ to diagnose:
   Next also keeps a single copy in the tree.
   `pnpm check-traces` (part of `pnpm build`) fails the build if a bundle
   carries the binding without the matching libvips.
+- **Do not reach for `outputFileTracingIncludes` to fix a missing native
+  library.** A glob naming a file inside pnpm's store gets re-derived through
+  every symlink pointing at it, and Vercel then rejects the upload with "The
+  framework produced an invalid deployment package for a Serverless
+  Function" — after a fully green build. `outputFileTracingExcludes` cannot
+  clean it up either; those paths are added after the exclude pass runs.
 
 ## Dev Mode (mock environment)
 

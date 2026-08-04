@@ -1,5 +1,5 @@
 {
-  "buildCommand": "prisma generate && next build && prisma migrate deploy",
+  "buildCommand": "pnpm build && prisma migrate deploy",
   "crons": [
     {
       "path": "/api/cron/billplz-poll",

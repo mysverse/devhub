@@ -58,10 +58,11 @@ to diagnose:
   real. Use it only for better stack traces. To unmask "ignore-listed
   frames" in prerender errors, build with `__NEXT_SHOW_IGNORE_LISTED=true`.
 - **Deploys migrate after the build succeeds**: `vercel.json` sets
-  `buildCommand` to `prisma generate && next build && prisma migrate deploy`
-  so a broken build can no longer leave production running old code against
-  a newly migrated schema. Keep that ordering; prerenders defer all DB IO,
-  so the build never needs the new schema.
+  `buildCommand` to `pnpm build && prisma migrate deploy` so a broken build
+  can no longer leave production running old code against a newly migrated
+  schema. Keep that ordering; prerenders defer all DB IO, so the build never
+  needs the new schema. Deploys run the same `build` script as local runs on
+  purpose — put build steps in `package.json`, not in `vercel.json`.
 - **Native modules loaded by dlopen must be traced in explicitly.** sharp's
   prebuilt binding reaches `libvips-cpp.so.*` through an RPATH rather than an
   import, so build tracing bundles `sharp.node` and silently drops the

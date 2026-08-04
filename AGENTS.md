@@ -73,14 +73,15 @@ to diagnose:
   shared object file`, while working fine locally where `node_modules` still
   holds the file. Check with `pnpm why sharp` before bumping it; matching
   Next also keeps a single copy in the tree.
-  `pnpm check-traces` (part of `pnpm build`) fails the build if a bundle
-  carries the binding without the matching libvips.
 - **Do not reach for `outputFileTracingIncludes` to fix a missing native
   library.** A glob naming a file inside pnpm's store gets re-derived through
   every symlink pointing at it, and Vercel then rejects the upload with "The
   framework produced an invalid deployment package for a Serverless
   Function" — after a fully green build. `outputFileTracingExcludes` cannot
   clean it up either; those paths are added after the exclude pass runs.
+- `pnpm check-traces` (part of `pnpm build`) fails the build on both of the
+  above: a bundle carrying sharp's binding without the matching libvips, and
+  any traced file sitting inside a symlinked directory.
 
 ## Dev Mode (mock environment)
 

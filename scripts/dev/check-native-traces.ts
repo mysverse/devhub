@@ -1,18 +1,23 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
 /**
- * Guards against shipping sharp's prebuilt binding without the libvips shared
- * library it dlopen()s at load time.
+ * Two build-output checks that only fail long after the build otherwise
+ * succeeds — one at runtime, one at deploy time.
  *
- * `@img/sharp-<platform>/lib/*.node` reaches libvips through an RPATH, not
- * through an import, so build tracing happily bundles the binding and drops
- * `libvips-cpp.so.*`. The result only shows up in production, as
- * `ERR_DLOPEN_FAILED: libvips-cpp.so.<version>: cannot open shared object
- * file` on the first request that touches an image. `next.config.ts` pulls the
- * library in via `outputFileTracingIncludes`; this check proves it landed in
- * every bundle that needs it.
+ * 1. sharp's binding without libvips. `@img/sharp-<platform>/lib/*.node`
+ *    reaches libvips through an RPATH, not through an import, so whether it
+ *    gets traced depends on the tracer recognising sharp's package layout.
+ *    When it does not, the bundle ships the binding alone and the first
+ *    request touching an image dies with `ERR_DLOPEN_FAILED:
+ *    libvips-cpp.so.<version>: cannot open shared object file`.
+ *
+ * 2. Files traced from inside a symlinked directory. pnpm's store is a web of
+ *    symlinks, and a traced path that runs *through* one makes Vercel reject
+ *    the upload with "The framework produced an invalid deployment package for
+ *    a Serverless Function" — after a green build, with no route named. Only
+ *    real paths and the symlinks themselves may be traced.
  */
 
 const ROOT = process.cwd();
@@ -93,6 +98,37 @@ function entryName(traceFile: string): string {
     .replace(/\\/g, "/");
 }
 
+const symlinkCache = new Map<string, boolean>();
+
+function isSymlink(dir: string): boolean {
+  const cached = symlinkCache.get(dir);
+  if (cached !== undefined) return cached;
+  let result = false;
+  try {
+    result = lstatSync(dir).isSymbolicLink();
+  } catch {
+    // A path that no longer exists cannot be a symlinked directory we care
+    // about; tracing tolerates stale entries, so treat it as clean.
+  }
+  symlinkCache.set(dir, result);
+  return result;
+}
+
+/**
+ * The nearest ancestor directory of `file` that is a symlink, if any. The
+ * symlink itself being traced is fine — Vercel recreates it. What breaks is a
+ * file traced at a path that runs *through* one.
+ */
+function symlinkedAncestor(file: string): string | null {
+  let found: string | null = null;
+  let dir = path.dirname(file);
+  while (dir.startsWith(ROOT) && dir !== ROOT) {
+    if (isSymlink(dir)) found = dir;
+    dir = path.dirname(dir);
+  }
+  return found;
+}
+
 function main() {
   console.log("🔍 Checking native module traces...");
 
@@ -111,6 +147,7 @@ function main() {
 
   const checked: string[] = [];
   const broken: { entry: string; missing: string }[] = [];
+  const throughSymlinks = new Map<string, string>();
 
   for (const traceFile of traceFiles) {
     const trace = JSON.parse(readFileSync(traceFile, "utf8")) as {
@@ -119,6 +156,12 @@ function main() {
     const traced = (trace.files ?? []).map((file) =>
       path.resolve(path.dirname(traceFile), file),
     );
+
+    for (const file of traced) {
+      if (throughSymlinks.has(file)) continue;
+      const link = symlinkedAncestor(file);
+      if (link) throughSymlinks.set(file, link);
+    }
 
     const binding = traced.find((file) => SHARP_BINDING.test(file));
     if (!binding) continue;
@@ -132,6 +175,24 @@ function main() {
     }
   }
 
+  if (throughSymlinks.size > 0) {
+    console.error(
+      `\n❌ ${throughSymlinks.size} traced file(s) sit inside a symlinked directory:\n`,
+    );
+    for (const [file, link] of throughSymlinks) {
+      console.error(`   ${path.relative(ROOT, file)}`);
+      console.error(`      via symlink ${path.relative(ROOT, link)}`);
+    }
+    console.error(
+      '\nVercel rejects these with "The framework produced an invalid\n' +
+        'deployment package for a Serverless Function" — after a green build.\n' +
+        "outputFileTracingIncludes is the usual culprit: a glob that names a\n" +
+        "file inside pnpm's store gets re-derived through every symlink\n" +
+        "pointing at it, and excludes cannot remove those (they are added after\n" +
+        "the exclude pass). Let the tracer find the file on its own instead.\n",
+    );
+  }
+
   if (broken.length > 0) {
     console.error(
       `\n❌ ${broken.length} bundle(s) ship sharp's native binding without libvips:\n`,
@@ -140,12 +201,18 @@ function main() {
       console.error(`   ${entry} — missing ${missing}`);
     }
     console.error(
-      "\nEvery request that reaches sharp in these bundles will fail with " +
-        "ERR_DLOPEN_FAILED.\nAdd the route to SHARP_ROUTES in next.config.ts " +
-        "so outputFileTracingIncludes pulls the library in.\n",
+      "\nEvery request that reaches sharp in these bundles will fail with\n" +
+        "ERR_DLOPEN_FAILED. Build tracing only picks libvips up for the sharp\n" +
+        "release Next itself depends on — run `pnpm why sharp` and pin the\n" +
+        "direct dependency back to that version.\n",
     );
+  }
+
+  if (throughSymlinks.size > 0 || broken.length > 0) {
     process.exit(1);
   }
+
+  console.log("✅ No traced file sits inside a symlinked directory.");
 
   if (checked.length === 0) {
     console.log("✅ No bundle loads sharp; nothing to verify.");

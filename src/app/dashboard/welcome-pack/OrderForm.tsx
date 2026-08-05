@@ -78,7 +78,10 @@ export type OrderFormPack = {
 };
 
 export type OrderFormDefaults = {
+  /** Courier label / ID document name. */
   legalName: string | null;
+  /** Peer-visible name printed on the physical ID card. */
+  preferredName: string | null;
   shippingAddress: string | null;
 };
 

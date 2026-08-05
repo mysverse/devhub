@@ -26,9 +26,9 @@ export default function LegalNameReminder({ userName }: { userName: string }) {
           fontStyle: "italic",
         }}
       >
-        Your legal name is kept private and is only visible to authorised
-        administrators for payment and compliance purposes. It is not shared
-        with other team members.
+        Your legal name is only used for payouts, KYC, signed documents and
+        parcel labels, and is visible only to authorised administrators. It is
+        never shown to other developers — they see your display name.
       </Text>
       <Button
         href={`${appUrl}/dashboard/settings`}

@@ -33,6 +33,7 @@ import { updateProfileSettings } from "./actions";
 
 type ProfileProps = {
   profile: {
+    preferredName: string | null;
     legalName: string | null;
     paymentMethod: string;
     paypalEmail: string | null;
@@ -146,11 +147,18 @@ export default function SettingsForm({
       <Stack gap="xl">
         <FormSection title="Personal Information">
           <TextInput
+            label="Display Name"
+            name="preferredName"
+            defaultValue={profile.preferredName || ""}
+            placeholder="Alex"
+            description="How you appear to everyone on DevHub — dashboards, notifications and emails. Leave blank to use your sign-in name."
+          />
+          <TextInput
             label="Legal Name"
             name="legalName"
             defaultValue={profile.legalName || ""}
             placeholder="John Doe"
-            description="This is kept private and only visible to authorised administrators for payment and compliance purposes."
+            description="Only used for payouts, KYC, signed documents and parcel labels. Never shown to other developers — they see your display name."
           />
           <Textarea
             label="Shipping Address (for Merch)"

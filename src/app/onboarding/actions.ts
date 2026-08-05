@@ -15,6 +15,7 @@ import {
 import prisma from "@/lib/prisma";
 
 type OnboardingInput = {
+  preferredName: string;
   legalName: string;
   linearId: string | null;
   linearEmail: string | null;
@@ -34,6 +35,7 @@ type OnboardingInput = {
 
 const OnboardingSchema = z
   .object({
+    preferredName: z.string().min(1, "Display name is required").max(80),
     legalName: z.string().min(1, "Legal name is required"),
     linearId: z.string().optional().nullable(),
     linearEmail: z.email().or(z.literal("")).optional().nullable(),
@@ -123,6 +125,7 @@ export async function completeOnboarding(
     }
 
     const profileData = {
+      preferredName: data.preferredName,
       legalName: data.legalName,
       linearId: resolvedLinearId,
       linearEmail: resolvedLinearEmail,

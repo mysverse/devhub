@@ -26,6 +26,7 @@ const NOTIFICATION_PREFERENCE_KEYS = new Set([
 
 const SettingsSchema = z
   .object({
+    preferredName: z.string().max(80).optional().nullable(),
     legalName: z.string().optional().nullable(),
     paymentMethod: z.enum(["PAYPAL", "DUITNOW", "ROBUX", "BANK_TRANSFER"]),
     paypalEmail: z
@@ -47,6 +48,7 @@ export async function updateProfileSettings(formData: FormData) {
   if (!userId) throw new Error("Unauthorized");
 
   const rawData = {
+    preferredName: formData.get("preferredName") || null,
     legalName: formData.get("legalName") || null,
     paymentMethod: formData.get("paymentMethod"),
     paypalEmail: formData.get("paypalEmail") || null,
@@ -65,6 +67,7 @@ export async function updateProfileSettings(formData: FormData) {
   }
 
   const {
+    preferredName,
     legalName,
     paymentMethod,
     paypalEmail,
@@ -103,6 +106,7 @@ export async function updateProfileSettings(formData: FormData) {
     await prisma.userProfile.update({
       where: { id: userId },
       data: {
+        preferredName: preferredName?.trim() || null,
         legalName: legalName || null,
         paymentMethod,
         paypalEmail: paypalEmail || null,

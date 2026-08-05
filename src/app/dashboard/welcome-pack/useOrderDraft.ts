@@ -55,7 +55,9 @@ function initialDraft(defaults: OrderFormDefaults): OrderDraft {
     stateProvince: "",
     postalCode: "",
     country: "MY",
-    idCardName: defaults.legalName ?? "",
+    // The ID card is worn in public, so it defaults to the peer-facing name.
+    // recipientName above stays on the legal name — that is a courier label.
+    idCardName: defaults.preferredName ?? defaults.legalName ?? "",
     notes: "",
     selectedSizes: {},
   };

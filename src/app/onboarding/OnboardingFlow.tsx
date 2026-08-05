@@ -107,8 +107,11 @@ export default function OnboardingFlow({
   // Step 0: user type
   const [userType, setUserType] = useState<"new" | "existing" | null>(null);
 
-  // Step 1: personal info
-  const [legalName, setLegalName] = useState(initialName ?? "");
+  // Step 1: personal info. The OAuth name seeds the DISPLAY name — it is a
+  // handle, not a legal name — so the legal-name field starts empty and is
+  // only ever filled by the user.
+  const [preferredName, setPreferredName] = useState(initialName ?? "");
+  const [legalName, setLegalName] = useState("");
 
   // Step 2: accounts
   const [linearEmail, setLinearEmail] = useState(detectedLinearEmail ?? "");
@@ -161,6 +164,10 @@ export default function OnboardingFlow({
   function nextStep() {
     if (active === 0 && !userType) {
       toast.error("Please select your situation to continue.");
+      return;
+    }
+    if (active === 1 && !preferredName.trim()) {
+      toast.error("Please enter a display name to continue.");
       return;
     }
     if (active === 1 && !legalName.trim()) {
@@ -218,6 +225,7 @@ export default function OnboardingFlow({
     setLoading(true);
 
     const result = await completeOnboarding({
+      preferredName: preferredName.trim(),
       legalName: legalName.trim(),
       linearId: detectedLinearId,
       linearEmail: linearEmail.trim() || null,
@@ -368,15 +376,25 @@ export default function OnboardingFlow({
               Personal Information
             </Title>
             <Text c="dimmed" mb="xl">
-              Your legal name is required for payment processing and HR records.
+              Your display name is how the team sees you. Your legal name is
+              only used for payouts and paperwork.
             </Text>
+            <TextInput
+              label="Display Name"
+              placeholder="Alex"
+              value={preferredName}
+              onChange={(e) => setPreferredName(e.target.value)}
+              required
+              mb="md"
+              description="How you appear to everyone on DevHub — dashboards, notifications and emails."
+            />
             <TextInput
               label="Legal Name"
               placeholder="John Doe"
               value={legalName}
               onChange={(e) => setLegalName(e.target.value)}
               required
-              description="Enter your full legal name as it appears on official documents. This is kept private and only visible to authorised administrators for payment and compliance purposes."
+              description="Your full legal name as it appears on official documents. Only used for payouts, KYC, signed documents and parcel labels — never shown to other developers."
             />
           </Card>
         )}

@@ -109,6 +109,7 @@ async function WelcomePackContent() {
       where: { id: userId },
       select: {
         legalName: true,
+        preferredName: true,
         shippingAddress: true,
       },
     }),
@@ -529,6 +530,7 @@ async function WelcomePackContent() {
 
   const defaults: OrderFormDefaults = {
     legalName: profile?.legalName ?? null,
+    preferredName: profile?.preferredName ?? null,
     shippingAddress: profile?.shippingAddress ?? null,
   };
 

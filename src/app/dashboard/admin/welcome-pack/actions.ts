@@ -14,6 +14,7 @@ import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 import type {
   EligibilitySnapshot,
   QualifyingLinearIssue,
@@ -414,7 +415,7 @@ async function loadOrderForEmail(orderId: string) {
     include: {
       pack: { select: { name: true } },
       user: {
-        include: { user: { select: { email: true, name: true } } },
+        include: { user: { select: USER_IDENTITY_SELECT } },
       },
     },
   });

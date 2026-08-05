@@ -5,6 +5,7 @@ import NotificationEmail from "@/emails/NotificationEmail";
 import { sendEmail } from "@/lib/email";
 import { catalogChannelDefaults } from "@/lib/notifications/catalog";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export const IN_APP_CHANNEL = "in_app";
 export const EMAIL_CHANNEL = "email";
@@ -131,7 +132,7 @@ async function loadNotification(
   return prisma.notification.findUnique({
     where: { id },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
       deliveries: true,
     },
   });
@@ -153,7 +154,7 @@ async function createNotification(input: NotifyInput) {
       dedupeKey: clean(input.dedupeKey),
     },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
       deliveries: true,
     },
   });
@@ -168,7 +169,7 @@ async function getOrCreateNotification(input: NotifyInput) {
   const existing = await prisma.notification.findUnique({
     where: { dedupeKey },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
       deliveries: true,
     },
   });
@@ -183,7 +184,7 @@ async function getOrCreateNotification(input: NotifyInput) {
           payload: input.payload,
         },
         include: {
-          user: { include: { user: { select: { email: true, name: true } } } },
+          user: { include: { user: { select: USER_IDENTITY_SELECT } } },
           deliveries: true,
         },
       });
@@ -199,7 +200,7 @@ async function getOrCreateNotification(input: NotifyInput) {
     const raced = await prisma.notification.findUniqueOrThrow({
       where: { dedupeKey },
       include: {
-        user: { include: { user: { select: { email: true, name: true } } } },
+        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
         deliveries: true,
       },
     });

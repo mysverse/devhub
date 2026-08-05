@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export type UserContact = { email: string; name: string };
 
@@ -15,7 +16,7 @@ export async function getUserEmailAndName(
 ): Promise<UserContact> {
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
-    include: { user: { select: { email: true, name: true } } },
+    include: { user: { select: USER_IDENTITY_SELECT } },
   });
 
   if (!profile?.user.email) {

@@ -1,3 +1,21 @@
+/**
+ * The payment rails an admin needs to actually send money, plus the address to
+ * contact the developer about a problem. Nested rather than flattened onto
+ * PayoutTransaction on purpose: settled rows carry `paymentDetails: null`, and
+ * a nested object makes every read a compile error when it is absent. Optional
+ * flat fields would let a future edit read redacted data and stay silent.
+ */
+export type PayoutPaymentDetails = {
+  paypalEmail: string | null;
+  duitNowId: string | null;
+  bankName: string | null;
+  bankAccountNumber: string | null;
+  bankAccountName: string | null;
+  robloxId: string | null;
+  robuxUsername: string | null;
+  email: string | null;
+};
+
 export type PayoutTransaction = {
   id: string;
   userId: string;
@@ -8,17 +26,15 @@ export type PayoutTransaction = {
   bonusPeriod?: string | null;
   taskTitle: string;
   developerName: string;
+  /** A label, not PII — kept at the top level so settled rows still show it. */
   paymentMethod: string;
-  paypalEmail?: string | null;
-  duitNowId?: string | null;
-  bankName?: string | null;
-  bankAccountNumber?: string | null;
-  bankAccountName?: string | null;
-  robloxId?: string | null;
-  robuxUsername?: string | null;
+  /**
+   * null for PAID/REJECTED rows: settled payouts have no operational need for
+   * bank details, and the columns are never queried for those tabs.
+   */
+  paymentDetails: PayoutPaymentDetails | null;
   linearIssueIdentifier?: string | null;
   linearIssueUrl?: string | null;
-  email?: string | null;
   paidAt?: string | null;
   rejectedAt?: string | null;
   rejectionReason?: string | null;

@@ -11,6 +11,7 @@ import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { DISPLAY_NAME_SELECT, resolveDisplayName } from "@/lib/display-name";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 import { assertEligibleForWelcomePack } from "@/lib/welcome-pack-eligibility";
 import { diffForEvent, logOrderEvent } from "@/lib/welcome-pack-events";
 import {
@@ -192,7 +193,7 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   };
 
   const orderInclude = {
-    user: { include: { user: { select: { email: true, name: true } } } },
+    user: { include: { user: { select: USER_IDENTITY_SELECT } } },
   } satisfies Prisma.WelcomePackOrderInclude;
 
   let order: Prisma.WelcomePackOrderGetPayload<{

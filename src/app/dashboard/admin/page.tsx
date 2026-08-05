@@ -1,5 +1,5 @@
 import { Badge, Group, Stack } from "@mantine/core";
-import type { Payout, Transaction, UserProfile } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 import type { Metadata } from "next";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -28,6 +28,11 @@ import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
 import prisma from "@/lib/prisma";
+import {
+  PROFILE_DISPLAY_SELECT,
+  PROFILE_PAYOUT_SELECT,
+  USER_IDENTITY_SELECT,
+} from "@/lib/prisma-select";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
@@ -42,34 +47,62 @@ import type { AdminPptEligibilityState } from "./AdminPptEligibilityTab";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
 import type { PptRequestData } from "./PptRequestCard";
-import type { PayoutTransaction } from "./types";
+import type { PayoutPaymentDetails, PayoutTransaction } from "./types";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/admin");
 
-type TransactionWithUser = Transaction & {
-  user: UserProfile;
-  payout: Payout | null;
-  pptPayoutState: {
-    status: string;
-    reason: string | null;
-    proofCommentUrl: string | null;
-  } | null;
-  bonusCandidates: {
-    id: string;
-    linearIssueIdentifier: string | null;
-    linearIssueTitle: string | null;
-    linearIssueUrl: string | null;
-    approvedAmount: number | null;
-  }[];
-  incentiveAwards: {
-    id: string;
-    type: string;
-    period: string;
-    amount: number;
-    netAmount: number | null;
-    status: string;
-  }[];
-};
+/**
+ * Pending payouts need the payment rails — an admin is about to send money.
+ * Settled ones do not, so the columns are never read for the paid/rejected
+ * tabs and cannot reach the browser. buildPayoutTransaction() sets
+ * paymentDetails to null for those rows.
+ */
+const PENDING_USER_SELECT = {
+  ...PROFILE_DISPLAY_SELECT,
+  ...PROFILE_PAYOUT_SELECT,
+  linearEmail: true,
+} as const satisfies Prisma.UserProfileSelect;
+
+const SETTLED_USER_SELECT = {
+  ...PROFILE_DISPLAY_SELECT,
+  paymentMethod: true,
+} as const satisfies Prisma.UserProfileSelect;
+
+/** BonusCandidate also carries assigneeName/assigneeEmail, which the payout
+ *  card never maps — enumerate what is actually used. */
+const BONUS_LINE_ITEM_SELECT = {
+  id: true,
+  linearIssueIdentifier: true,
+  linearIssueTitle: true,
+  linearIssueUrl: true,
+  approvedAmount: true,
+} as const satisfies Prisma.BonusCandidateSelect;
+
+type PendingTransaction = Prisma.TransactionGetPayload<{
+  include: {
+    user: { select: typeof PENDING_USER_SELECT };
+    payout: true;
+    bonusCandidates: { select: typeof BONUS_LINE_ITEM_SELECT };
+    incentiveAwards: true;
+    pptPayoutState: {
+      select: { status: true; reason: true; proofCommentUrl: true };
+    };
+  };
+}>;
+
+type SettledTransaction = Prisma.TransactionGetPayload<{
+  include: {
+    user: { select: typeof SETTLED_USER_SELECT };
+    payout: true;
+    bonusCandidates: { select: typeof BONUS_LINE_ITEM_SELECT };
+    incentiveAwards: true;
+    pptPayoutState: {
+      select: { status: true; reason: true; proofCommentUrl: true };
+    };
+  };
+}>;
+
+type TransactionWithUser = PendingTransaction | SettledTransaction;
 
 function buildPayoutTransaction(
   tx: TransactionWithUser,
@@ -77,6 +110,20 @@ function buildPayoutTransaction(
   creditLimitUsage?: { used: number; limit: number; remaining: number } | null,
 ): PayoutTransaction {
   const { user } = tx;
+  // Only pending rows carry the rails; the settled queries do not select them.
+  const paymentDetails: PayoutPaymentDetails | null =
+    "bankAccountNumber" in user
+      ? {
+          paypalEmail: user.paypalEmail,
+          duitNowId: user.duitNowId,
+          bankName: user.bankName,
+          bankAccountNumber: user.bankAccountNumber,
+          bankAccountName: user.bankAccountName,
+          robloxId: user.robloxId,
+          robuxUsername: user.robuxUsername,
+          email: user.linearEmail,
+        }
+      : null;
   return {
     id: tx.id,
     userId: user.id,
@@ -88,16 +135,9 @@ function buildPayoutTransaction(
     taskTitle,
     developerName: resolveDisplayName({ profile: user }),
     paymentMethod: user.paymentMethod,
-    paypalEmail: user.paypalEmail,
-    duitNowId: user.duitNowId,
-    bankName: user.bankName,
-    bankAccountNumber: user.bankAccountNumber,
-    bankAccountName: user.bankAccountName,
-    robloxId: user.robloxId,
-    robuxUsername: user.robuxUsername,
+    paymentDetails,
     linearIssueIdentifier: tx.linearIssueIdentifier,
     linearIssueUrl: tx.linearIssueUrl,
-    email: user.linearEmail,
     paidAt: tx.paidAt?.toISOString() ?? null,
     rejectedAt: tx.rejectedAt?.toISOString() ?? null,
     rejectionReason: tx.rejectionReason,
@@ -232,9 +272,9 @@ async function AdminPageContent() {
     prisma.transaction.findMany({
       where: { status: { in: ["PENDING", "ON_HOLD"] } },
       include: {
-        user: true,
+        user: { select: PENDING_USER_SELECT },
         payout: true,
-        bonusCandidates: true,
+        bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
         incentiveAwards: true,
         pptPayoutState: {
           select: {
@@ -250,9 +290,9 @@ async function AdminPageContent() {
     prisma.transaction.findMany({
       where: { status: "PAID" },
       include: {
-        user: true,
+        user: { select: SETTLED_USER_SELECT },
         payout: true,
-        bonusCandidates: true,
+        bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
         incentiveAwards: true,
         pptPayoutState: {
           select: {
@@ -268,9 +308,9 @@ async function AdminPageContent() {
     prisma.transaction.findMany({
       where: { status: "REJECTED" },
       include: {
-        user: true,
+        user: { select: SETTLED_USER_SELECT },
         payout: true,
-        bonusCandidates: true,
+        bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
         incentiveAwards: true,
         pptPayoutState: {
           select: {
@@ -287,7 +327,7 @@ async function AdminPageContent() {
       where: { status: "PENDING" },
       include: {
         requester: {
-          include: { user: { select: { name: true, email: true } } },
+          include: { user: { select: USER_IDENTITY_SELECT } },
         },
         attachments: { orderBy: { sortOrder: "asc" } },
       },
@@ -298,7 +338,7 @@ async function AdminPageContent() {
     getIncentiveConfig(),
     prisma.incentiveAward.findMany({
       include: {
-        user: { include: { user: { select: { name: true, email: true } } } },
+        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
         awardIssues: {
           include: {
             issueCompletion: {
@@ -319,7 +359,7 @@ async function AdminPageContent() {
       where: { status: "READY_FOR_REVIEW" },
       include: {
         user: {
-          include: { user: { select: { email: true, name: true } } },
+          include: { user: { select: USER_IDENTITY_SELECT } },
         },
       },
       orderBy: [{ period: "asc" }, { completedAt: "asc" }],
@@ -345,7 +385,7 @@ async function AdminPageContent() {
         ],
       },
       include: {
-        user: { include: { user: { select: { name: true, email: true } } } },
+        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
         transaction: {
           include: {
             payout: {
@@ -382,7 +422,7 @@ async function AdminPageContent() {
         ],
       },
       include: {
-        user: { include: { user: { select: { name: true, email: true } } } },
+        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
       },
       orderBy: { updatedAt: "desc" },
       take: 250,

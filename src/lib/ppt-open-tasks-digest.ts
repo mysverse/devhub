@@ -6,6 +6,7 @@ import { getLinearServiceClient } from "@/lib/linear";
 import { fetchSuggestedPpts } from "@/lib/linear-queries";
 import { EMAIL_CHANNEL, notifyWithPreferences } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 const ACTIVITY_WINDOW_DAYS = 60;
 const DIGEST_TASK_COUNT = 5;
@@ -51,7 +52,7 @@ export async function runPptOpenTasksDigest() {
         none: { status: { in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED"] } },
       },
     },
-    include: { user: { select: { email: true, name: true } } },
+    include: { user: { select: USER_IDENTITY_SELECT } },
   });
 
   const weekKey = new Date().toISOString().slice(0, 10);

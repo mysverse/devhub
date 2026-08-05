@@ -72,3 +72,52 @@ export function diffForEvent<T extends Record<string, unknown>>(
   }
   return { before: changedBefore, after: changedAfter };
 }
+
+/**
+ * Shipping fields that locate a person. Cleared by the retention sweep and
+ * redacted out of audit metadata.
+ */
+export const WELCOME_PACK_ADDRESS_FIELDS = [
+  "recipientName",
+  "phone",
+  "addressLine1",
+  "addressLine2",
+  "city",
+  "stateProvince",
+  "postalCode",
+  "taxId",
+] as const;
+
+/**
+ * Strips located values out of an event's {before, after} diff while keeping
+ * the key set. Admins keep "which fields changed, when, and by whom" — the
+ * audit property that matters — and lose only the stale values, which would
+ * otherwise preserve a full address history that outlives the order itself.
+ */
+export function redactOrderEventMetadata(
+  metadata: unknown,
+  placeholder = "[redacted]",
+): unknown {
+  if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
+    return metadata;
+  }
+  const record = metadata as Record<string, unknown>;
+  const redactSide = (side: unknown) => {
+    if (!side || typeof side !== "object" || Array.isArray(side)) return side;
+    const entries = Object.entries(side as Record<string, unknown>).map(
+      ([key, value]) =>
+        (WELCOME_PACK_ADDRESS_FIELDS as readonly string[]).includes(key)
+          ? [key, value === null ? null : placeholder]
+          : [key, value],
+    );
+    return Object.fromEntries(entries);
+  };
+
+  if (!("before" in record) && !("after" in record)) return metadata;
+  return {
+    ...record,
+    ...("before" in record ? { before: redactSide(record.before) } : {}),
+    ...("after" in record ? { after: redactSide(record.after) } : {}),
+    _redacted: true,
+  };
+}

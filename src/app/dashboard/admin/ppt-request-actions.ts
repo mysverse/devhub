@@ -21,6 +21,7 @@ import {
 } from "@/lib/notifications";
 import { DEVHUB_PPT_REQUEST_DESCRIPTION_MARKER } from "@/lib/ppt-request-marker";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export type PptApprovalAssigneeTarget =
   | { type: "requester" }
@@ -192,7 +193,7 @@ export async function approvePptRequest(
     where: { id: requestId },
     include: {
       requester: {
-        include: { user: { select: { email: true, name: true } } },
+        include: { user: { select: USER_IDENTITY_SELECT } },
       },
       attachments: { orderBy: { sortOrder: "asc" } },
     },
@@ -398,7 +399,7 @@ export async function rejectPptRequest(requestId: string, reason?: string) {
     where: { id: requestId },
     include: {
       requester: {
-        include: { user: { select: { email: true, name: true } } },
+        include: { user: { select: USER_IDENTITY_SELECT } },
       },
     },
   });

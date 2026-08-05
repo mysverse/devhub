@@ -8,12 +8,14 @@ import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { DISPLAY_NAME_SELECT, resolveDisplayName } from "@/lib/display-name";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import {
   type ExportableOrder,
   evaluateOrdersForExport,
 } from "@/lib/welcome-pack/easyparcel-validation";
 import { welcomePackAssetUrl } from "@/lib/welcome-pack-assets";
+import { redactOrderEventMetadata } from "@/lib/welcome-pack-events";
 import ItemsManager, { type AdminItemData } from "./ItemsManager";
 import OrdersTable, {
   type AdminOrderEvent,
@@ -61,10 +63,14 @@ async function AdminWelcomePackContent() {
       },
     }),
     prisma.welcomePackOrder.findMany({
+      // Bounded: this query shipped every order ever created — with full
+      // addresses and the complete address-change history — to one browser,
+      // and grew without limit.
+      take: 200,
       orderBy: { createdAt: "desc" },
       include: {
         user: {
-          include: { user: { select: { email: true, name: true } } },
+          include: { user: { select: USER_IDENTITY_SELECT } },
         },
         pack: {
           select: {
@@ -317,7 +323,9 @@ async function AdminWelcomePackContent() {
           actorRole: e.actorRole,
           actorName: e.actorId ? (actorNames.get(e.actorId) ?? null) : null,
           message: e.message,
-          metadata: e.metadata,
+          // Address values in the audit trail outlive the order itself and
+          // are never acted on; the changed-key set is what admins need.
+          metadata: redactOrderEventMetadata(e.metadata),
           createdAt: e.createdAt.toISOString(),
         }),
       ),

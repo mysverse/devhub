@@ -22,6 +22,7 @@ import {
   getAssignmentWatchTiming,
 } from "@/lib/ppt-assignment-watch-activity";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export const DEVHUB_ASSIGNMENT_WATCH_COMMENT_MARKER =
   "<!-- devhub:ppt-assignment-watch -->";
@@ -288,7 +289,7 @@ async function findLinkedUser(issue: AssignmentWatchIssue) {
           : []),
       ],
     },
-    include: { user: { select: { email: true, name: true } } },
+    include: { user: { select: USER_IDENTITY_SELECT } },
   });
 }
 
@@ -544,7 +545,7 @@ export async function recordTakeoverAway({
         },
       },
       include: {
-        user: { include: { user: { select: { email: true, name: true } } } },
+        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
       },
     });
     if (!watch) return;
@@ -659,7 +660,7 @@ async function upsertWatch(issue: AssignmentWatchIssue) {
       },
     },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
     },
   });
   const activity = deriveAssignmentActivity({
@@ -688,7 +689,7 @@ async function upsertWatch(issue: AssignmentWatchIssue) {
         ...baseData,
       },
       include: {
-        user: { include: { user: { select: { email: true, name: true } } } },
+        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
       },
     });
   }
@@ -714,7 +715,7 @@ async function upsertWatch(issue: AssignmentWatchIssue) {
         : {}),
     },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
     },
   });
 }

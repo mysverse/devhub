@@ -1,0 +1,56 @@
+/**
+ * Named Prisma selects, so narrowing is a decision made once rather than a
+ * literal copy-pasted into every query.
+ *
+ * The point is not that any current query leaks — most are hand-narrowed
+ * before they reach a client. It is that a sensitive column added to
+ * UserProfile next year should not automatically ship to a browser because
+ * some query used `include:` and someone spread the row into a DTO.
+ */
+import type { Prisma } from "@prisma/client";
+import type { DisplayNameProfile } from "@/lib/display-name";
+
+/** better-auth User fields the notification and email paths need. */
+export const USER_IDENTITY_SELECT = {
+  name: true,
+  email: true,
+} as const satisfies Prisma.UserSelect;
+
+/** Drop-in for the hand-copied `{ user: { select: { name, email } } }`. */
+export const PROFILE_CONTACT_INCLUDE = {
+  user: { select: USER_IDENTITY_SELECT },
+} as const satisfies Prisma.UserProfileInclude;
+
+/** Exactly what resolveDisplayName() reads, and nothing else. */
+export const PROFILE_DISPLAY_SELECT = {
+  id: true,
+  preferredName: true,
+  user: { select: { name: true } },
+} as const satisfies Prisma.UserProfileSelect;
+
+/** Payment rails. Only for server code that actually pays someone. */
+export const PROFILE_PAYOUT_SELECT = {
+  paymentMethod: true,
+  paypalEmail: true,
+  duitNowId: true,
+  bankName: true,
+  bankAccountNumber: true,
+  bankAccountName: true,
+  robloxId: true,
+  robuxUsername: true,
+} as const satisfies Prisma.UserProfileSelect;
+
+/**
+ * Compile-time link between the preset and the resolver. If someone drops
+ * preferredName from PROFILE_DISPLAY_SELECT, resolveDisplayName() would keep
+ * type-checking and silently fall back to the OAuth name at runtime — this
+ * turns that into a `pnpm typecheck` failure with a clear location.
+ */
+type _DisplayPresetSatisfiesResolver =
+  Prisma.UserProfileGetPayload<{
+    select: typeof PROFILE_DISPLAY_SELECT;
+  }> extends DisplayNameProfile
+    ? true
+    : never;
+const _assertDisplayPreset: _DisplayPresetSatisfiesResolver = true;
+void _assertDisplayPreset;

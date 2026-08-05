@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/authz";
 import { createKycAuditEntry } from "@/lib/kyc";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export async function approveKyc(verificationId: string) {
   const adminId = await requireAdmin();
@@ -15,7 +16,7 @@ export async function approveKyc(verificationId: string) {
     where: { id: verificationId },
     include: {
       user: {
-        include: { user: { select: { email: true, name: true } } },
+        include: { user: { select: USER_IDENTITY_SELECT } },
       },
     },
   });
@@ -83,7 +84,7 @@ export async function rejectKyc(verificationId: string, reason: string) {
     where: { id: verificationId },
     include: {
       user: {
-        include: { user: { select: { email: true, name: true } } },
+        include: { user: { select: USER_IDENTITY_SELECT } },
       },
     },
   });

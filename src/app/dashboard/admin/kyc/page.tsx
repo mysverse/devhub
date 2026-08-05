@@ -7,6 +7,7 @@ import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import KycReviewCard from "./KycReviewCard";
 
@@ -39,7 +40,7 @@ async function AdminKycContent() {
       where: { status: "PENDING" },
       include: {
         user: {
-          include: { user: { select: { name: true, email: true } } },
+          include: { user: { select: USER_IDENTITY_SELECT } },
         },
       },
       orderBy: { submittedAt: "asc" },
@@ -48,7 +49,7 @@ async function AdminKycContent() {
       where: { status: { in: ["APPROVED", "REJECTED", "EXPIRED"] } },
       include: {
         user: {
-          include: { user: { select: { name: true, email: true } } },
+          include: { user: { select: USER_IDENTITY_SELECT } },
         },
       },
       orderBy: { reviewedAt: "desc" },

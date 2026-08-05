@@ -14,6 +14,7 @@ import {
   getSnoozeHours,
 } from "@/lib/ppt-assignment-watch";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 function cleanNote(note: string) {
   const trimmed = note.trim();
@@ -42,7 +43,7 @@ async function loadWatch(id: string) {
   return prisma.pptAssignmentWatch.findUnique({
     where: { id },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
     },
   });
 }

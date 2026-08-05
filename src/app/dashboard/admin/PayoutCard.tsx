@@ -47,10 +47,23 @@ import {
   rejectTransaction,
 } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
-import type { PayoutTransaction } from "./types";
+import type { PayoutPaymentDetails, PayoutTransaction } from "./types";
 
-function renderPaymentDetails(tx: PayoutTransaction) {
-  if (tx.paymentMethod === "PAYPAL") {
+function renderPaymentDetails(
+  paymentMethod: string,
+  details: PayoutPaymentDetails | null,
+) {
+  // Settled payouts ship no payment rails. Without this branch every "Missing"
+  // fallback below would fire at once and read as data corruption.
+  if (!details) {
+    return (
+      <Text size="sm" c="dimmed" fs="italic">
+        Payment details hidden for settled payouts
+      </Text>
+    );
+  }
+  const tx = details;
+  if (paymentMethod === "PAYPAL") {
     return (
       tx.paypalEmail || (
         <span style={{ color: "var(--mantine-color-red-6)" }}>
@@ -59,7 +72,7 @@ function renderPaymentDetails(tx: PayoutTransaction) {
       )
     );
   }
-  if (tx.paymentMethod === "ROBUX") {
+  if (paymentMethod === "ROBUX") {
     return (
       tx.robuxUsername || (
         <span style={{ color: "var(--mantine-color-red-6)" }}>
@@ -68,7 +81,7 @@ function renderPaymentDetails(tx: PayoutTransaction) {
       )
     );
   }
-  if (tx.paymentMethod === "BANK_TRANSFER") {
+  if (paymentMethod === "BANK_TRANSFER") {
     return (
       <>
         <div>
@@ -92,7 +105,7 @@ function renderPaymentDetails(tx: PayoutTransaction) {
       </>
     );
   }
-  if (tx.paymentMethod === "DUITNOW") {
+  if (paymentMethod === "DUITNOW") {
     if (tx.duitNowId) {
       return <>ID: {tx.duitNowId}</>;
     }
@@ -153,9 +166,9 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     isPending &&
     tx.currency === "MYR" &&
     tx.paymentMethod === "DUITNOW" &&
-    isBillplzSupported(tx.bankName) &&
-    !!tx.bankAccountNumber &&
-    !!tx.bankAccountName &&
+    isBillplzSupported(tx.paymentDetails?.bankName) &&
+    !!tx.paymentDetails?.bankAccountNumber &&
+    !!tx.paymentDetails?.bankAccountName &&
     (!tx.payout || tx.payout.status === "FAILED");
 
   // Xendit eligibility: eWallet only + enabled + MYR + Xendit-supported + bank details + no active payout
@@ -164,10 +177,10 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     isPending &&
     tx.currency === "MYR" &&
     tx.paymentMethod === "DUITNOW" &&
-    requiresKycForAutoPayout(tx.bankName) &&
-    isXenditSupported(tx.bankName) &&
-    !!tx.bankAccountNumber &&
-    !!tx.bankAccountName &&
+    requiresKycForAutoPayout(tx.paymentDetails?.bankName) &&
+    isXenditSupported(tx.paymentDetails?.bankName) &&
+    !!tx.paymentDetails?.bankAccountNumber &&
+    !!tx.paymentDetails?.bankAccountName &&
     (!tx.payout || tx.payout.status === "FAILED");
 
   // Roblox eligibility: ROBUX currency + robloxId present + no active payout
@@ -175,7 +188,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     isPending &&
     tx.currency === "ROBUX" &&
     tx.paymentMethod === "ROBUX" &&
-    !!tx.robloxId &&
+    !!tx.paymentDetails?.robloxId &&
     (!tx.payout || tx.payout.status === "FAILED");
 
   const payoutProcessing = tx.payout?.status === "PROCESSING";
@@ -184,12 +197,14 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     transactionStatus: tx.status,
     currency: tx.currency,
     paymentMethod: tx.paymentMethod,
-    paypalEmail: tx.paypalEmail,
-    duitNowId: tx.duitNowId,
-    bankName: tx.bankName,
-    bankAccountNumber: tx.bankAccountNumber,
-    bankAccountName: tx.bankAccountName,
-    robloxId: tx.robloxId,
+    // classifyPayoutRoute short-circuits on a non-PENDING status before it
+    // reads any of these, so settled rows are unaffected by the nulls.
+    paypalEmail: tx.paymentDetails?.paypalEmail,
+    duitNowId: tx.paymentDetails?.duitNowId,
+    bankName: tx.paymentDetails?.bankName,
+    bankAccountNumber: tx.paymentDetails?.bankAccountNumber,
+    bankAccountName: tx.paymentDetails?.bankAccountName,
+    robloxId: tx.paymentDetails?.robloxId,
     payout: tx.payout,
     xenditEnabled: tx.xenditEnabled,
   });
@@ -465,7 +480,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
               {/* component="div": renderPaymentDetails returns block elements,
                   which are invalid inside the default <p>. */}
               <Text size="sm" c="dimmed" ff="monospace" component="div">
-                {renderPaymentDetails(tx)}
+                {renderPaymentDetails(tx.paymentMethod, tx.paymentDetails)}
               </Text>
             </Box>
 
@@ -536,7 +551,10 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                         : tx.linearIssueUrl || ""
                     }
                   />
-                  <CopyField label="Email Address" value={tx.email || ""} />
+                  <CopyField
+                    label="Email Address"
+                    value={tx.paymentDetails?.email || ""}
+                  />
                   <CopyField
                     label="Message to Beneficiary"
                     value={`Payment of ${formatAmount(tx.amount, tx.currency as CurrencyCode)} for ${isBonus ? "monthly bonus" : isIncentive ? "DevHub incentives" : tx.linearIssueIdentifier || "PPT task"}: ${tx.taskTitle}. Thank you for your contribution to MYSverse!`}

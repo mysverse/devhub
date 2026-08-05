@@ -19,6 +19,7 @@ import {
   uploadPptAttachmentToLinear,
 } from "@/lib/ppt-request-attachments";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
@@ -174,7 +175,7 @@ export async function POST(req: Request) {
       const [admins, requester] = await Promise.all([
         prisma.userProfile.findMany({
           where: ADMIN_ACCESS_WHERE,
-          include: { user: { select: { email: true, name: true } } },
+          include: { user: { select: USER_IDENTITY_SELECT } },
         }),
         prisma.userProfile.findUnique({
           where: { id: userId },

@@ -35,6 +35,7 @@ import {
 } from "@/lib/incentive-copy";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export type LinearIncentiveIssueInput = {
   id: string;
@@ -407,7 +408,7 @@ async function notifyDeveloperAward(awardId: string) {
   const award = await prisma.incentiveAward.findUnique({
     where: { id: awardId },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
     },
   });
   if (!award) return;

@@ -35,6 +35,7 @@ import {
   type PptStatus,
 } from "@/lib/ppt-reason-copy";
 import prisma from "@/lib/prisma";
+import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 const PPT_LABEL = "PPT";
 const DEVELOPER_NOTIFY_COOLDOWN_MS = 30 * 60 * 1000;
@@ -427,7 +428,7 @@ async function findLinkedUser(assignee: LinearUserSnapshot | null) {
         ...(assignee.id ? [{ linearId: assignee.id }] : []),
       ],
     },
-    include: { user: { select: { email: true, name: true } } },
+    include: { user: { select: USER_IDENTITY_SELECT } },
   });
 }
 
@@ -562,7 +563,7 @@ async function findPptState(linearIssueId: string) {
     where: { linearIssueId },
     include: {
       transaction: { include: { payout: true } },
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
     },
   });
 }
@@ -765,7 +766,7 @@ async function notifyDeveloper(
   const state = await prisma.pptPayoutState.findUnique({
     where: { id: stateId },
     include: {
-      user: { include: { user: { select: { email: true, name: true } } } },
+      user: { include: { user: { select: USER_IDENTITY_SELECT } } },
     },
   });
   const lastNotified = state?.lastDeveloperNotifiedAt?.getTime() ?? 0;
@@ -851,7 +852,7 @@ async function notifyAdmins(
     }),
     prisma.userProfile.findMany({
       where: ADMIN_ACCESS_WHERE,
-      include: { user: { select: { email: true, name: true } } },
+      include: { user: { select: USER_IDENTITY_SELECT } },
     }),
   ]);
 
@@ -1778,7 +1779,7 @@ async function handleEligiblePayout(
     // admins learned why these sat in PENDING.
     const linkedUser = await prisma.userProfile.findUnique({
       where: { id: userId },
-      include: { user: { select: { email: true, name: true } } },
+      include: { user: { select: USER_IDENTITY_SELECT } },
     });
     const limit = WEEKLY_CREDIT_LIMITS[currency] ?? 0;
     await notify({

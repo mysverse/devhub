@@ -5,6 +5,7 @@ import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
+import { resolveDisplayName } from "@/lib/display-name";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -57,12 +58,12 @@ async function AdminUsersContent() {
         select: { transactions: true },
       },
     },
-    orderBy: { legalName: "asc" },
+    orderBy: { preferredName: "asc" },
   });
 
   const serializedUsers = users.map((u) => ({
     id: u.id,
-    legalName: u.legalName,
+    displayName: resolveDisplayName({ profile: u }),
     role: u.role,
     developerRank: u.developerRank,
     specialties: u.specialties,

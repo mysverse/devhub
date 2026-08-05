@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
 import { DEVELOPER_RANKS, DEVELOPER_SPECIALTIES } from "@/lib/developer-access";
+import { resolveDisplayName } from "@/lib/display-name";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import AccessManagementClient from "./AccessManagementClient";
@@ -56,7 +57,7 @@ async function AccessManagementContent() {
             take: 5,
           },
         },
-        orderBy: [{ legalName: "asc" }, { id: "asc" }],
+        orderBy: [{ preferredName: "asc" }, { id: "asc" }],
       }),
     ]);
 
@@ -120,8 +121,7 @@ async function AccessManagementContent() {
       }))}
       users={users.map((profile) => ({
         id: profile.id,
-        displayName:
-          profile.legalName || profile.user.name || profile.user.email,
+        displayName: resolveDisplayName({ profile }),
         email: profile.user.email,
         image: profile.user.image,
         developerRank: profile.developerRank,

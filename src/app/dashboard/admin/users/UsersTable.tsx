@@ -48,7 +48,8 @@ type SignedDoc = {
 
 type UserRow = {
   id: string;
-  legalName: string | null;
+  /** Peer-safe name from resolveDisplayName(). Never the legal name. */
+  displayName: string;
   role: string;
   developerRank: DeveloperRankValue;
   specialties: DeveloperSpecialtyValue[];
@@ -228,7 +229,7 @@ export default function UsersTable({
                       />
                       <div>
                         <Text size="sm" fw={500}>
-                          {user.legalName || user.userName}
+                          {user.displayName}
                         </Text>
                         <Text size="xs" c="dimmed">
                           {user.userEmail}

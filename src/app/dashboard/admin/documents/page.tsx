@@ -19,6 +19,7 @@ import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
+import { DISPLAY_NAME_SELECT, resolveDisplayName } from "@/lib/display-name";
 import { REQUIRED_DOCUMENTS } from "@/lib/documents";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
@@ -52,16 +53,19 @@ async function AdminDocumentsContent() {
   const users = await prisma.userProfile.findMany({
     select: {
       id: true,
-      legalName: true,
+      ...DISPLAY_NAME_SELECT,
       signedDocuments: {
         select: {
           id: true,
           documentType: true,
           signedAt: true,
+          // The authoritative name for a signed document is the one on the
+          // document, not today's profile column.
+          legalName: true,
         },
       },
     },
-    orderBy: { legalName: "asc" },
+    orderBy: { preferredName: "asc" },
   });
 
   return (
@@ -81,7 +85,7 @@ async function AdminDocumentsContent() {
               <TableTr key={user.id}>
                 <TableTd>
                   <Text size="sm" fw={500}>
-                    {user.legalName || "No name set"}
+                    {resolveDisplayName({ profile: user })}
                   </Text>
                 </TableTd>
                 {REQUIRED_DOCUMENTS.map((type) => {
@@ -92,7 +96,15 @@ async function AdminDocumentsContent() {
                     <TableTd key={type}>
                       {doc ? (
                         <Group gap="xs">
-                          <Badge color="green" variant="light" size="sm">
+                          {/* The legal name shown here is the one captured on
+                              the document itself — the authoritative record for
+                              compliance — not the current profile column. */}
+                          <Badge
+                            color="green"
+                            variant="light"
+                            size="sm"
+                            title={`Signed as ${doc.legalName}`}
+                          >
                             Signed
                           </Badge>
                           <Text size="xs" c="dimmed">

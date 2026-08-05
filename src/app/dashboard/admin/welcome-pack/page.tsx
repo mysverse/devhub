@@ -6,6 +6,7 @@ import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
 import { requireAdminPage } from "@/lib/authz";
+import { DISPLAY_NAME_SELECT, resolveDisplayName } from "@/lib/display-name";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import {
@@ -107,18 +108,11 @@ async function AdminWelcomePackContent() {
     actorIds.length > 0
       ? await prisma.userProfile.findMany({
           where: { id: { in: actorIds } },
-          select: {
-            id: true,
-            legalName: true,
-            user: { select: { name: true, email: true } },
-          },
+          select: { id: true, ...DISPLAY_NAME_SELECT },
         })
       : [];
   const actorNames = new Map(
-    actors.map((a) => [
-      a.id,
-      a.legalName || a.user.name || a.user.email || "Unknown",
-    ]),
+    actors.map((profile) => [profile.id, resolveDisplayName({ profile })]),
   );
 
   const packConfig: PackConfigData = pack
@@ -273,8 +267,7 @@ async function AdminWelcomePackContent() {
       packName: o.pack.name,
       packIsActive: o.pack.isActive,
       recipientName: o.recipientName,
-      developerName:
-        o.user.legalName || o.user.user.name || o.recipientName || "Developer",
+      developerName: resolveDisplayName({ profile: o.user }),
       developerEmail: o.user.user.email ?? null,
       region: o.region,
       idCardName: o.idCardName,

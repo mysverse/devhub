@@ -14,6 +14,11 @@ import {
 } from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getWeeklyUsageForUsers } from "@/lib/credit-limit";
+import {
+  DISPLAY_NAME_SELECT,
+  resolveDisplayName,
+  resolveDisplayNameOrNull,
+} from "@/lib/display-name";
 import { getIncentiveConfig } from "@/lib/incentives";
 import { getLinearClient, getLinearServiceClient } from "@/lib/linear";
 import { resolveLinearFetchError } from "@/lib/linear-error";
@@ -81,7 +86,7 @@ function buildPayoutTransaction(
     source: tx.source,
     bonusPeriod: tx.bonusPeriod,
     taskTitle,
-    developerName: user.legalName || user.linearEmail || "Unknown Developer",
+    developerName: resolveDisplayName({ profile: user }),
     paymentMethod: user.paymentMethod,
     paypalEmail: user.paypalEmail,
     duitNowId: user.duitNowId,
@@ -468,11 +473,10 @@ async function AdminPageContent() {
     .map((candidate) => ({
       id: candidate.id,
       userId: candidate.userId as string,
-      developerName:
-        candidate.user?.legalName ||
-        candidate.user?.user.name ||
-        candidate.assigneeName ||
-        "Unknown Developer",
+      developerName: resolveDisplayName({
+        profile: candidate.user,
+        storedLinearName: candidate.assigneeName,
+      }),
       developerEmail:
         candidate.user?.user.email || candidate.assigneeEmail || null,
       currency: candidate.currency,
@@ -531,11 +535,7 @@ async function AdminPageContent() {
   const incentiveAwardRows: AdminIncentiveAwardData[] = incentiveAwards.map(
     (award) => ({
       id: award.id,
-      developerName:
-        award.user.legalName ||
-        award.user.user.name ||
-        award.user.user.email ||
-        "Unknown Developer",
+      developerName: resolveDisplayName({ profile: award.user }),
       type: award.type,
       period: award.period,
       thresholdMet: award.thresholdMet,
@@ -568,17 +568,13 @@ async function AdminPageContent() {
     proofOverrideByIds.length > 0
       ? await prisma.userProfile.findMany({
           where: { id: { in: proofOverrideByIds } },
-          select: {
-            id: true,
-            legalName: true,
-            user: { select: { name: true, email: true } },
-          },
+          select: { id: true, ...DISPLAY_NAME_SELECT },
         })
       : [];
   const proofOverrideNameById = new Map(
     proofOverrideProfiles.map((profile) => [
       profile.id,
-      profile.legalName || profile.user.name || profile.user.email,
+      resolveDisplayName({ profile }),
     ]),
   );
 
@@ -593,17 +589,13 @@ async function AdminPageContent() {
     assignmentWatchAdminIds.length > 0
       ? await prisma.userProfile.findMany({
           where: { id: { in: assignmentWatchAdminIds } },
-          select: {
-            id: true,
-            legalName: true,
-            user: { select: { name: true, email: true } },
-          },
+          select: { id: true, ...DISPLAY_NAME_SELECT },
         })
       : [];
   const assignmentWatchAdminNameById = new Map(
     assignmentWatchAdminProfiles.map((profile) => [
       profile.id,
-      profile.legalName || profile.user.name || profile.user.email,
+      resolveDisplayName({ profile }),
     ]),
   );
   const warningHours = getWarningHours();
@@ -635,11 +627,10 @@ async function AdminPageContent() {
           linearIssueUrl: watch.linearIssueUrl,
           assigneeName: watch.assigneeName,
           assigneeEmail: watch.assigneeEmail,
-          developerName:
-            watch.user?.legalName ||
-            watch.user?.user.name ||
-            watch.assigneeName ||
-            null,
+          developerName: resolveDisplayNameOrNull({
+            profile: watch.user,
+            storedLinearName: watch.assigneeName,
+          }),
           status: watch.status,
           assignedAt: watch.assignedAt.toISOString(),
           lastActivityAt: watch.lastActivityAt.toISOString(),
@@ -689,11 +680,10 @@ async function AdminPageContent() {
         linearIssueIdentifier: state.linearIssueIdentifier,
         linearIssueTitle: state.linearIssueTitle,
         linearIssueUrl: state.linearIssueUrl,
-        developerName:
-          state.user?.legalName ||
-          state.user?.user.name ||
-          state.assigneeName ||
-          null,
+        developerName: resolveDisplayNameOrNull({
+          profile: state.user,
+          storedLinearName: state.assigneeName,
+        }),
         assigneeEmail: state.assigneeEmail,
         status: state.status,
         reason: state.reason,
@@ -747,10 +737,7 @@ async function AdminPageContent() {
         pptRequests={pendingPptRequests.map(
           (req): PptRequestData => ({
             id: req.id,
-            requesterName:
-              req.requester.legalName ||
-              req.requester.user.name ||
-              "Unknown Developer",
+            requesterName: resolveDisplayName({ profile: req.requester }),
             requesterEmail: req.requester.user.email,
             requesterLinearId: req.requester.linearId,
             linearIssueId: req.linearIssueId,

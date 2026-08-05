@@ -7,7 +7,11 @@ import LinkButton from "@/components/LinkButton";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
-import { requireAdminPage } from "@/lib/authz";
+import {
+  getCurrentUserProfileForAccess,
+  hasAdminAccess,
+  requireAdminPage,
+} from "@/lib/authz";
 import { formatBonusPeriod, getBonusConfig } from "@/lib/bonus";
 import { getWeeklyUsageForUsers } from "@/lib/credit-limit";
 import { getIncentiveConfig } from "@/lib/incentives";
@@ -185,6 +189,12 @@ async function PendingKycBadge() {
   // unlike AdminPageContent this subtree reads no request data of its own,
   // so without this the build-time prerender rejects the uncached query.
   await connection();
+  // This is a SIBLING Suspense subtree to AdminPageContent, so that component's
+  // requireAdminPage() does not gate it — without this check the pending-KYC
+  // count streams to any authenticated user. Return null rather than redirect:
+  // a decorative badge must not navigate the page.
+  const { profile } = await getCurrentUserProfileForAccess();
+  if (!hasAdminAccess(profile)) return null;
   const pendingKycCount = await prisma.kycVerification.count({
     where: { status: "PENDING" },
   });

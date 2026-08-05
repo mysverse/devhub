@@ -1,8 +1,8 @@
-import { sendPaymentConfirmation } from "@/app/dashboard/admin/actions";
 import { awardAchievement } from "@/lib/achievements";
 import { createPaymentOrder } from "@/lib/billplz";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
+import { sendPaymentConfirmation } from "@/lib/payment-confirmation";
 import {
   getXenditBankCode,
   isBillplzSupported,

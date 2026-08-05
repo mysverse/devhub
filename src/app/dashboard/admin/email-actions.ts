@@ -7,19 +7,7 @@ import PaymentInfoInvalid from "@/emails/PaymentInfoInvalid";
 import { requireAdmin } from "@/lib/authz";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
-
-export async function getUserEmailAndName(userId: string) {
-  const profile = await prisma.userProfile.findUnique({
-    where: { id: userId },
-    include: { user: { select: { email: true, name: true } } },
-  });
-
-  if (!profile?.user.email) {
-    throw new Error("User email not found");
-  }
-
-  return { email: profile.user.email, name: profile.user.name };
-}
+import { getUserEmailAndName } from "@/lib/user-contact";
 
 export async function sendLegalNameReminder(userId: string) {
   const adminId = await requireAdmin();

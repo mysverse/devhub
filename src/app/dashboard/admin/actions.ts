@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import PaymentProcessed from "@/emails/PaymentProcessed";
 import PaymentRejected from "@/emails/PaymentRejected";
 import { awardAchievement } from "@/lib/achievements";
 import { requireAdmin } from "@/lib/authz";
@@ -11,10 +10,10 @@ import { formatBonusPeriod } from "@/lib/bonus";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   cancelIncentiveAwardsForTransaction,
-  formatAwardType,
   markIncentiveAwardsPaidForTransaction,
 } from "@/lib/incentives";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import { sendPaymentConfirmation } from "@/lib/payment-confirmation";
 import {
   initiateBillplzPayout,
   initiateRobloxPayout,
@@ -29,89 +28,8 @@ import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
 import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getBaseUrl } from "@/lib/url";
+import { getUserEmailAndName } from "@/lib/user-contact";
 import { isXenditEnabled } from "@/lib/xendit";
-import { getUserEmailAndName } from "./email-actions";
-
-/**
- * Generate PDF slip, upload to blob, and send payment confirmation email.
- * Shared between manual "Mark as Paid" and automated Billplz callback flows.
- */
-export async function sendPaymentConfirmation(transactionId: string) {
-  const { buffer, filename, transaction } =
-    await generateTransactionSlipBuffer(transactionId);
-
-  // Store PDF in Vercel Blob for permanent access
-  try {
-    const pdfBlobUrl = await uploadTransactionPdf(transactionId, buffer);
-    await prisma.transaction.update({
-      where: { id: transactionId },
-      data: { pdfBlobUrl },
-    });
-  } catch (blobError) {
-    console.error("Failed to upload PDF to blob storage:", blobError);
-  }
-
-  const { email, name } = await getUserEmailAndName(transaction.userId);
-
-  const taskTitle =
-    transaction.source === "BONUS"
-      ? transaction.linearIssueTitle ||
-        `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
-      : transaction.source === "INCENTIVE"
-        ? transaction.linearIssueTitle || "DevHub incentive awards"
-        : transaction.linearIssueTitle ||
-          transaction.linearIssueIdentifier ||
-          "Manual Payout";
-  const lineItems =
-    transaction.source === "INCENTIVE"
-      ? transaction.incentiveAwards.map((award) => ({
-          label: `${formatAwardType(award.type)} - ${award.period}`,
-          amount: formatAmount(
-            award.netAmount ?? award.amount,
-            transaction.currency as CurrencyCode,
-          ),
-        }))
-      : transaction.source === "BONUS"
-        ? transaction.bonusCandidates.map((candidate) => ({
-            label: `${candidate.linearIssueIdentifier ? `${candidate.linearIssueIdentifier} - ` : ""}${candidate.linearIssueTitle || "Bonus item"}`,
-            amount: formatAmount(
-              candidate.approvedAmount ?? 0,
-              transaction.currency as CurrencyCode,
-            ),
-          }))
-        : undefined;
-
-  const amount = formatAmount(
-    transaction.amount,
-    transaction.currency as CurrencyCode,
-  );
-  await notify({
-    userId: transaction.userId,
-    domain: "payment",
-    type: "PROCESSED",
-    title: "Payment processed",
-    message: `${amount} for ${taskTitle} has been processed.`,
-    href: "/dashboard",
-    entityType: "transaction",
-    entityId: transactionId,
-    payload: { transactionId, amount, taskTitle },
-    dedupeKey: `transaction:paid:${transactionId}`,
-    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
-    email: {
-      to: email,
-      subject: "Payment Processed - MYSverse DevHub",
-      category: "payment_processed",
-      idempotencyKey: `transaction:paid:${transactionId}`,
-      react: PaymentProcessed({
-        userName: name,
-        amount,
-        taskTitle,
-        lineItems,
-      }),
-      attachments: [{ filename, content: Buffer.from(buffer) }],
-    },
-  });
-}
 
 export async function markTransactionAsPaid(transactionId: string) {
   await requireAdmin();

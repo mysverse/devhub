@@ -87,3 +87,33 @@ export function getProbationReviewDates(start = new Date()) {
     finalReviewAt,
   };
 }
+
+/**
+ * Who counts as an admin. Lives here rather than in authz.ts because that
+ * module imports Prisma and throws at load time without a DATABASE_URL, which
+ * would make these — the most security-relevant predicates in the app —
+ * untestable. authz.ts re-exports both.
+ */
+export function hasAdminAccess(
+  profile: {
+    role: string;
+    developerRank?: string | null;
+  } | null,
+) {
+  return (
+    profile?.role === "ADMIN" || isDeveloperAdminRank(profile?.developerRank)
+  );
+}
+
+/**
+ * The query-side twin of hasAdminAccess(), used to fan out admin
+ * notifications. src/lib/authz.test.ts asserts the two cannot drift apart:
+ * a rank in one but not the other silently splits "receives admin mail" from
+ * "may act as an admin".
+ */
+export const ADMIN_ACCESS_WHERE = {
+  OR: [
+    { role: "ADMIN" as const },
+    { developerRank: { in: [...ADMIN_DEVELOPER_RANKS] } },
+  ],
+};

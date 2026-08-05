@@ -40,6 +40,9 @@ async function DocumentViewContent({ params }: { params: Params }) {
 
   const template = getDocumentTemplate(docType);
   const renderedContent = renderTemplate(template.content, {
+    // pii-allow: pii/display-name-fallback — this is the signature line of a
+    // legal agreement, which must carry the legal name; the blank is shown
+    // when none is set yet so the user is prompted to add one.
     LEGAL_NAME: userProfile.legalName ?? "_______________",
   });
 

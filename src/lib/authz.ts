@@ -1,26 +1,12 @@
-import type { Prisma } from "@prisma/client";
 import { redirect } from "next/navigation";
 import { getSession } from "@/lib/auth-utils";
-import { isDeveloperAdminRank } from "@/lib/developer-access";
+import { hasAdminAccess } from "@/lib/developer-access";
 import prisma from "@/lib/prisma";
 
-export const ADMIN_ACCESS_WHERE: Prisma.UserProfileWhereInput = {
-  OR: [
-    { role: "ADMIN" as const },
-    { developerRank: { in: ["DEVELOPER_COUNCIL", "HEAD_DEVELOPER"] } },
-  ],
-};
-
-export function hasAdminAccess(
-  profile: {
-    role: string;
-    developerRank?: string | null;
-  } | null,
-) {
-  return (
-    profile?.role === "ADMIN" || isDeveloperAdminRank(profile?.developerRank)
-  );
-}
+// Re-exported so existing call sites keep importing authz. The definitions
+// live in developer-access.ts, which is Prisma-free and therefore unit
+// testable — see src/lib/authz.test.ts.
+export { ADMIN_ACCESS_WHERE, hasAdminAccess } from "@/lib/developer-access";
 
 export async function getCurrentUserProfileForAccess() {
   const { userId } = await getSession();

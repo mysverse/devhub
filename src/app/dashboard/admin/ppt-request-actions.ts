@@ -18,6 +18,7 @@ import {
   IN_APP_CHANNEL,
   notifyWithPreferences,
 } from "@/lib/notifications";
+import { DEVHUB_PPT_REQUEST_DESCRIPTION_MARKER } from "@/lib/ppt-request-marker";
 import prisma from "@/lib/prisma";
 
 export type PptApprovalAssigneeTarget =
@@ -44,18 +45,17 @@ function attachmentMarkdown(
 function approvedIssueDescription(request: {
   description: string | null;
   note: string | null;
-  requester: { legalName: string | null; user: { name: string | null } };
   attachments: { filename: string; mimeType: string; linearAssetUrl: string }[];
 }) {
   const parts = [
     request.description?.trim(),
     attachmentMarkdown(request.attachments),
     request.note ? `## Request note\n\n${request.note.trim()}` : null,
-    `---\nApproved from a DevHub PPT request by ${
-      request.requester.legalName ||
-      request.requester.user.name ||
-      "a developer"
-    }.`,
+    // No requester name: this description is permanent and visible to the whole
+    // Linear workspace, and Linear already records the creator, the assignee
+    // and the DevHub link. The sibling approvalComment() below has always
+    // omitted it.
+    `---\n${DEVHUB_PPT_REQUEST_DESCRIPTION_MARKER}\nCreated from a DevHub PPT request.`,
   ];
   return parts.filter(Boolean).join("\n\n");
 }

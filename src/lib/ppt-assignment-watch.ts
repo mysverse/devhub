@@ -297,13 +297,14 @@ function issueTitle(issue: AssignmentWatchIssue) {
     : (issue.title ?? "PPT task");
 }
 
-function warningComment(issue: AssignmentWatchIssue, staleHours: number) {
+// Addressed to the assignee in the second person rather than naming them:
+// publicly tagging someone as inactive on a workspace-visible issue is the
+// harm, whichever name is used. Linear already shows who the assignee is.
+function warningComment(staleHours: number) {
   return `${DEVHUB_ASSIGNMENT_WATCH_COMMENT_MARKER}
 DevHub activity reminder: this PPT has had no visible activity for ${Math.floor(
     staleHours,
-  )} hours. ${
-    issue.assignee.displayName ?? issue.assignee.name ?? "The assignee"
-  } — a quick progress note resets the timer. Waiting on something? Mark the task blocked in DevHub. After ${getUnassignHours()} hours without activity the task returns to the board (the standard rule for every task).`;
+  )} hours. A quick progress note resets the timer. Waiting on something? Mark the task blocked in DevHub. After ${getUnassignHours()} hours without activity the task returns to the board (the standard rule for every task).`;
 }
 
 function unassignComment(staleHours: number) {
@@ -332,7 +333,7 @@ async function commentIfPossible(
     issueId: issue.id,
     body:
       type === "warning"
-        ? warningComment(issue, staleHours)
+        ? warningComment(staleHours)
         : unassignComment(staleHours),
   });
   await prisma.pptAssignmentWatch.update({

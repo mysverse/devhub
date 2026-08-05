@@ -102,23 +102,27 @@ export type AdminOrderEvent = {
   createdAt: string;
 };
 
+/** Shown where shipping PII used to be, once retention has cleared it. */
+const PURGED_LABEL = "Removed (data retention)";
+
 export type AdminOrderRow = {
   id: string;
   status: WelcomePackOrderStatus;
   wave: number;
   packName: string;
   packIsActive: boolean;
-  recipientName: string;
+  /** null once the data-retention sweep clears a settled order's shipping PII. */
+  recipientName: string | null;
   developerName: string;
   developerEmail: string | null;
   region: ShippingRegion;
   idCardName: string;
-  phone: string;
-  addressLine1: string;
+  phone: string | null;
+  addressLine1: string | null;
   addressLine2: string | null;
-  city: string;
+  city: string | null;
   stateProvince: string | null;
-  postalCode: string;
+  postalCode: string | null;
   country: string;
   addressIsResidential: boolean | null;
   taxId: string | null;
@@ -228,13 +232,13 @@ const CSV_COLUMNS: {
   { header: "Wave", value: (o) => String(o.wave) },
   { header: "Developer", value: (o) => o.developerName },
   { header: "Email", value: (o) => o.developerEmail ?? "" },
-  { header: "Recipient", value: (o) => o.recipientName },
-  { header: "Phone", value: (o) => o.phone },
-  { header: "Address 1", value: (o) => o.addressLine1 },
+  { header: "Recipient", value: (o) => o.recipientName ?? "" },
+  { header: "Phone", value: (o) => o.phone ?? "" },
+  { header: "Address 1", value: (o) => o.addressLine1 ?? "" },
   { header: "Address 2", value: (o) => o.addressLine2 ?? "" },
-  { header: "City", value: (o) => o.city },
+  { header: "City", value: (o) => o.city ?? "" },
   { header: "State", value: (o) => o.stateProvince ?? "" },
-  { header: "Postcode", value: (o) => o.postalCode },
+  { header: "Postcode", value: (o) => o.postalCode ?? "" },
   { header: "Country", value: (o) => o.country },
   { header: "Region", value: (o) => o.region },
   {
@@ -313,13 +317,13 @@ function downloadCsv(orders: AdminOrderRow[]) {
 
 // Tab-separated shipping rows for pasting straight into a spreadsheet.
 const TSV_COLUMNS: { header: string; value: (o: AdminOrderRow) => string }[] = [
-  { header: "Recipient", value: (o) => o.recipientName },
-  { header: "Phone", value: (o) => o.phone },
-  { header: "Address 1", value: (o) => o.addressLine1 },
+  { header: "Recipient", value: (o) => o.recipientName ?? "" },
+  { header: "Phone", value: (o) => o.phone ?? "" },
+  { header: "Address 1", value: (o) => o.addressLine1 ?? "" },
   { header: "Address 2", value: (o) => o.addressLine2 ?? "" },
-  { header: "City", value: (o) => o.city },
+  { header: "City", value: (o) => o.city ?? "" },
   { header: "State", value: (o) => o.stateProvince ?? "" },
-  { header: "Postcode", value: (o) => o.postalCode },
+  { header: "Postcode", value: (o) => o.postalCode ?? "" },
   { header: "Country", value: (o) => o.country },
 ];
 
@@ -391,7 +395,7 @@ export default function OrdersTable({
         ![
           o.developerName,
           o.developerEmail ?? "",
-          o.recipientName,
+          o.recipientName ?? "",
           o.trackingNumber ?? "",
         ].some((v) => v.toLowerCase().includes(query))
       ) {
@@ -1056,10 +1060,10 @@ function OrderCard({
                   </Text>
                   <Group gap="xs" wrap="nowrap" align="center">
                     <Text size="sm" fw={500}>
-                      {order.recipientName}
+                      {order.recipientName ?? PURGED_LABEL}
                     </Text>
                     <CopyButton
-                      value={order.recipientName}
+                      value={order.recipientName ?? ""}
                       label="recipient name"
                     />
                   </Group>
@@ -1070,8 +1074,11 @@ function OrderCard({
                     Phone Number
                   </Text>
                   <Group gap="xs" wrap="nowrap" align="center">
-                    <Text size="sm">{order.phone}</Text>
-                    <CopyButton value={order.phone} label="phone number" />
+                    <Text size="sm">{order.phone ?? PURGED_LABEL}</Text>
+                    <CopyButton
+                      value={order.phone ?? ""}
+                      label="phone number"
+                    />
                   </Group>
                 </Stack>
 

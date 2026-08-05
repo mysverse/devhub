@@ -1286,14 +1286,21 @@ model WelcomePackOrder {
   idCardName String
 
   region        ShippingRegion
-  recipientName String
-  phone         String
-  addressLine1  String
+  // Shipping PII. Nullable because the data-retention cron clears it once the
+  // order is settled — see WELCOME_PACK_ADDRESS_FIELDS in
+  // src/lib/welcome-pack-events.ts and addressPurgedAt below. Nullable rather
+  // than a "[purged]" tombstone so `pnpm typecheck` enumerates every reader
+  // and a purged order can never silently reach a courier workbook.
+  recipientName String?
+  phone         String?
+  addressLine1  String?
   addressLine2  String?
-  city          String
+  city          String?
   stateProvince String?
-  postalCode    String
+  postalCode    String?
   country       String
+  /** Set when the retention sweep cleared the shipping fields above. */
+  addressPurgedAt DateTime?
 
   trackingNumber  String?
   trackingUrl     String?
@@ -1339,6 +1346,8 @@ model WelcomePackOrder {
   @@index([userId])
   @@index([status])
   @@index([packId])
+  // Drives the data-retention sweep's scan for settled orders.
+  @@index([status, deliveredAt])
 }
 
 model WelcomePackOrderItemSelection {

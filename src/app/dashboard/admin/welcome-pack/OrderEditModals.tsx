@@ -162,13 +162,15 @@ export function EditShippingModal({
 }) {
   const [address, setAddress] = useState<AddressValues>({
     region: order.region,
-    recipientName: order.recipientName,
-    phone: order.phone,
-    addressLine1: order.addressLine1,
+    // Only PENDING/APPROVED orders are amendable, and the retention sweep
+    // never touches those — the coercions cover the type, not a real case.
+    recipientName: order.recipientName ?? "",
+    phone: order.phone ?? "",
+    addressLine1: order.addressLine1 ?? "",
     addressLine2: order.addressLine2 ?? "",
-    city: order.city,
+    city: order.city ?? "",
     stateProvince: order.stateProvince ?? "",
-    postalCode: order.postalCode,
+    postalCode: order.postalCode ?? "",
     country: order.country,
   });
   const [idCardName, setIdCardName] = useState(order.idCardName);

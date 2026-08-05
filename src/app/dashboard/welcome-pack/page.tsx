@@ -154,13 +154,16 @@ async function WelcomePackContent() {
     const editableOrder: EditableOrder = {
       idCardName: activeOrder.idCardName,
       region: activeOrder.region,
-      recipientName: activeOrder.recipientName,
-      phone: activeOrder.phone,
-      addressLine1: activeOrder.addressLine1,
+      // Only PENDING/APPROVED orders are editable and the retention sweep
+      // never touches those, so these are non-null in practice. The coercion
+      // exists because DELIVERED orders keep activeUserId and can be purged.
+      recipientName: activeOrder.recipientName ?? "",
+      phone: activeOrder.phone ?? "",
+      addressLine1: activeOrder.addressLine1 ?? "",
       addressLine2: activeOrder.addressLine2,
-      city: activeOrder.city,
+      city: activeOrder.city ?? "",
       stateProvince: activeOrder.stateProvince,
-      postalCode: activeOrder.postalCode,
+      postalCode: activeOrder.postalCode ?? "",
       country: activeOrder.country,
       notes: activeOrder.notes,
       selections: activeOrder.selections.map((s) => ({

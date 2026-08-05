@@ -1492,6 +1492,66 @@ export async function seed() {
       },
     },
   });
+  // Retention fixture: a terminal order old enough for the data-retention
+  // cron to purge. activeUserId is null because CANCELLED releases the slot,
+  // so this coexists with the developer's DELIVERED order above — which stays
+  // inside the 90-day window and must NOT be touched, giving the sweep both a
+  // positive and a negative case.
+  await prisma.welcomePackOrder.create({
+    data: {
+      userId: devId,
+      activeUserId: null,
+      packId: pack.id,
+      status: "CANCELLED",
+      wave: 1,
+      idCardName: "Alex Architect",
+      region: "DOMESTIC",
+      recipientName: "Alexander Tan Wei Ming",
+      phone: "+60149876543",
+      addressLine1: "88 Jalan Meranti",
+      city: "Ipoh",
+      stateProvince: "Perak",
+      postalCode: "30000",
+      country: "MY",
+      addressIsResidential: true,
+      createdAt: daysAgo(120),
+      updatedAt: daysAgo(110),
+      selections: { create: [{ itemId: stickerItem.id }] },
+      events: {
+        create: [
+          {
+            actorId: devId,
+            actorRole: "USER",
+            type: "SUBMITTED",
+            message: "Order submitted (wave 1)",
+            createdAt: daysAgo(120),
+          },
+          {
+            actorId: devId,
+            actorRole: "USER",
+            type: "SHIPPING_UPDATED",
+            message: "Shipping address updated",
+            // A real before/after diff, so the sweep has audit metadata to
+            // redact — purging the columns alone would leave the old address
+            // legible here forever.
+            metadata: {
+              before: { addressLine1: "1 Jalan Lama", city: "Taiping" },
+              after: { addressLine1: "88 Jalan Meranti", city: "Ipoh" },
+            },
+            createdAt: daysAgo(118),
+          },
+          {
+            actorId: devId,
+            actorRole: "USER",
+            type: "CANCELLED",
+            message: "Order cancelled by developer",
+            createdAt: daysAgo(110),
+          },
+        ],
+      },
+    },
+  });
+
   await prisma.welcomePackOrder.create({
     data: {
       userId: ravi.userId,

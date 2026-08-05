@@ -229,7 +229,8 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
       type: "SUBMITTED",
       react: createElement(WelcomePackOrderSubmitted, {
         developerName,
-        recipientName: order.recipientName,
+        // Never purged: retention only touches settled orders.
+        recipientName: order.recipientName ?? "",
         region: order.region,
         wave: order.wave,
         idCardName: order.idCardName,
@@ -299,7 +300,8 @@ export async function cancelWelcomePackOrder() {
       type: "CANCELLED",
       react: createElement(WelcomePackOrderCancelled, {
         developerName,
-        recipientName: order.recipientName,
+        // Never purged: retention only touches settled orders.
+        recipientName: order.recipientName ?? "",
       }),
     });
   } catch (error) {

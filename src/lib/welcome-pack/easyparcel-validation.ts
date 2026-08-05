@@ -34,14 +34,17 @@ export type ExportableOrder = {
   reference: string;
   status: string;
   region: "DOMESTIC" | "INTERNATIONAL";
-  recipientName: string;
+  // Nullable: the data-retention sweep clears shipping PII once an order is
+  // settled. A purged order correctly fails the readiness checks below — you
+  // cannot ship to an address that was deliberately deleted.
+  recipientName: string | null;
   email: string | null;
-  phone: string;
-  addressLine1: string;
+  phone: string | null;
+  addressLine1: string | null;
   addressLine2: string | null;
-  city: string;
+  city: string | null;
   stateProvince: string | null;
-  postalCode: string;
+  postalCode: string | null;
   country: string; // ISO-2
   addressIsResidential: boolean | null;
   taxId: string | null;
@@ -59,7 +62,7 @@ export type ExportIssue = { field: string; message: string };
 export type OrderReadiness = {
   orderId: string;
   reference: string;
-  recipientName: string;
+  recipientName: string | null;
   region: "DOMESTIC" | "INTERNATIONAL";
   previouslyExported: boolean;
   warnings: ExportIssue[];

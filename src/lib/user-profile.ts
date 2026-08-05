@@ -22,7 +22,10 @@ export const ensureUserProfile = cache(
       update: {},
       create: {
         id: userId,
-        legalName: name ?? null,
+        // The OAuth provider name is a handle, not a legal name — it seeds the
+        // display identity. legalName stays empty until the user supplies it in
+        // onboarding, so the column only ever holds a real legal name.
+        preferredName: name ?? null,
       },
     });
 

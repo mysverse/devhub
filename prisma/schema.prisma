@@ -71,6 +71,13 @@ model UserProfile {
   robloxId        String? @unique
   linearId        String? @unique
   linearEmail     String? @unique
+  // Display identity. Every human-facing surface (UI, email, notification,
+  // Linear comment) must resolve names through resolveDisplayName() in
+  // src/lib/display-name.ts — never read legalName for display.
+  preferredName   String?
+  // Compliance identity ONLY: KYC, document signing, payout verification and
+  // courier labels. Collected under an explicit promise that it is never shown
+  // to other developers. Guarded by scripts/dev/check-pii.ts.
   legalName       String?
   shippingAddress String? // For merch
 

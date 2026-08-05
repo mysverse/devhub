@@ -13,6 +13,8 @@ export type Persona = {
   key: PersonaKey;
   email: string;
   name: string;
+  /** Peer-facing display name. null exercises the User.name fallback. */
+  preferredName: string | null;
   /** null = no UserProfile is seeded (exercises onboarding). */
   linearId: string | null;
   discordId: string | null;
@@ -24,6 +26,7 @@ export const PERSONAS: Record<PersonaKey, Persona> = {
     key: "admin",
     email: "admin@devhub.mock",
     name: "Aina Admin",
+    preferredName: "Aina",
     linearId: "linear-user-admin",
     discordId: "100000000000000001",
     robloxId: "20000001",
@@ -32,6 +35,7 @@ export const PERSONAS: Record<PersonaKey, Persona> = {
     key: "developer",
     email: "developer@devhub.mock",
     name: "Alex Developer",
+    preferredName: "Alex",
     linearId: "linear-user-alex",
     discordId: "100000000000000002",
     robloxId: "20000002",
@@ -40,6 +44,7 @@ export const PERSONAS: Record<PersonaKey, Persona> = {
     key: "fresh",
     email: "fresh@devhub.mock",
     name: "Farah Fresh",
+    preferredName: null,
     linearId: null,
     discordId: null,
     robloxId: null,
@@ -59,6 +64,8 @@ export type BackgroundUser = {
   userId: string;
   email: string;
   name: string;
+  /** Peer-facing display name. null exercises the User.name fallback. */
+  preferredName: string | null;
   linearId: string;
   discordId: string;
   robloxId: string;
@@ -69,6 +76,7 @@ export const BACKGROUND_USERS: BackgroundUser[] = [
     userId: "dev-user-bala",
     email: "bala@devhub.mock",
     name: "Bala Builder",
+    preferredName: "Bala",
     linearId: "linear-user-bala",
     discordId: "100000000000000003",
     robloxId: "20000003",
@@ -77,14 +85,19 @@ export const BACKGROUND_USERS: BackgroundUser[] = [
     userId: "dev-user-mei",
     email: "mei@devhub.mock",
     name: "Mei Mesher",
+    preferredName: "Mei",
     linearId: "linear-user-mei",
     discordId: "100000000000000004",
     robloxId: "20000004",
   },
   {
+    // preferredName deliberately null: keeps the User.name fallback on screen
+    // in every admin view, so a regression that reaches for legalName instead
+    // is visible during verification.
     userId: "dev-user-ravi",
     email: "ravi@devhub.mock",
     name: "Ravi Scripter",
+    preferredName: null,
     linearId: "linear-user-ravi",
     discordId: "100000000000000005",
     robloxId: "20000005",

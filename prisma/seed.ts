@@ -164,6 +164,9 @@ export async function seed() {
       robloxId: PERSONAS.admin.robloxId,
       linearId: PERSONAS.admin.linearId,
       linearEmail: PERSONAS.admin.email,
+      preferredName: PERSONAS.admin.preferredName,
+      // Deliberately distinct from preferredName: any screen still rendering a
+      // full Malaysian legal name is a live PII leak during verification.
       legalName: "Nurul Aina binti Ahmad",
       role: "ADMIN",
       developerRank: "HEAD_DEVELOPER",
@@ -186,6 +189,7 @@ export async function seed() {
       robloxId: PERSONAS.developer.robloxId,
       linearId: PERSONAS.developer.linearId,
       linearEmail: PERSONAS.developer.email,
+      preferredName: PERSONAS.developer.preferredName,
       legalName: "Alexander Tan Wei Ming",
       shippingAddress: "12 Jalan Cempaka, 50450 Kuala Lumpur, Malaysia",
       role: "DEVELOPER",
@@ -237,6 +241,7 @@ export async function seed() {
         robloxId: entry.user.robloxId,
         linearId: entry.user.linearId,
         linearEmail: entry.user.email,
+        preferredName: entry.user.preferredName,
         legalName: entry.legalName,
         role: "DEVELOPER",
         developerRank: entry.rank,

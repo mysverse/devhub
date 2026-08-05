@@ -203,7 +203,11 @@ export const LINEAR_ISSUES: DevLinearIssue[] = [
     id: "issue-mys-204",
     identifier: "MYS-204",
     title: "Refit traffic light controller for new junction kit",
-    description: null,
+    // Carries the pre-split footer on purpose: this is the fixture
+    // scripts/dev/scrub-legal-name-leaks.ts finds and rewrites in dev mode.
+    // The name here must match the developer persona's seeded legalName.
+    description:
+      "Swap the junction kit controller over to the new signal timings.\n\n---\nApproved from a DevHub PPT request by Alexander Tan Wei Ming.",
     estimate: 1,
     stateType: "unstarted",
     assigneeId: ALEX,

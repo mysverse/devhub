@@ -884,6 +884,27 @@ export async function seed() {
     },
   });
 
+  // Pre-split leak fixture: an admin notification whose message was rendered
+  // with the requester's legal name before the display-name resolver landed.
+  // scripts/dev/scrub-legal-name-leaks.ts rewrites this row in dev mode.
+  await prisma.notification.create({
+    data: {
+      userId: adminId,
+      actorId: devId,
+      domain: "ppt_request",
+      type: "SUBMITTED",
+      title:
+        "New PPT request: Refit traffic light controller for new junction kit",
+      message:
+        "Alexander Tan Wei Ming requested RM20 for Refit traffic light controller for new junction kit.",
+      href: "/dashboard/admin?tab=ppt-requests",
+      entityType: "ppt_request",
+      entityId: "seed-legacy-ppt-request",
+      dedupeKey: "seed:legacy-leak:ppt-request-submitted",
+      createdAt: daysAgo(4),
+    },
+  });
+
   await prisma.notification.create({
     data: {
       userId: devId,

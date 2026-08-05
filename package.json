@@ -22,7 +22,8 @@
     "smoke": "tsx scripts/dev/smoke.ts",
     "visual": "tsx scripts/dev/visual.ts",
     "simulate": "tsx scripts/dev/simulate.ts",
-    "repair:ppt-payouts": "tsx scripts/dev/repair-ppt-payouts.ts"
+    "repair:ppt-payouts": "tsx scripts/dev/repair-ppt-payouts.ts",
+    "scrub:legal-names": "tsx scripts/dev/scrub-legal-name-leaks.ts"
   },
   "dependencies": {
     "@heroicons/react": "^2.2.0",

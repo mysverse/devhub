@@ -6,6 +6,7 @@ import type {
 } from "@prisma/client";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { linearEstimateToComplexityLevel } from "@/lib/currency";
+import { resolveDisplayName } from "@/lib/display-name";
 import { getLinearServiceClient } from "@/lib/linear";
 import { DEVHUB_PPT_ASSIGNMENT_WATCH_ISSUES_QUERY } from "@/lib/linear-documents";
 import {
@@ -416,7 +417,11 @@ async function notifyAdminsUnassigned(
         domain: "admin_notice",
         type: "PPT_AUTO_UNASSIGNED",
         title: `PPT auto-unassigned: ${issue.identifier ?? issue.title ?? "task"}`,
-        message: `${watch.assigneeName ?? "A developer"} was unassigned from ${issueTitle(issue)} after stale assignment checks.`,
+        message: `${resolveDisplayName({
+          profile: watch.user,
+          storedLinearName: watch.assigneeName,
+          fallback: "A developer",
+        })} was unassigned from ${issueTitle(issue)} after stale assignment checks.`,
         href: "/dashboard/admin",
         entityType: "linear_issue",
         entityId: issue.id,

@@ -21,6 +21,7 @@ import {
   formatAmount,
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
+import { resolveDisplayName } from "@/lib/display-name";
 import {
   buildIncentiveEarningPotential,
   buildIncentiveNextTargets,
@@ -438,8 +439,10 @@ async function notifyDeveloperAward(awardId: string) {
           category: "incentive_earned",
           idempotencyKey: `incentive:earned:${award.id}`,
           react: createElement(IncentiveEarned, {
-            userName:
-              award.user.legalName || award.user.user.name || "developer",
+            userName: resolveDisplayName({
+              profile: award.user,
+              fallback: "developer",
+            }),
             amount: formatAmount(award.amount, award.currency as CurrencyCode),
             awardType: formatAwardType(award.type),
             period: award.period,
@@ -470,6 +473,8 @@ async function notifyAdminsForAward(awardId: string, reason: string) {
   ]);
   if (!award) return;
 
+  const awardDeveloperName = resolveDisplayName({ profile: award.user });
+
   for (const admin of admins) {
     if (!admin.user.email) continue;
     await notify({
@@ -477,7 +482,7 @@ async function notifyAdminsForAward(awardId: string, reason: string) {
       domain: "incentive",
       type: "ADMIN_ALERT",
       title: "Incentive award needs review",
-      message: `${award.user.legalName || award.user.user.name || "Developer"}: ${formatAwardType(award.type)} held for ${reason}.`,
+      message: `${awardDeveloperName}: ${formatAwardType(award.type)} held for ${reason}.`,
       href: "/dashboard/admin",
       entityType: "incentive_award",
       entityId: award.id,
@@ -496,7 +501,7 @@ async function notifyAdminsForAward(awardId: string, reason: string) {
           releasedCount: 0,
           paidCount: 0,
           headline: "Incentive award needs review",
-          detail: `${award.user.legalName || award.user.user.name || "Developer"}: ${formatAwardType(award.type)} held for ${reason}.`,
+          detail: `${awardDeveloperName}: ${formatAwardType(award.type)} held for ${reason}.`,
         }),
       },
     });
@@ -574,10 +579,11 @@ export async function recordIssueCompletionFromLinear(
     const trashed = Boolean(input.trashed);
     const assigneeLinearId = input.assignee?.id?.trim() || null;
     const assigneeEmail = input.assignee?.email?.trim() || null;
+    // Never fall back to the email address: this column is rendered as a
+    // display name in admin views and notifications.
     const assigneeName =
       input.assignee?.displayName?.trim() ||
       input.assignee?.name?.trim() ||
-      assigneeEmail ||
       null;
     const user = await findAssigneeUser(input);
     const now = new Date();

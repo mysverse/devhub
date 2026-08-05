@@ -8,6 +8,7 @@ import WelcomePackOrderCancelled from "@/emails/WelcomePackOrderCancelled";
 import WelcomePackOrderSubmitted from "@/emails/WelcomePackOrderSubmitted";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
+import { DISPLAY_NAME_SELECT, resolveDisplayName } from "@/lib/display-name";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 import { assertEligibleForWelcomePack } from "@/lib/welcome-pack-eligibility";
@@ -216,11 +217,7 @@ export async function submitWelcomePackOrder(input: SubmitOrderInput) {
   }
 
   try {
-    const developerName =
-      order.user.legalName ||
-      order.user.user.name ||
-      order.recipientName ||
-      "Developer";
+    const developerName = resolveDisplayName({ profile: order.user });
     await notifyAdmins({
       subject: `New Welcome Pack order — ${developerName}`,
       category: "welcome_pack_order_submitted",
@@ -255,12 +252,7 @@ export async function cancelWelcomePackOrder() {
       id: true,
       status: true,
       recipientName: true,
-      user: {
-        select: {
-          legalName: true,
-          user: { select: { name: true } },
-        },
-      },
+      user: { select: DISPLAY_NAME_SELECT },
     },
   });
   if (!order) return { error: "No order to cancel" };
@@ -295,11 +287,7 @@ export async function cancelWelcomePackOrder() {
   }
 
   try {
-    const developerName =
-      order.user.legalName ||
-      order.user.user.name ||
-      order.recipientName ||
-      "Developer";
+    const developerName = resolveDisplayName({ profile: order.user });
     await notifyAdmins({
       subject: `Welcome Pack order cancelled — ${developerName}`,
       category: "welcome_pack_order_cancelled",

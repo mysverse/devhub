@@ -10,6 +10,7 @@ import WelcomePackOrderRejected from "@/emails/WelcomePackOrderRejected";
 import WelcomePackOrderShipped from "@/emails/WelcomePackOrderShipped";
 import { requireAdmin } from "@/lib/authz";
 import { deleteWelcomePackBlob } from "@/lib/blob-storage";
+import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
@@ -424,11 +425,8 @@ function recipientFromOrder(
 ) {
   return {
     email: order.user.user.email,
-    name:
-      order.user.legalName ||
-      order.recipientName ||
-      order.user.user.name ||
-      "Developer",
+    // recipientName is the courier label (a legal name), not a greeting.
+    name: resolveDisplayName({ profile: order.user }),
   };
 }
 

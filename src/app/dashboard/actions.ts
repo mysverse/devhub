@@ -6,6 +6,7 @@ import { awardAchievement, markAchievementsSeen } from "@/lib/achievements";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
+import { resolveDisplayName } from "@/lib/display-name";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import { describeLinearMutationError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
@@ -18,6 +19,7 @@ import {
   recordTakeoverAway,
 } from "@/lib/ppt-assignment-watch";
 import prisma from "@/lib/prisma";
+import { getUserProfile } from "@/lib/user-profile";
 
 function revalidateBoards(viewerLinearId: string) {
   revalidatePath("/dashboard/ppts");
@@ -78,11 +80,16 @@ export async function claimIssue(
     });
     await awardAchievement(userId, "FIRST_CLAIM", { issueId: issue.id });
     if (previousAssignee) {
+      const takenByProfile = await getUserProfile(userId);
       await recordTakeoverAway({
         issue: issueRef,
         previousAssigneeLinearId: previousAssignee.id,
         takenByUserId: userId,
-        takenByName: user?.name ?? viewer.displayName ?? "Another developer",
+        takenByName: resolveDisplayName({
+          profile: { preferredName: takenByProfile?.preferredName, user },
+          linear: viewer,
+          fallback: "Another developer",
+        }),
         reason: takeoverReason,
       });
     }

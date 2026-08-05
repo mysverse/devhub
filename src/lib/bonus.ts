@@ -148,11 +148,10 @@ export async function syncBonusCandidateFromLinearIssue(
   const stateName = input.state?.name ?? null;
   const assigneeLinearId = input.assignee?.id?.trim() || null;
   const assigneeEmail = input.assignee?.email?.trim() || null;
+  // Never fall back to the email address: this column is rendered as a
+  // display name in admin views and notifications.
   const assigneeName =
-    input.assignee?.displayName?.trim() ||
-    input.assignee?.name?.trim() ||
-    assigneeEmail ||
-    null;
+    input.assignee?.displayName?.trim() || input.assignee?.name?.trim() || null;
 
   const baseData = {
     linearIssueIdentifier: input.identifier ?? null,

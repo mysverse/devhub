@@ -6,6 +6,7 @@ import PptRequestSubmitted from "@/emails/PptRequestSubmitted";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
+import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import {
   EMAIL_CHANNEL,
@@ -181,8 +182,10 @@ export async function POST(req: Request) {
         }),
       ]);
 
-      const requesterName =
-        requester?.legalName || requester?.user.name || "A developer";
+      const requesterName = resolveDisplayName({
+        profile: requester,
+        fallback: "A developer",
+      });
       const estimatedAmount = formatAmount(
         estimateToAmount(requestedEstimate, "MYR"),
         "MYR",

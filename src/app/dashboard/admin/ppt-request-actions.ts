@@ -11,6 +11,7 @@ import {
   estimateToAmount,
   formatAmount,
 } from "@/lib/currency";
+import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { findTodoWorkflowStateId } from "@/lib/linear-queries";
 import {
@@ -310,10 +311,7 @@ export async function approvePptRequest(
       // Send approval email
       try {
         const email = request.requester.user.email;
-        const name =
-          request.requester.legalName ||
-          request.requester.user.name ||
-          "Developer";
+        const name = resolveDisplayName({ profile: request.requester });
         const estimatedAmount = formatAmount(
           estimateToAmount(request.requestedEstimate, "MYR"),
           "MYR",
@@ -423,8 +421,7 @@ export async function rejectPptRequest(requestId: string, reason?: string) {
   // Send rejection email
   try {
     const email = request.requester.user.email;
-    const name =
-      request.requester.legalName || request.requester.user.name || "Developer";
+    const name = resolveDisplayName({ profile: request.requester });
 
     await notifyWithPreferences({
       userId: request.requesterId,

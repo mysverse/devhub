@@ -14,6 +14,10 @@ import {
   linearEstimateToComplexityLevel,
 } from "@/lib/currency";
 import {
+  resolveDisplayName,
+  resolveDisplayNameOrNull,
+} from "@/lib/display-name";
+import {
   getLinearClient,
   getLinearServiceClient,
   LinearReauthRequiredError,
@@ -797,8 +801,10 @@ async function notifyDeveloper(
           category: "ppt_developer_notice",
           idempotencyKey: `ppt:developer:${stateId}:${state.completionEpisode}:${reason}`,
           react: createElement(PptPayoutBlocked, {
-            userName:
-              state.user.legalName || state.user.user.name || "developer",
+            userName: resolveDisplayName({
+              profile: state.user,
+              fallback: "developer",
+            }),
             issueIdentifier: snapshot.identifier,
             issueTitle: getIssueTitle(snapshot),
             issueUrl: snapshot.url,
@@ -876,11 +882,10 @@ async function notifyAdmins(
         react: createElement(PptPayoutAdminAlert, {
           issueIdentifier: snapshot.identifier,
           issueTitle: getIssueTitle(snapshot),
-          developerName:
-            state?.user?.legalName ||
-            state?.user?.user.name ||
-            snapshot.assignee?.displayName ||
-            snapshot.assignee?.name,
+          developerName: resolveDisplayNameOrNull({
+            profile: state?.user,
+            linear: snapshot.assignee,
+          }),
           reason: formatReason(reason),
           detail: message ?? undefined,
         }),
@@ -1800,8 +1805,10 @@ async function handleEligiblePayout(
             category: "payment_awaiting_review",
             idempotencyKey: `payment:awaiting_review:${transactionId}`,
             react: createElement(TransactionAwaitingReview, {
-              userName:
-                linkedUser.legalName || linkedUser.user.name || "developer",
+              userName: resolveDisplayName({
+                profile: linkedUser,
+                fallback: "developer",
+              }),
               issueIdentifier: snapshot.identifier,
               issueTitle: getIssueTitle(snapshot),
               amountLabel: formatAmount(amount, currency),

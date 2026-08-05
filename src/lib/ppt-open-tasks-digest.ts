@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import PptOpenTasksDigest from "@/emails/PptOpenTasksDigest";
 import { formatEstimate, getCurrencyForPaymentMethod } from "@/lib/currency";
+import { resolveDisplayName } from "@/lib/display-name";
 import { getLinearServiceClient } from "@/lib/linear";
 import { fetchSuggestedPpts } from "@/lib/linear-queries";
 import { EMAIL_CHANNEL, notifyWithPreferences } from "@/lib/notifications";
@@ -80,7 +81,10 @@ export async function runPptOpenTasksDigest() {
         category: "ppt_open_tasks_digest",
         idempotencyKey: `ppt-task:open-digest:${developer.id}:${weekKey}`,
         react: createElement(PptOpenTasksDigest, {
-          userName: developer.legalName || developer.user.name || "developer",
+          userName: resolveDisplayName({
+            profile: developer,
+            fallback: "developer",
+          }),
           tasks,
           totalCount: openTasks.length,
         }),

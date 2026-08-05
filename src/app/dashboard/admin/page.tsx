@@ -24,6 +24,7 @@ import { getLinearClient, getLinearServiceClient } from "@/lib/linear";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
+import { logPiiAccess } from "@/lib/pii-audit";
 import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
 import { describePptNextStep } from "@/lib/ppt-eligibility";
@@ -253,6 +254,15 @@ async function PendingKycBadge() {
 
 async function AdminPageContent() {
   const userId = await requireAdminPage();
+  // One aggregate row per render, not one per transaction: the board shows up
+  // to 100 pending rows, and per-row logging would bury the precise entries
+  // written by the KYC and slip routes under thousands of page-view rows.
+  await logPiiAccess({
+    actorId: userId,
+    resource: "BANK_DETAILS",
+    context: "/dashboard/admin",
+    details: "viewed the payout board",
+  });
   const recentWatchHistoryCutoff = new Date(
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   );

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
+import { logPiiAccess } from "@/lib/pii-audit";
 import prisma from "@/lib/prisma";
 
 const VALID_TYPES = new Set(["id-document", "selfie"]);
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ verificationId: string; type: string }> },
 ) {
   const { userId } = await getSession();
@@ -50,6 +51,18 @@ export async function GET(
       { status: 410 },
     );
   }
+
+  // Government ID images and selfies were readable by any admin with no
+  // trace. Awaited so the row lands before the bytes do; logPiiAccess cannot
+  // throw, so this can never stop a document being served.
+  await logPiiAccess({
+    actorId: userId,
+    subjectId: verification.userId,
+    resource: type === "id-document" ? "KYC_ID_DOCUMENT" : "KYC_SELFIE",
+    resourceId: verificationId,
+    context: "/api/kyc/document",
+    headers: req.headers,
+  });
 
   const blobUrl =
     type === "id-document"

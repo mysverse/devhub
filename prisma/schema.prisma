@@ -1150,6 +1150,38 @@ model KycVerification {
   @@index([status])
 }
 
+/**
+ * Reads of the most sensitive PII. Every other audit model in this schema
+ * records mutations; this one records access — who looked at whose government
+ * ID or bank details, and when. Written by logPiiAccess() in
+ * src/lib/pii-audit.ts.
+ */
+model PiiAccessLog {
+  id String @id @default(cuid())
+  /**
+   * UserProfile id of the reader, and of the subject whose data was read
+   * (null for aggregate, page-level rows). Plain strings with no relation,
+   * like WelcomePackOrderEvent.actorId — deleting a user must not cascade away
+   * the record of what they read.
+   */
+  actorId   String
+  subjectId String?
+  /** KYC_ID_DOCUMENT | KYC_SELFIE | BANK_DETAILS | WELCOME_PACK_ADDRESS */
+  resource   String
+  /** verificationId | transactionId | orderId */
+  resourceId String?
+  /** Route path or action name. */
+  context   String?
+  details   String?
+  ipAddress String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([subjectId, createdAt])
+  @@index([resource, createdAt])
+}
+
 model KycAuditLog {
   id             String          @id @default(cuid())
   verificationId String

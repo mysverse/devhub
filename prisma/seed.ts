@@ -1899,6 +1899,37 @@ export async function seed() {
   console.log("[seed] Done. Personas:");
   console.log(`  admin     ${PERSONAS.admin.email}     (id ${adminId})`);
   console.log(`  developer ${PERSONAS.developer.email} (id ${devId})`);
+  // PII read-audit fixtures, so the table is not dead on arrival in dev mode.
+  await prisma.piiAccessLog.createMany({
+    data: [
+      {
+        actorId: adminId,
+        subjectId: devId,
+        resource: "KYC_ID_DOCUMENT",
+        resourceId: "seed-kyc-verification",
+        context: "/api/kyc/document",
+        ipAddress: "203.0.113.5",
+        userAgent: "Mozilla/5.0 (dev-mode seed)",
+        createdAt: daysAgo(3),
+      },
+      {
+        actorId: adminId,
+        subjectId: devId,
+        resource: "BANK_DETAILS",
+        resourceId: "seed-transaction",
+        context: "/api/transactions/[id]/pdf",
+        createdAt: daysAgo(2),
+      },
+      {
+        actorId: adminId,
+        resource: "BANK_DETAILS",
+        context: "/dashboard/admin",
+        details: "viewed the payout board",
+        createdAt: daysAgo(1),
+      },
+    ],
+  });
+
   console.log("  fresh     fresh@devhub.mock (no profile — onboarding)");
 }
 

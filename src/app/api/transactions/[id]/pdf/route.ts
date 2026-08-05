@@ -2,12 +2,13 @@ import { getDownloadUrl } from "@vercel/blob";
 import { NextResponse } from "next/server";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
+import { logPiiAccess } from "@/lib/pii-audit";
 import prisma from "@/lib/prisma";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 
 type Params = Promise<{ id: string }>;
 
-export async function GET(_request: Request, { params }: { params: Params }) {
+export async function GET(req: Request, { params }: { params: Params }) {
   const { id } = await params;
   const { userId } = await getSession();
   if (!userId) {
@@ -35,6 +36,20 @@ export async function GET(_request: Request, { params }: { params: Params }) {
 
     if (transaction.userId !== userId && !hasAdminAccess(requestingUser)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // Only when someone ELSE reads the slip: a developer downloading their own
+    // payment record is not a PII access event, and logging it would bury the
+    // rows that matter. The slip carries legalName and full bank details.
+    if (transaction.userId !== userId) {
+      await logPiiAccess({
+        actorId: userId,
+        subjectId: transaction.userId,
+        resource: "BANK_DETAILS",
+        resourceId: id,
+        context: "/api/transactions/[id]/pdf",
+        headers: req.headers,
+      });
     }
 
     const slipId = id.slice(-8);

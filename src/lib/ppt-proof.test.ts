@@ -9,6 +9,11 @@ import {
   PROOF_QUESTION_MIN_CHARS,
   proofContent,
 } from "@/lib/ppt-proof";
+import {
+  describePptNextStep,
+  formatReason,
+  getActionForReason,
+} from "@/lib/ppt-reason-copy";
 
 const GOOD_PROOF =
   "#ppt-proof Rebuilt the lobby spawn logic and verified it in Studio: https://example.com/clip";
@@ -64,6 +69,29 @@ describe("checkProofBody", () => {
     assert.equal(
       checkProofBody(between) === null,
       isMeaningfulProofBody(between),
+    );
+  });
+});
+
+describe("rejected proof is reported as its own reason", () => {
+  it("does not tell a developer to post proof they already posted", () => {
+    const missing = formatReason("MISSING_PROOF");
+    const rejected = formatReason("PROOF_NOT_QUALIFYING");
+    assert.notEqual(missing, rejected);
+    // The whole point: the rejected copy has to acknowledge a comment exists.
+    assert.match(rejected, /was posted/i);
+  });
+
+  it("spells out both halves of the rule in the next step", () => {
+    const action = getActionForReason("PROOF_NOT_QUALIFYING");
+    assert.match(action, new RegExp(`${PROOF_MIN_CHARS}`));
+    assert.match(action, /link, screenshot, commit/i);
+  });
+
+  it("keeps the rejected proof waiting on the developer, not an admin", () => {
+    assert.equal(
+      describePptNextStep("NEEDS_PROOF", "PROOF_NOT_QUALIFYING").owner,
+      "developer",
     );
   });
 });

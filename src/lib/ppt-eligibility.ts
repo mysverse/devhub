@@ -208,6 +208,7 @@ export function describePptNextStep(
 function shouldShowProofTemplate(reason: PptReason) {
   return [
     "MISSING_PROOF",
+    "PROOF_NOT_QUALIFYING",
     "PROOF_RESET_BY_QUESTION",
     "WAITING_STABILITY",
     "REOPENED_BEFORE_PAYOUT",
@@ -336,6 +337,7 @@ function isArchivedOrTrashedIssue(snapshot: LinearIssueSnapshot) {
 function shouldClearProofForReason(reason: PptReason) {
   return [
     "MISSING_PROOF",
+    "PROOF_NOT_QUALIFYING",
     "PROOF_RESET_BY_QUESTION",
     "REOPENED_BEFORE_PAYOUT",
     "PPT_LABEL_REMOVED",
@@ -357,6 +359,7 @@ function shouldHoldTransactionForReason(reason: PptReason) {
     "MISSING_ASSIGNEE",
     "NO_LINKED_USER",
     "MISSING_PROOF",
+    "PROOF_NOT_QUALIFYING",
     "PROOF_RESET_BY_QUESTION",
     "APPROVED_BONUS_EXISTS",
     "LINEAR_API_ERROR",
@@ -623,6 +626,46 @@ function findQualifyingProof(
     );
 
   return candidates[0] ?? null;
+}
+
+/**
+ * The assignee tagged a comment `#ppt-proof` in this episode, but it failed the
+ * proof check. Only meaningful once findQualifyingProof has returned null — at
+ * that point every tagged attempt in range failed, so the newest one carries
+ * the rejection worth reporting.
+ *
+ * Without this, a rejected proof was indistinguishable from no proof at all:
+ * the developer was told to post proof they had already posted.
+ */
+function findRejectedProofAttempt(
+  snapshot: LinearIssueSnapshot,
+  state: PptState,
+  assignmentAt: Date,
+) {
+  const assigneeId = snapshot.assignee?.id;
+  if (!assigneeId) return null;
+
+  const lowerBound = lowerBoundForProof(snapshot, state, assignmentAt);
+  const attempts = snapshot.comments
+    .filter((comment) => {
+      const attemptAt = comment.editedAt ?? comment.createdAt;
+      return (
+        comment.userId === assigneeId &&
+        attemptAt >= lowerBound &&
+        comment.body.toLowerCase().includes(PROOF_TAG)
+      );
+    })
+    .sort(
+      (a, b) =>
+        (b.editedAt ?? b.createdAt).getTime() -
+        (a.editedAt ?? a.createdAt).getTime(),
+    );
+
+  for (const attempt of attempts) {
+    const rejection = checkProofBody(attempt.body);
+    if (rejection) return { comment: attempt, rejection };
+  }
+  return null;
 }
 
 function findResetQuestion(
@@ -2413,15 +2456,39 @@ async function evaluatePptSnapshot(
   }
 
   if (!proof) {
+    // Distinguish "proof was posted and rejected" from "no proof exists".
+    // Both block payout the same way; only one of them means the developer is
+    // waiting on an explanation rather than on themselves.
+    const attempt = findRejectedProofAttempt(
+      snapshot,
+      previousState,
+      assignmentAt,
+    );
+    const reason = attempt ? "PROOF_NOT_QUALIFYING" : "MISSING_PROOF";
+
     await blockPayout(
       snapshot,
       base.id,
       linkedUser.id,
-      "MISSING_PROOF",
+      reason,
       "NEEDS_PROOF",
       "PROOF_MISSING",
     );
-    return { status: "BLOCKED" as const, reason: "MISSING_PROOF" as const };
+    if (attempt) {
+      await appendEvent({
+        stateId: base.id,
+        linearIssueId: snapshot.id,
+        type: "PROOF_MISSING",
+        reason,
+        message: attempt.rejection.message,
+        actorLinearId: attempt.comment.userId,
+        metadata: {
+          commentId: attempt.comment.id,
+          rejection: attempt.rejection.reason,
+        },
+      });
+    }
+    return { status: "BLOCKED" as const, reason };
   }
 
   await prisma.pptPayoutState.update({

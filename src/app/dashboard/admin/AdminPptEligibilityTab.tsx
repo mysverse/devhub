@@ -70,6 +70,9 @@ const ownerLabels = {
 
 const proofOverrideReasons = new Set([
   "MISSING_PROOF",
+  // DevHub judged the posted proof insufficient; an admin who disagrees needs
+  // the override here more than anywhere else.
+  "PROOF_NOT_QUALIFYING",
   "PROOF_RESET_BY_QUESTION",
   "REOPENED_BEFORE_PAYOUT",
   "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",

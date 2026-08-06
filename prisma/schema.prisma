@@ -597,6 +597,10 @@ enum PptPayoutReason {
   MISSING_ASSIGNEE
   NO_LINKED_USER
   MISSING_PROOF
+  /// Proof was posted but failed the ppt-proof.ts check — distinct from
+  /// MISSING_PROOF so the developer is told their comment was read and why it
+  /// didn't qualify, rather than being told to post proof they already posted.
+  PROOF_NOT_QUALIFYING
   PROOF_RESET_BY_QUESTION
   PAID_ISSUE_NEEDS_REVIEW
   WAITING_STABILITY

@@ -1,4 +1,8 @@
-import { DEFAULT_STABILITY_MINUTES, PROOF_TAG } from "./payout-policy";
+import {
+  DEFAULT_STABILITY_MINUTES,
+  PROOF_MIN_CHARS,
+  PROOF_TAG,
+} from "./payout-policy";
 
 // Client-safe copy for the PPT payout state machine: plain-language reason
 // strings, the developer-facing next step per reason, and the owner
@@ -22,6 +26,7 @@ export type PptReason =
   | "MISSING_ASSIGNEE"
   | "NO_LINKED_USER"
   | "MISSING_PROOF"
+  | "PROOF_NOT_QUALIFYING"
   | "PROOF_RESET_BY_QUESTION"
   | "PAID_ISSUE_NEEDS_REVIEW"
   | "WAITING_STABILITY"
@@ -83,6 +88,7 @@ export function formatReason(reason: PptReason | null | undefined): string {
     NO_LINKED_USER:
       "The Linear assignee is not linked to a DevHub developer profile.",
     MISSING_PROOF: `A recent ${PROOF_TAG} comment from the assignee is required.`,
+    PROOF_NOT_QUALIFYING: `A ${PROOF_TAG} comment was posted, but it does not qualify yet.`,
     PROOF_RESET_BY_QUESTION:
       "A follow-up question was asked after completion, so fresh proof is required.",
     PAID_ISSUE_NEEDS_REVIEW:
@@ -128,6 +134,9 @@ export function getActionForReason(
 ): string {
   const stabilityMinutes =
     options?.stabilityMinutes ?? DEFAULT_STABILITY_MINUTES;
+  if (reason === "PROOF_NOT_QUALIFYING") {
+    return `Post a fresh ${PROOF_TAG} comment with at least ${PROOF_MIN_CHARS} characters describing what changed, and include something checkable — a link, screenshot, commit, or where it is live.`;
+  }
   if (reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION") {
     return `Reply in Linear or use DevHub with ${PROOF_TAG}, what changed, proof links/screenshots, where it is implemented, and verification notes.`;
   }
@@ -237,6 +246,7 @@ export function describePptNextStep(
 
   const developerReasons = new Set<PptReason>([
     "MISSING_PROOF",
+    "PROOF_NOT_QUALIFYING",
     "PROOF_RESET_BY_QUESTION",
     "MISSING_ESTIMATE",
     "MISSING_ASSIGNEE",

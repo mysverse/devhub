@@ -373,6 +373,33 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
   },
 ];
 
+/** Every channel the catalog knows how to deliver on. */
+export const NOTIFICATION_CHANNEL_KEYS: NotificationChannelKey[] = [
+  "in_app",
+  "email",
+];
+
+/**
+ * Every "domain:type:channel" a developer is allowed to set a preference for,
+ * derived from the catalog rather than restated.
+ *
+ * The settings UI renders a toggle for every `configurable: true` entry, but
+ * the save action used to check against a hand-written allowlist covering
+ * five of them. The other toggles rendered, moved, and were silently rejected
+ * on save — mute switches that did nothing. Deriving both sides from one
+ * source means a new configurable entry can't ship half-wired.
+ */
+export function configurablePreferenceKeys(): Set<string> {
+  const keys = new Set<string>();
+  for (const entry of NOTIFICATION_CATALOG) {
+    if (!entry.configurable) continue;
+    for (const channel of NOTIFICATION_CHANNEL_KEYS) {
+      keys.add(`${entry.domain}:${entry.type}:${channel}`);
+    }
+  }
+  return keys;
+}
+
 /** Channel defaults derived from the catalog, keyed "domain:type". */
 export function catalogChannelDefaults(): Record<
   string,

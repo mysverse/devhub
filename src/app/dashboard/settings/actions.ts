@@ -5,24 +5,17 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth-utils";
 import { getRobuxPayoutAvailability } from "@/lib/integration-availability";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
+import { configurablePreferenceKeys } from "@/lib/notifications/catalog";
 import {
   normalizeMalaysianPhone,
   paymentSuperRefine,
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
-const NOTIFICATION_PREFERENCE_KEYS = new Set([
-  "ppt_request:SUBMITTED:in_app",
-  "ppt_request:SUBMITTED:email",
-  "ppt_request:APPROVED:in_app",
-  "ppt_request:APPROVED:email",
-  "ppt_request:REJECTED:in_app",
-  "ppt_request:REJECTED:email",
-  "ppt_task:ASSIGNED_TO_YOU:in_app",
-  "ppt_task:ASSIGNED_TO_YOU:email",
-  "ppt_task:UNCLAIMED_AVAILABLE:in_app",
-  "ppt_task:UNCLAIMED_AVAILABLE:email",
-]);
+// Derived from the catalog, never restated here: the settings UI renders a
+// toggle for every configurable entry, so anything this set doesn't cover is a
+// switch that moves and then silently fails to save.
+const NOTIFICATION_PREFERENCE_KEYS = configurablePreferenceKeys();
 
 const SettingsSchema = z
   .object({

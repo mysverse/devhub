@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { NOTIFICATION_CATALOG } from "./catalog";
+import {
+  configurablePreferenceKeys,
+  NOTIFICATION_CATALOG,
+  NOTIFICATION_CHANNEL_KEYS,
+} from "./catalog";
 import { TYPE_OVERRIDES } from "./copy";
 
 test("every presentation override has a catalog entry (no drift)", () => {
@@ -24,6 +28,43 @@ test("catalog entries are unique per domain:type", () => {
     assert.ok(!seen.has(key), `Duplicate catalog entry: ${key}`);
     seen.add(key);
   }
+});
+
+test("every configurable entry is settable on every channel", () => {
+  // The settings UI renders a toggle for each configurable entry; the save
+  // action validates against this set. A gap here is a switch that moves and
+  // then silently fails to save, which is exactly what shipped before: five
+  // hand-written keys against thirteen rendered toggles.
+  const keys = configurablePreferenceKeys();
+  const missing: string[] = [];
+  for (const entry of NOTIFICATION_CATALOG) {
+    if (!entry.configurable) continue;
+    for (const channel of NOTIFICATION_CHANNEL_KEYS) {
+      const key = `${entry.domain}:${entry.type}:${channel}`;
+      if (!keys.has(key)) missing.push(key);
+    }
+  }
+  assert.deepEqual(
+    missing,
+    [],
+    `Configurable notifications with no settable preference: ${missing.join(", ")}`,
+  );
+});
+
+test("always-sent entries are not settable", () => {
+  const keys = configurablePreferenceKeys();
+  const leaked = NOTIFICATION_CATALOG.filter((entry) => !entry.configurable)
+    .flatMap((entry) =>
+      NOTIFICATION_CHANNEL_KEYS.map(
+        (channel) => `${entry.domain}:${entry.type}:${channel}`,
+      ),
+    )
+    .filter((key) => keys.has(key));
+  assert.deepEqual(
+    leaked,
+    [],
+    `Always-sent notifications must not be mutable: ${leaked.join(", ")}`,
+  );
 });
 
 test("email-only entries keep in_app off deliberately", () => {

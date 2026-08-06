@@ -34,10 +34,14 @@ export const DEFAULT_SNOOZE_HOURS = 72;
 export const DEFAULT_IDLE_NUDGE_HOURS = 24;
 /** How long a self-service "I'm blocked" pause lasts before auto-expiring. */
 export const DEFAULT_SELF_BLOCK_HOURS = 72;
-/** Minimum meaningful characters for a #ppt-proof comment posted in Linear. */
+/**
+ * Minimum meaningful characters for a #ppt-proof comment, measured with the
+ * `#ppt-proof` marker stripped out. One number for every route proof can take
+ * — the Proof button and the evaluator that reads comments back off Linear —
+ * so proof the UI accepts can never be proof the payout check rejects. The
+ * rule itself lives in `ppt-proof.ts`.
+ */
 export const PROOF_MIN_CHARS = 40;
-/** Minimum characters for proof submitted through DevHub's Proof button. */
-export const PROOF_BUTTON_MIN_CHARS = 20;
 
 export type PayoutPolicy = {
   stabilityMinutes: number;

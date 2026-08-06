@@ -11,6 +11,7 @@ import {
 } from "@/app/dashboard/ppts/actions";
 import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import { signIn } from "@/lib/auth-client";
+import { checkProofBody, describeProofEvidence } from "@/lib/ppt-proof";
 
 export default function PptProofButton({
   issueId,
@@ -23,6 +24,13 @@ export default function PptProofButton({
   const [body, setBody] = useState("");
   const [submitting, startSubmitTransition] = useTransition();
   const [retrying, startRetryTransition] = useTransition();
+
+  // The exact rule the payout evaluator applies, run live. Previously the
+  // button accepted anything over 20 characters and the evaluator quietly
+  // demanded 40 plus evidence, so proof could post to Linear and then never
+  // release payout with nothing explaining why.
+  const rejection = checkProofBody(body);
+  const touched = body.trim().length > 0;
 
   function handleSubmit() {
     const draft = body;
@@ -116,7 +124,13 @@ export default function PptProofButton({
             value={body}
             onChange={(event) => setBody(event.currentTarget.value)}
             placeholder={`#ppt-proof\n\nWhat changed:\nProof links/screenshots:\nLocation:\nVerification:`}
+            error={touched && rejection ? rejection.message : undefined}
           />
+          {!rejection && (
+            <Text size="xs" c="dimmed">
+              {describeProofEvidence()}
+            </Text>
+          )}
           <Group justify="flex-end">
             <Button variant="default" onClick={close} disabled={submitting}>
               Cancel
@@ -125,6 +139,7 @@ export default function PptProofButton({
               color="green"
               onClick={handleSubmit}
               loading={submitting}
+              disabled={Boolean(rejection)}
               leftSection={<ClipboardCheck size={14} />}
             >
               Submit Proof

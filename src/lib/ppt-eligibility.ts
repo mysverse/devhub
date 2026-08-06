@@ -34,6 +34,11 @@ import { PROOF_TAG } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { shouldEvaluatePptWebhookHint } from "@/lib/ppt-eligibility-gate";
 import {
+  checkProofBody,
+  isMeaningfulProofBody,
+  isProofFollowUpQuestion,
+} from "@/lib/ppt-proof";
+import {
   describePptNextStep as describePptNextStepBase,
   formatReason,
   getActionForReason as getActionForReasonBase,
@@ -244,25 +249,6 @@ function makeGuidanceComment(reason: PptReason, snapshot: LinearIssueSnapshot) {
   );
 
   return lines.filter(Boolean).join("\n");
-}
-
-function isDevHubGuidanceComment(body: string) {
-  return body.toLowerCase().includes("devhub payout check");
-}
-
-function isMeaningfulProof(body: string) {
-  const cleaned = body.replace(new RegExp(PROOF_TAG, "gi"), "").trim();
-  if (cleaned.length < 40) return false;
-  return /https?:\/\/|!\[|screenshot|screen|video|clip|drive|figma|roblox|studio|place|asset|implemented|location|verified|tested|before|after|commit|branch|pull request|pr/i.test(
-    cleaned,
-  );
-}
-
-function isFollowUpQuestion(body: string) {
-  if (isDevHubGuidanceComment(body)) return false;
-  return /\?|screenshot|proof|provide|details|where|located|implemented|verify|evidence/i.test(
-    body,
-  );
 }
 
 function isUniqueConstraintError(error: unknown) {
@@ -627,7 +613,7 @@ function findQualifyingProof(
         comment.userId === assigneeId &&
         proofAt >= lowerBound &&
         comment.body.toLowerCase().includes(PROOF_TAG) &&
-        isMeaningfulProof(comment.body)
+        isMeaningfulProofBody(comment.body)
       );
     })
     .sort(
@@ -654,7 +640,7 @@ function findResetQuestion(
       const commentAt = comment.editedAt ?? comment.createdAt;
       if (commentAt < completedAt) return false;
       if (proofAt && commentAt <= proofAt) return false;
-      return isFollowUpQuestion(comment.body);
+      return isProofFollowUpQuestion(comment.body);
     })
     .sort(
       (a, b) =>
@@ -2540,10 +2526,12 @@ export async function postPptProofComment({
   body: string;
 }) {
   const trimmedBody = body.trim();
-  if (trimmedBody.length < 20) {
-    return {
-      error: "Proof is too short. Include what changed and where to verify it.",
-    };
+  // Same check the payout evaluator runs on the comment once it comes back off
+  // Linear — rejecting here means the developer gets told, instead of posting
+  // successfully and then never hearing why the payout didn't move.
+  const rejection = checkProofBody(trimmedBody);
+  if (rejection) {
+    return { error: rejection.message };
   }
 
   const client = await getLinearClient(userId);

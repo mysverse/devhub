@@ -27,6 +27,11 @@ const DOMAIN_COPY: Record<string, NotificationPresentation> = {
     tone: "warning",
   },
   recognition: { heading: "Nice work", color: "teal", tone: "positive" },
+  campaign: {
+    heading: "Payout campaign",
+    color: "violet",
+    tone: "positive",
+  },
 };
 
 export const TYPE_OVERRIDES: Record<
@@ -161,6 +166,21 @@ export const TYPE_OVERRIDES: Record<
     color: "orange",
     tone: "warning",
     typeLabel: "Taken over",
+  },
+  "campaign:STARTED": {
+    color: "violet",
+    tone: "positive",
+    typeLabel: "Multiplier live",
+  },
+  "campaign:ENDING_SOON": {
+    color: "orange",
+    tone: "warning",
+    typeLabel: "Ending soon",
+  },
+  "campaign:ENDED": {
+    color: "gray",
+    tone: "info",
+    typeLabel: "Campaign ended",
   },
 };
 

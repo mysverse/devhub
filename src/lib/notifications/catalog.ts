@@ -329,6 +329,37 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     defaults: { in_app: true, email: true },
     configurable: false,
   },
+  // ── Payout campaigns (always sent — this is money on the table) ──────────
+  {
+    domain: "campaign",
+    type: "STARTED",
+    audience: "developer",
+    title: "Payout multiplier started",
+    description:
+      "A limited-time campaign is paying more than the normal rate — what it boosts, and when it ends.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+  },
+  {
+    domain: "campaign",
+    type: "ENDING_SOON",
+    audience: "developer",
+    title: "Payout multiplier ending",
+    description:
+      "A reminder roughly two days before a campaign ends, so nothing you are close to finishing misses it.",
+    defaults: { in_app: true, email: false },
+    configurable: false,
+  },
+  {
+    domain: "campaign",
+    type: "ENDED",
+    audience: "developer",
+    title: "Payout multiplier ended",
+    description:
+      "A wrap-up of what a finished campaign paid you on top of the normal rate.",
+    defaults: { in_app: true, email: false },
+    configurable: false,
+  },
   // ── Recognition (in-app only, deliberately quiet) ────────────────────────
   {
     domain: "recognition",

@@ -206,6 +206,68 @@ misprices real payouts:
 - The promo banner renders inside `AppShellMain`, never the header: `pnpm
   visual` fails when anything wraps out of the fixed 60px bar.
 
+## Activation (getting developers to a first task)
+
+The board is opt-in by design, and the diagnosed failure is people who
+onboard and never claim anything. These invariants exist because each one was
+already broken once:
+
+- **Proof has one rule, in `src/lib/ppt-proof.ts`.** The Proof button, the
+  server action, and the payout evaluator all call `checkProofBody()`. They
+  previously disagreed (20 characters vs 40 plus evidence), so proof could
+  post to Linear successfully and then silently never release payout. Never
+  re-inline a length or a keyword check at a call site.
+- **A rejected proof is `PROOF_NOT_QUALIFYING`, not `MISSING_PROOF`.** The
+  latter means no proof comment exists. Using it for a rejected one tells a
+  developer to post proof they already posted.
+- **Notification preferences are derived from the catalog**, via
+  `configurablePreferenceKeys()`. Never hand-write the allowlist: it drifted
+  to five keys against twelve configurable entries, so fourteen toggles
+  rendered, moved, and silently failed to save. A channel is settable only
+  where the catalog declares it, and it must appear in the emit site's
+  `channels` array or the toggle is decorative.
+- **The re-engagement digest must not gate on prior activity.**
+  `classifyDigestCohort()` splits by how far someone got (unlinked /
+  never-activated / lapsed / idle). The old audience required an existing
+  watch or transaction, which excluded the target population by construction.
+  The only hard exclusion is someone already carrying a task.
+- **Recommendations always carry a `because`.** `rankTasksForDeveloper()` is
+  pure and unit-tested; it matches titles as well as labels because the Linear
+  workspace carries no specialty labels, and it matches whole words only
+  ("rapid transit" contains "api"). A ranked list with no stated reason reads
+  as a lottery.
+- **One task suggestion per person, ever** — enforced by the unique index on
+  `TaskSuggestion(linearIssueId, userId)`, not by a check that can be raced.
+  Claiming resolves outcomes (`CLAIMED` / `TAKEN`), which is the only read on
+  whether pushing work at people works.
+
+## LLM Adapter
+
+`src/lib/llm.ts` (transport), `llm-prompts.ts` (prompts + schemas),
+`llm-suggestions.ts` (the surfaces). Model and request shape live in exactly
+one place.
+
+- **The adapter is always optional.** `getLlmClient()` returns null without
+  `ANTHROPIC_API_KEY`, and `generateStructured()` returns null for every
+  failure — no key, rate limit, refusal, malformed output, network. Callers
+  cannot distinguish them, deliberately: there is one fallback, do it
+  manually. Nothing in the payout chain, and nothing a developer needs in
+  order to get paid, may depend on a model being reachable. Production runs
+  with the key unset until drafts have been reviewed.
+- **No PII goes to the model.** Prompt builders take `PromptIssue` and
+  `PromptDeveloper`, which carry issue text and specialty enums and nothing
+  else — there is no field for a legal name, email, address, or bank detail,
+  and developers are referred to by opaque ref. Widening those types is how
+  this breaks; `llm-prompts.test.ts` asserts their shape.
+- **Output is schema-validated** with `zodOutputFormat` + `messages.parse`, so
+  a caller gets a typed object or null, never prose to regex.
+- **Everything it produces is advisory.** Drafts prefill a form a human
+  submits; triage produces a review queue. The adapter never writes to Linear,
+  creates a transaction, or announces anything.
+- **Dev mode intercepts `api.anthropic.com`** (`src/dev/handlers/anthropic.ts`)
+  and returns a canned reply shaped to the requested schema. `pnpm dev:mock`
+  must never make a real model call.
+
 ## Route Structure
 
 ```text
@@ -240,6 +302,7 @@ src/app/
 - **Transaction/Payout**: payout ledger. `Transaction.source` distinguishes `PPT`, `BONUS`, and `MANUAL`; statuses are `PENDING`, `PAID`, `CANCELLED`, and `REJECTED`.
 - **BonusConfig/BonusCandidate/BonusNotification**: bonus scale/config, synced Linear bonus candidates, and unread developer notification events.
 - **PptRequest**: developer requests for admins to create or mark Linear issues as PPT.
+- **TaskSuggestion**: an admin pointing one developer at one open task, with the reason and the outcome (`CLAIMED`/`TAKEN`). Unique per `(linearIssueId, userId)`.
 - **KycVerification/KycAuditLog**: KYC review and audit history.
 - **SignedDocument/CoiEntry**: NDA/COI document acceptance and conflict disclosures.
 - **WelcomePack/WelcomePackOrder/...**: welcome pack configuration, assets, orders, and item selections.
@@ -257,6 +320,7 @@ LINEAR_CLIENT_ID
 LINEAR_CLIENT_SECRET
 LINEAR_API_KEY                  # optional image-proxy fallback only
 LINEAR_WEBHOOK_SECRET
+ANTHROPIC_API_KEY               # optional; every LLM surface degrades without it
 DISCORD_CLIENT_ID
 DISCORD_CLIENT_SECRET
 DISCORD_BOT_TOKEN

@@ -56,8 +56,6 @@ const BlockSchema = z.object({
 const PptRequestSchema = z.object({
   mode: z.enum(["new", "existing"]),
   linearIssueId: z.string().min(1).nullable(),
-  linearIssueIdentifier: z.string().nullable(),
-  linearIssueUrl: z.string().url().nullable(),
   title: z.string().trim().min(3).max(120),
   teamId: z.string().min(1),
   projectId: z.string().min(1).nullable(),

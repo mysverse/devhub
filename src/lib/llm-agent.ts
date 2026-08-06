@@ -1,9 +1,5 @@
 import type Anthropic from "@anthropic-ai/sdk";
-import { zodResponsesFunction } from "openai/helpers/zod";
-import type {
-  ResponseInputItem,
-  Tool,
-} from "openai/resources/responses/responses";
+import type { ResponseInputItem } from "openai/resources/responses/responses";
 import * as z from "zod/v4";
 import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant-tools";
 import {
@@ -19,6 +15,7 @@ import {
   resolveOpenAiModel,
   safetyIdentifier,
 } from "@/lib/llm";
+import { openAiAssistantTools } from "@/lib/openai-assistant-tools";
 
 const MAX_TOOL_ROUNDS = 4;
 const MAX_OUTPUT_TOKENS = 2_500;
@@ -86,16 +83,6 @@ function json(value: unknown) {
   );
 }
 
-function openAiTools(): Tool[] {
-  return ASSISTANT_TOOLS.map((tool) =>
-    zodResponsesFunction({
-      name: tool.name,
-      description: tool.description,
-      parameters: tool.schema,
-    }),
-  );
-}
-
 function anthropicTools(): Anthropic.Messages.Tool[] {
   return ASSISTANT_TOOLS.map((tool) => ({
     name: tool.name,
@@ -160,7 +147,7 @@ async function runOpenAi(
           model,
           instructions: systemPrompt(input.isAdmin),
           input: items,
-          tools: openAiTools(),
+          tools: openAiAssistantTools(),
           max_output_tokens: MAX_OUTPUT_TOKENS,
           reasoning: { effort: "low", context: "current_turn" },
           text: { verbosity: "medium" },

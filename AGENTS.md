@@ -287,34 +287,40 @@ Both directions used to resolve silently in favour of destroying one side.
 
 ## LLM Adapter
 
-`src/lib/llm.ts` (transport), `llm-prompts.ts` (prompts + schemas),
-`llm-suggestions.ts` (the surfaces). Model and request shape live in exactly
-one place.
+`src/lib/llm.ts` (provider-neutral structured transport), `llm-agent.ts`
+(streamed chat/tool loop), `llm-prompts.ts` (prompts + schemas), and
+`llm-suggestions.ts` (the original drafting surfaces). Provider selection and
+model request shape live at these boundaries, never at call sites.
 
-- **The adapter is always optional.** `getLlmClient()` returns null without
-  `ANTHROPIC_API_KEY`, and `generateStructured()` returns null for every
-  failure — no key, rate limit, refusal, malformed output, network. Callers
-  cannot distinguish them, deliberately: there is one fallback, do it
-  manually. Nothing in the payout chain, and nothing a developer needs in
-  order to get paid, may depend on a model being reachable. Production runs
-  with the key unset until drafts have been reviewed.
+- **The adapter is always optional.** Provider order comes from `LLM_PROVIDER`
+  and `LLM_FALLBACK_PROVIDER`, filtered to providers with keys.
+  `generateStructured()` returns null for every terminal failure — no key,
+  rate limit, refusal, malformed output, network — so existing surfaces keep
+  one manual fallback. Nothing in the payout chain, and nothing a developer
+  needs in order to get paid, may depend on a model being reachable.
 - **No PII goes to the model.** Prompt builders take `PromptIssue` and
   `PromptDeveloper`, which carry issue text and specialty enums and nothing
   else — there is no field for a legal name, email, address, or bank detail,
-  and developers are referred to by opaque ref. Widening those types is how
-  this breaks; `llm-prompts.test.ts` asserts their shape.
-- **Output is schema-validated** with `zodOutputFormat` + `messages.parse`, so
-  a caller gets a typed object or null, never prose to regex.
-- **The request shape is not uniform across models.** `MODELS` in `llm.ts` is
-  the allow-list: Sonnet 5 and Opus 5 take adaptive thinking plus an `effort`
-  level, Haiku 4.5 predates both and needs `budget_tokens` while rejecting
-  `effort`. Add a model there or it can't be selected; getting the pairing
-  wrong is a 400, not a worse answer. Effort defaults to `low` — this is
-  advisory output a human reviews, so cost beats depth unless a caller says
-  otherwise.
-- **Everything it produces is advisory.** Drafts prefill a form a human
-  submits; triage produces a review queue. The adapter never writes to Linear,
-  creates a transaction, or announces anything.
+  and developers are referred to by opaque ref. Chat stores the user's local
+  message but sends only the redacted context window; tool output is redacted
+  again before it returns to the provider. Widening prompt types or bypassing
+  `prepareAssistantTurn()` is how this breaks.
+- **Structured output is schema-validated** with provider-native Zod helpers:
+  OpenAI Responses uses `zodTextFormat` + `responses.parse`; Anthropic uses
+  `zodOutputFormat` + `messages.parse`. Callers get a typed object or null,
+  never prose to regex.
+- **Request shape is provider/model-specific.** OpenAI GPT 5.6 uses Responses
+  with low effort, current-turn reasoning context, medium verbosity,
+  `store:false`, and a hashed safety identifier. Anthropic Sonnet/Opus use
+  adaptive thinking while Haiku uses a token budget. Keep these pairings at
+  the transport boundary; a wrong pairing is a 400, not a worse answer.
+- **A model never executes a write.** Chat read tools may run immediately.
+  Every `propose_*` tool only persists an expiring `AssistantAction`; the UI
+  renders its exact payload and a separate authenticated request confirms it.
+  Confirmation revalidates ownership/current Linear state and compare-and-set
+  transitions the action before calling existing domain actions. Payouts,
+  payment details, KYC, access, labels, estimates, and bulk/destructive changes
+  are outside the tool set.
 - **Every call is metered and capped.** `LlmCall` is both the usage record and
   the rate-limit ledger; `checkLlmRateLimits` counts a rolling hour, copied from
   `checkEmailRateLimits`. Hitting a cap returns null, which every caller already
@@ -328,9 +334,9 @@ one place.
 - **The model is never trusted with a reference.** It receives issue identifiers
   and returns identifiers; the server re-anchors against exactly what it sent,
   and an unknown identifier is demoted, never believed.
-- **Dev mode intercepts `api.anthropic.com`** (`src/dev/handlers/anthropic.ts`)
-  and returns a canned reply shaped to the requested schema. `pnpm dev:mock`
-  must never make a real model call.
+- **Dev mode intercepts both provider hosts.** `src/dev/handlers/openai.ts`
+  returns Responses JSON/SSE and `anthropic.ts` returns Messages replies.
+  `pnpm dev:mock` must never make a real model call.
 
 ## Route Structure
 
@@ -388,6 +394,12 @@ LINEAR_API_KEY                  # optional image-proxy fallback only
 LINEAR_WEBHOOK_SECRET
 ANTHROPIC_API_KEY               # optional; every LLM surface degrades without it
 ANTHROPIC_MODEL                 # optional; default claude-sonnet-5
+OPENAI_API_KEY                  # optional; enables OpenAI Responses
+OPENAI_MODEL                    # optional; default gpt-5.6-luna
+LLM_PROVIDER                    # optional; openai or anthropic
+LLM_FALLBACK_PROVIDER           # optional; other provider or none
+LLM_ASSISTANT_ENABLED           # optional; false hides/disables chat
+LLM_ASSISTANT_MAX_TURNS_PER_HOUR # optional; default 20, 0 disables
 LLM_MAX_CALLS_PER_HOUR          # optional; rolling-hour cap, 0 disables
 LLM_MAX_CALLS_PER_USER_PER_HOUR # optional; per-user cap, 0 disables
 DISCORD_CLIENT_ID

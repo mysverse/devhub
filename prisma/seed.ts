@@ -274,6 +274,58 @@ export async function seed() {
     });
   }
 
+  // A complete assistant thread keeps the chat transcript and confirmation
+  // card visible in screenshots without making any external model request.
+  await prisma.assistantConversation.create({
+    data: {
+      id: "assistant-conversation-developer",
+      userId: devId,
+      title: "Plan a spawn audit tool",
+      messages: {
+        create: [
+          {
+            id: "assistant-message-developer-user",
+            role: "USER",
+            content:
+              "Help me turn a spawn-point audit tool into a small, verifiable task.",
+          },
+          {
+            id: "assistant-message-developer-reply",
+            role: "ASSISTANT",
+            content:
+              "A tight first version can scan the current place, list every spawn point, and flag duplicate names or missing team assignments. I prepared an ordinary Linear issue for review; it is not a PPT and does not guarantee payment.",
+            provider: "openai",
+            model: "gpt-5.6-luna",
+          },
+        ],
+      },
+      actions: {
+        create: {
+          id: "assistant-action-developer-create",
+          messageId: "assistant-message-developer-reply",
+          userId: devId,
+          kind: "create_task",
+          payload: {
+            title: "Add a spawn-point audit tool",
+            description:
+              "Scan the active place and report duplicate spawn names and missing team assignments.",
+            teamId: LINEAR_TEAM.id,
+            projectId: LINEAR_PROJECT.id,
+            dueDate: dateOnlyUtc(new Date(now.getTime() + 7 * 86_400_000)),
+          },
+          preview: {
+            title: "Create ordinary Linear issue: Add a spawn-point audit tool",
+            description:
+              "Creates an unlabelled Linear issue in the selected team.",
+            warning: "This is not a PPT and does not guarantee payment.",
+          },
+          expiresAt: new Date(now.getTime() + 7 * 86_400_000),
+          idempotencyKey: "assistant:seed:create-spawn-audit",
+        },
+      },
+    },
+  });
+
   // ── Access & integration config ────────────────────────────────────────────
   await prisma.accessIntegrationConfig.create({
     data: {

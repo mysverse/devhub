@@ -27,7 +27,7 @@ function field(prompt: string, label: string) {
 }
 
 /** Which canned response fits, based on the schema the caller asked for. */
-function buildReply(body: MessageRequest) {
+export function buildReply(body: MessageRequest) {
   const prompt = promptText(body);
   const properties =
     (body.output_config?.format?.schema?.properties as

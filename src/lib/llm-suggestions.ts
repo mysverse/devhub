@@ -1,14 +1,20 @@
 import { generateStructured } from "@/lib/llm";
 import {
   buildPptDraftPrompt,
+  buildTaskIdeaPrompt,
   buildTaskReasonPrompt,
   PPT_DRAFT_SCHEMA,
   PPT_DRAFT_SYSTEM,
   type PptDraft,
   type PromptDeveloper,
+  type PromptDeveloperContext,
   type PromptIssue,
+  type PromptScope,
+  TASK_IDEA_SCHEMA,
+  TASK_IDEA_SYSTEM,
   TASK_REASON_SCHEMA,
   TASK_REASON_SYSTEM,
+  type TaskIdeaSuggestions,
 } from "@/lib/llm-prompts";
 
 // The drafting surfaces. Every one returns null when the adapter is
@@ -57,4 +63,37 @@ export async function explainTaskForDeveloper(
     maxTokens: 300,
   });
   return result?.reason?.trim() || deterministicReason;
+}
+
+/**
+ * Existing backlog issues worth picking up, plus original work that isn't in
+ * Linear yet. Returns null on anything at all going wrong, so the caller
+ * falls back to the deterministic ranker.
+ */
+export async function proposeTaskIdeas(input: {
+  developer: PromptDeveloper;
+  context: PromptDeveloperContext;
+  backlog: PromptIssue[];
+  scope: PromptScope | null;
+  request: string | null;
+  limit: number;
+  userId: string | null;
+}): Promise<TaskIdeaSuggestions | null> {
+  return generateStructured({
+    surface: "task_ideas",
+    userId: input.userId,
+    system: TASK_IDEA_SYSTEM,
+    prompt: buildTaskIdeaPrompt({
+      developer: input.developer,
+      context: input.context,
+      backlog: input.backlog,
+      scope: input.scope,
+      request: input.request,
+      limit: input.limit,
+    }),
+    schema: TASK_IDEA_SCHEMA,
+    // Several ideas, each with criteria — the largest shape here, and the
+    // reason max_tokens became per-surface.
+    maxTokens: 4_000,
+  });
 }

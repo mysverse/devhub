@@ -3,10 +3,12 @@
 import {
   ActionIcon,
   Alert,
+  Anchor,
   Badge,
   Button,
   Code,
   Group,
+  Image,
   Loader,
   Stack,
   Text,
@@ -14,12 +16,14 @@ import {
   Tooltip,
 } from "@mantine/core";
 import {
+  ArrowRight,
   Bot,
   Check,
   CheckCircle2,
   CircleAlert,
   CircleDashed,
   Clipboard,
+  ExternalLink,
   FilePenLine,
   Lightbulb,
   ListChecks,
@@ -39,9 +43,11 @@ import { SPRING } from "@/components/animations";
 import MermaidDiagram from "@/components/MermaidDiagram";
 import type {
   AssistantActionDto,
+  AssistantLinearIssueReference,
   AssistantMessageDto,
 } from "@/lib/assistant-types";
 import classes from "./AssistantExperience.module.css";
+import { assistantReplySuggestions } from "./assistant-suggestions";
 
 export type AssistantRunActivity = {
   id: string;
@@ -107,20 +113,34 @@ function displayValue(key: string, value: unknown) {
   return text;
 }
 
-function payloadFields(payload: unknown) {
+function payloadFields(kind: string, payload: unknown) {
   if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
     return [];
   }
-  return Object.entries(payload as Record<string, unknown>)
-    .filter(
-      ([key, value]) =>
-        value !== null &&
-        value !== "" &&
-        !key.toLowerCase().endsWith("id") &&
-        key !== "linearIssueIdentifier" &&
-        key !== "linearIssueUrl",
-    )
-    .slice(0, 8);
+  const entries = Object.entries(payload as Record<string, unknown>).filter(
+    ([key, value]) =>
+      value !== null &&
+      value !== "" &&
+      key !== "title" &&
+      key !== "mode" &&
+      !key.toLowerCase().endsWith("id") &&
+      key !== "linearIssueIdentifier" &&
+      key !== "linearIssueUrl",
+  );
+  if (kind === "ppt_request") {
+    const preferred = [
+      "projectName",
+      "dueDate",
+      "estimate",
+      "assigneeIntent",
+      "description",
+    ];
+    return preferred.flatMap((key) => {
+      const entry = entries.find(([candidate]) => candidate === key);
+      return entry ? [entry] : [];
+    });
+  }
+  return entries.slice(0, 6);
 }
 
 function ActionCard({
@@ -133,7 +153,7 @@ function ActionCard({
   const [busy, setBusy] = useState(false);
   const pending = action.status === "PENDING";
   const status = STATUS_COPY[action.status];
-  const fields = payloadFields(action.payload);
+  const fields = payloadFields(action.kind, action.payload);
 
   async function decide(decision: "confirm" | "cancel") {
     setBusy(true);
@@ -325,6 +345,103 @@ function AssistantMarkdown({ content }: { content: string }) {
   );
 }
 
+function LinearIssueCard({
+  reference,
+}: {
+  reference: AssistantLinearIssueReference;
+}) {
+  const imageUrl = reference.imageUrl
+    ? `/api/image-proxy?url=${encodeURIComponent(reference.imageUrl)}`
+    : null;
+  return (
+    <Anchor
+      className={classes.linearReference}
+      href={reference.url}
+      target="_blank"
+      rel="noreferrer"
+      underline="never"
+      aria-label={`Open ${reference.identifier} in Linear`}
+    >
+      {imageUrl && (
+        <Image
+          className={classes.linearReferenceImage}
+          src={imageUrl}
+          alt=""
+          height={96}
+        />
+      )}
+      <Stack gap={6} p="sm" style={{ minWidth: 0 }}>
+        <Group justify="space-between" wrap="nowrap" gap="xs">
+          <Group gap={5} wrap="wrap">
+            <Badge size="xs" variant="light" color="blue">
+              {reference.identifier}
+            </Badge>
+            <Badge size="xs" variant="dot" color="gray">
+              {reference.stateName}
+            </Badge>
+            {reference.estimate !== null && (
+              <Badge size="xs" variant="outline" color="grape">
+                Level {reference.estimate}
+              </Badge>
+            )}
+          </Group>
+          <ExternalLink
+            size={14}
+            color="var(--mantine-color-dimmed)"
+            style={{ flexShrink: 0 }}
+          />
+        </Group>
+        <Text size="sm" fw={750} c="bright" lh={1.35}>
+          {reference.title}
+        </Text>
+        {reference.description && (
+          <Text size="xs" c="dimmed" lineClamp={2} lh={1.45}>
+            {reference.description}
+          </Text>
+        )}
+        {reference.labelNames.length > 0 && (
+          <Group gap={5}>
+            {reference.labelNames.slice(0, 3).map((label) => (
+              <Badge key={label} size="xs" variant="outline" color="gray">
+                {label}
+              </Badge>
+            ))}
+          </Group>
+        )}
+      </Stack>
+    </Anchor>
+  );
+}
+
+function MessageReferences({
+  references,
+}: {
+  references: AssistantLinearIssueReference[];
+}) {
+  if (references.length === 0) return null;
+  const visible = references.slice(0, 3);
+  const rest = references.slice(3);
+  return (
+    <Stack gap={8} mt="sm">
+      {visible.map((reference) => (
+        <LinearIssueCard key={reference.id} reference={reference} />
+      ))}
+      {rest.length > 0 && (
+        <details className={classes.moreReferences}>
+          <summary>
+            Show {rest.length} more {rest.length === 1 ? "task" : "tasks"}
+          </summary>
+          <Stack gap={8} mt={8}>
+            {rest.map((reference) => (
+              <LinearIssueCard key={reference.id} reference={reference} />
+            ))}
+          </Stack>
+        </details>
+      )}
+    </Stack>
+  );
+}
+
 function ActivityList({
   activities,
   providerTrail,
@@ -391,14 +508,17 @@ export function AssistantMessage({
   activities = [],
   providerTrail = [],
   onRetry,
+  onPrompt,
 }: {
   message: AssistantMessageDto;
   onActionChange: (action: AssistantActionDto) => void;
   activities?: AssistantRunActivity[];
   providerTrail?: string[];
   onRetry?: () => void;
+  onPrompt?: (prompt: string) => void;
 }) {
   const assistant = message.role === "assistant";
+  const suggestions = assistantReplySuggestions(message);
 
   async function copyMessage() {
     try {
@@ -451,6 +571,8 @@ export function AssistantMessage({
             </Group>
           ) : null}
 
+          <MessageReferences references={message.references} />
+
           <AnimatePresence initial={false}>
             {(activities.length > 0 || providerTrail.length > 1) && (
               <motion.div
@@ -501,6 +623,23 @@ export function AssistantMessage({
               onChange={onActionChange}
             />
           ))}
+
+          {onPrompt && suggestions.length > 0 && (
+            <Group gap={6} mt="sm">
+              {suggestions.map((suggestion) => (
+                <Button
+                  key={suggestion}
+                  size="compact-xs"
+                  variant="light"
+                  color={suggestion.includes("PPT") ? "blue" : "gray"}
+                  rightSection={<ArrowRight size={11} />}
+                  onClick={() => onPrompt(suggestion)}
+                >
+                  {suggestion}
+                </Button>
+              ))}
+            </Group>
+          )}
         </div>
 
         {message.content && (

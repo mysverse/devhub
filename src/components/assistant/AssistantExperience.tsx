@@ -49,6 +49,7 @@ import type {
   AssistantConversationDto,
   AssistantConversationSummary,
   AssistantMessageDto,
+  AssistantReferenceDto,
   AssistantStreamEvent,
 } from "@/lib/assistant-types";
 import classes from "./AssistantExperience.module.css";
@@ -93,6 +94,28 @@ function upsertAction(
   });
 }
 
+function addReferences(
+  messages: AssistantMessageDto[],
+  references: AssistantReferenceDto[],
+) {
+  return messages.map((message) => {
+    if (message.role !== "assistant" || message.status !== "PENDING") {
+      return message;
+    }
+    return {
+      ...message,
+      references: [
+        ...new Map(
+          [...message.references, ...references].map((reference) => [
+            `${reference.kind}:${reference.id}`,
+            reference,
+          ]),
+        ).values(),
+      ],
+    };
+  });
+}
+
 function starterIcon(label: string) {
   if (label === "Shape an idea") return <Lightbulb size={18} />;
   if (label === "Plan my next move") return <Compass size={18} />;
@@ -127,6 +150,7 @@ export default function AssistantExperience({
   const controllerRef = useRef<AbortController | null>(null);
   const runMessageIdRef = useRef<string | null>(null);
   const stickToBottomRef = useRef(true);
+  const conversationRequestRef = useRef(0);
   const loadedRef = useRef(mode === "page");
   const lastMessage = active?.messages.at(-1);
   const scrollSignal = [
@@ -136,6 +160,7 @@ export default function AssistantExperience({
     lastMessage?.actions
       .map((action) => `${action.id}:${action.status}`)
       .join(","),
+    lastMessage?.references.map((reference) => reference.id).join(","),
     activities.map((activity) => `${activity.id}:${activity.phase}`).join(","),
   ].join(":");
 
@@ -167,11 +192,13 @@ export default function AssistantExperience({
   }, []);
 
   const openConversation = useCallback(async (id: string) => {
+    const requestId = ++conversationRequestRef.current;
     setLoading(true);
     try {
       const data = await responseJson<{
         conversation: AssistantConversationDto;
       }>(await fetch(`/api/assistant/conversations/${id}`));
+      if (requestId !== conversationRequestRef.current) return;
       setActive(data.conversation);
       setActivities([]);
       setProviderTrail([]);
@@ -183,7 +210,7 @@ export default function AssistantExperience({
         error instanceof Error ? error.message : "Could not load this chat.",
       );
     } finally {
-      setLoading(false);
+      if (requestId === conversationRequestRef.current) setLoading(false);
     }
   }, []);
 
@@ -204,6 +231,7 @@ export default function AssistantExperience({
   }, [available, enabled, openConversation, refreshList]);
 
   async function createConversation() {
+    const requestId = ++conversationRequestRef.current;
     const data = await responseJson<{
       conversation: AssistantConversationSummary;
     }>(await fetch("/api/assistant/conversations", { method: "POST" }));
@@ -211,6 +239,7 @@ export default function AssistantExperience({
       ...data.conversation,
       messages: [],
     };
+    if (requestId !== conversationRequestRef.current) return conversation;
     setConversations((current) => [
       data.conversation,
       ...current.filter((item) => item.id !== data.conversation.id),
@@ -339,6 +368,17 @@ export default function AssistantExperience({
       );
       return;
     }
+    if (event.type === "references") {
+      setActive((current) =>
+        current
+          ? {
+              ...current,
+              messages: addReferences(current.messages, event.references),
+            }
+          : current,
+      );
+      return;
+    }
     const finalMessage = event.message;
     if (!finalMessage) {
       if (event.type === "error") toast.error(event.error);
@@ -436,6 +476,15 @@ export default function AssistantExperience({
     markInterrupted();
   }
 
+  function handlePrompt(prompt: string, prefill?: string) {
+    if (prefill || /help me scope an idea/i.test(prompt)) {
+      setDraft(prefill ?? "I want to build ");
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+      return;
+    }
+    sendMessage(prompt);
+  }
+
   function updateAction(action: AssistantActionDto) {
     setActive((current) =>
       current
@@ -504,7 +553,24 @@ export default function AssistantExperience({
           <Group gap={3} wrap="nowrap" style={{ flexShrink: 0 }}>
             {loading && <Loader size="xs" />}
             {compact && (
-              <Menu position="bottom-end" withinPortal width={260}>
+              <Tooltip label="New chat">
+                <ActionIcon
+                  variant="subtle"
+                  color="gray"
+                  aria-label="New chat"
+                  disabled={sending}
+                  onClick={() =>
+                    createConversation().catch((error) =>
+                      toast.error(error.message),
+                    )
+                  }
+                >
+                  <Plus size={17} />
+                </ActionIcon>
+              </Tooltip>
+            )}
+            {compact && (
+              <Menu position="bottom-end" withinPortal width={260} zIndex={410}>
                 <MenuTarget>
                   <Tooltip label="Recent chats">
                     <ActionIcon
@@ -516,7 +582,7 @@ export default function AssistantExperience({
                     </ActionIcon>
                   </Tooltip>
                 </MenuTarget>
-                <MenuDropdown>
+                <MenuDropdown className={classes.chatMenuDropdown}>
                   {conversations.slice(0, 8).map((conversation) => (
                     <MenuItem
                       key={conversation.id}
@@ -618,6 +684,7 @@ export default function AssistantExperience({
                 onActionChange={updateAction}
                 activities={message.id === runMessageId ? activities : []}
                 providerTrail={message.id === runMessageId ? providerTrail : []}
+                onPrompt={handlePrompt}
                 onRetry={
                   retryPrompts.has(message.id)
                     ? () => sendMessage(retryPrompts.get(message.id))
@@ -668,7 +735,9 @@ export default function AssistantExperience({
                     >
                       <UnstyledButton
                         className={classes.starterCard}
-                        onClick={() => sendMessage(starter.prompt)}
+                        onClick={() =>
+                          handlePrompt(starter.prompt, starter.prefill)
+                        }
                         disabled={sending}
                       >
                         <Group gap="sm" wrap="nowrap" align="flex-start">
@@ -708,7 +777,7 @@ export default function AssistantExperience({
                   color="gray"
                   radius="xl"
                   disabled={sending}
-                  onClick={() => sendMessage(prompt)}
+                  onClick={() => handlePrompt(prompt)}
                   style={{ flex: "0 0 auto" }}
                 >
                   {prompt}

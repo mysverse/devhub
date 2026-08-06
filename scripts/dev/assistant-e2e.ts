@@ -12,17 +12,48 @@ import { chromium, type Locator, type Page } from "playwright";
 config({ path: ".env.mock", override: true, quiet: true });
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+const PERSONA =
+  process.env.ASSISTANT_E2E_PERSONA === "admin" ? "admin" : "developer";
 
 async function waitForText(locator: Locator, timeout = 20_000) {
   await locator.waitFor({ state: "visible", timeout });
 }
 
 async function newChat(page: Page) {
-  await page.getByRole("button", { name: "Recent chats" }).click();
-  await page.getByRole("menuitem", { name: "New chat" }).click();
+  await page.getByRole("button", { name: "New chat" }).click();
+  await page
+    .getByRole("button", { name: "Shape an idea" })
+    .waitFor({ state: "visible" });
   await page
     .getByRole("textbox", { name: "Message DevHub Assistant" })
     .waitFor({ state: "visible" });
+}
+
+async function assertRecentChatsUsable(page: Page) {
+  await page.getByRole("button", { name: "Recent chats" }).click();
+  const menu = page.getByRole("menu");
+  await menu.waitFor({ state: "visible" });
+  const audit = await menu.evaluate((element) => {
+    const box = element.getBoundingClientRect();
+    const topmost = document.elementFromPoint(
+      box.left + box.width / 2,
+      box.top + Math.min(box.height / 2, 40),
+    );
+    return {
+      top: box.top,
+      right: box.right,
+      bottom: box.bottom,
+      left: box.left,
+      topmost: Boolean(topmost && element.contains(topmost)),
+    };
+  });
+  assert.ok(audit.top >= 0 && audit.left >= 0);
+  assert.ok(audit.right <= (await page.evaluate(() => window.innerWidth)) + 1);
+  assert.ok(
+    audit.bottom <= (await page.evaluate(() => window.innerHeight)) + 1,
+  );
+  assert.ok(audit.topmost, "Recent chats must render above the overlay");
+  await page.keyboard.press("Escape");
 }
 
 async function send(page: Page, message: string) {
@@ -38,8 +69,10 @@ async function assertChatBounds(page: Page, viewportWidth: number) {
   const audit = await dialog.evaluate((root) => {
     const box = root.getBoundingClientRect();
     const shell = root.firstElementChild?.getBoundingClientRect();
+    const messageViewport = root.querySelector(".mantine-ScrollArea-viewport");
     const outside = [...root.querySelectorAll("button, textarea, input")]
       .filter((node) => {
+        if (node.closest(".mantine-ScrollArea-viewport")) return false;
         const rect = node.getBoundingClientRect();
         return (
           rect.left < box.left - 1 ||
@@ -57,6 +90,9 @@ async function assertChatBounds(page: Page, viewportWidth: number) {
     return {
       outside,
       panelOverflow: root.scrollHeight - root.clientHeight,
+      messageHorizontalOverflow: messageViewport
+        ? messageViewport.scrollWidth - messageViewport.clientWidth
+        : Number.POSITIVE_INFINITY,
       shellGap: shell
         ? Math.abs(box.bottom - shell.bottom)
         : Number.POSITIVE_INFINITY,
@@ -68,6 +104,10 @@ async function assertChatBounds(page: Page, viewportWidth: number) {
   assert.ok(
     audit.panelOverflow <= 1,
     "The assistant panel itself must not scroll",
+  );
+  assert.ok(
+    audit.messageHorizontalOverflow <= 1,
+    "Messages must not overflow horizontally",
   );
   assert.ok(
     audit.shellGap <= 1,
@@ -108,7 +148,7 @@ async function main() {
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
   try {
-    await page.goto(`${BASE_URL}/api/dev/login?as=admin`, {
+    await page.goto(`${BASE_URL}/api/dev/login?as=${PERSONA}`, {
       waitUntil: "load",
       timeout: 60_000,
     });
@@ -130,12 +170,30 @@ async function main() {
     await page
       .getByRole("dialog", { name: "DevHub Assistant" })
       .waitFor({ state: "visible" });
+    fs.mkdirSync(path.join(process.cwd(), "screenshots"), { recursive: true });
+    await waitForText(page.getByRole("button", { name: "New chat" }));
+    await assertRecentChatsUsable(page);
 
     await newChat(page);
-    await send(page, "What tasks am I currently assigned?");
+    await send(page, "Find task MYS-201");
     await waitForText(page.getByText("1 check used"));
     await page.getByText("1 check used").click();
-    await waitForText(page.getByText("Active tasks ready"));
+    await waitForText(page.getByText("Task search ready"));
+    await waitForText(
+      page.getByRole("link", { name: "Open MYS-201 in Linear" }),
+    );
+    await page.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "assistant-linear-references-desktop.png",
+      ),
+    });
+    await page.reload({ waitUntil: "load" });
+    await page.getByRole("button", { name: "Open DevHub Assistant" }).click();
+    await waitForText(
+      page.getByRole("link", { name: "Open MYS-201 in Linear" }),
+    );
 
     await newChat(page);
     await send(page, "Prepare an ordinary task for a spawn audit");
@@ -146,13 +204,50 @@ async function main() {
     await assertManualScrollHolds(page);
 
     await newChat(page);
-    await send(page, "Test fallback");
-    await waitForText(page.getByText("Backup used"));
-    await page.getByText("Backup used").click();
+    await page.getByRole("button", { name: "Shape an idea" }).click();
+    const composer = page.getByRole("textbox", {
+      name: "Message DevHub Assistant",
+    });
+    assert.equal(await composer.inputValue(), "I want to build ");
+    await composer.fill(
+      "I want to make a realistic Proton X90-inspired civilian car for Lebuhraya in Roblox, with a basic interior",
+    );
+    await composer.press("Enter");
+    await waitForText(page.getByText("Working draft"));
+    await page.getByRole("button", { name: "Make this a PPT" }).click();
+    await waitForText(page.getByText(/due date \+ estimate/i));
+    await send(page, "End of this month, estimate 3. Test fallback");
+    await waitForText(
+      page.getByText(
+        "Submit PPT request: Create a realistic Proton X90-inspired civilian car",
+      ),
+    );
+    await waitForText(page.getByRole("button", { name: "Confirm" }));
+    await waitForText(page.getByText("2 checks used"));
+    await page.getByText("2 checks used").click();
     await waitForText(
       page.getByText("Primary assistant paused. Backup took over."),
     );
-    await waitForText(page.getByText(/switched to the backup/i));
+    await waitForText(page.getByText("Project destination ready"));
+    await waitForText(page.getByText(/backup finished the job/i));
+    await assertChatBounds(page, 1280);
+    await page.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "assistant-idea-to-ppt-desktop.png",
+      ),
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertChatBounds(page, 390);
+    await page.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "assistant-idea-to-ppt-mobile.png",
+      ),
+    });
+    await page.setViewportSize({ width: 1280, height: 850 });
 
     await newChat(page);
     await send(page, "Explain the task flow with a diagram");
@@ -160,7 +255,6 @@ async function main() {
       .getByRole("img", { name: "Assistant diagram" })
       .waitFor({ state: "visible", timeout: 30_000 });
     await assertChatBounds(page, 1280);
-    fs.mkdirSync(path.join(process.cwd(), "screenshots"), { recursive: true });
     await page.screenshot({
       path: path.join(
         process.cwd(),
@@ -178,6 +272,8 @@ async function main() {
       `Assistant dialog overflows mobile by ${box.width - 390}px`,
     );
     await assertChatBounds(page, 390);
+    await waitForText(page.getByRole("button", { name: "New chat" }));
+    await assertRecentChatsUsable(page);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
@@ -192,10 +288,12 @@ async function main() {
     });
     assert.deepEqual(pageErrors, []);
     console.log("✓ read tool activity");
+    console.log("✓ rich Linear task references");
     console.log("✓ multi-round action proposal");
-    console.log("✓ OpenAI 400 → Anthropic streamed fallback");
+    console.log("✓ rough idea → PPT in three user turns");
+    console.log("✓ OpenAI 400 → Anthropic tool/action fallback");
     console.log("✓ Mermaid response rendering");
-    console.log("✓ mobile overlay bounds");
+    console.log("✓ recent/new chat controls on desktop and mobile");
   } finally {
     await context.close();
     await browser.close();

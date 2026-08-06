@@ -1,6 +1,7 @@
 export type AssistantPrompt = {
   label: string;
   prompt: string;
+  prefill?: string;
   description: string;
   tone: "blue" | "cyan" | "grape" | "teal";
 };
@@ -9,6 +10,7 @@ export const ASSISTANT_STARTERS: AssistantPrompt[] = [
   {
     label: "Shape an idea",
     prompt: "Help me turn a rough idea into a small, well-scoped task",
+    prefill: "I want to build ",
     description: "Turn a fuzzy thought into a clear next step.",
     tone: "grape",
   },

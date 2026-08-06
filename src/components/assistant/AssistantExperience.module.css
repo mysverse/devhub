@@ -65,6 +65,12 @@
   min-width: 0;
 }
 
+.chatMenuDropdown {
+  max-height: min(520px, calc(100dvh - 88px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .assistantOrb {
   position: relative;
   isolation: isolate;
@@ -256,6 +262,39 @@
   border: 1px solid rgba(116, 143, 252, 0.16);
   border-radius: var(--mantine-radius-md);
   background: rgba(25, 113, 194, 0.06);
+}
+
+.linearReference {
+  display: block;
+  overflow: hidden;
+  border: 1px solid rgba(116, 143, 252, 0.24);
+  border-radius: var(--mantine-radius-md);
+  color: inherit;
+  background: rgba(20, 21, 23, 0.62);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    background-color var(--duration-fast) var(--ease-out),
+    transform var(--duration-fast) var(--ease-out);
+}
+
+.linearReference:hover {
+  border-color: var(--mantine-color-blue-5);
+  background: rgba(34, 139, 230, 0.08);
+  transform: translateY(-1px);
+}
+
+.linearReferenceImage {
+  width: 100%;
+  object-fit: cover;
+  border-bottom: 1px solid var(--mantine-color-dark-4);
+  background: var(--mantine-color-dark-8);
+}
+
+.moreReferences summary {
+  width: fit-content;
+  cursor: pointer;
+  color: var(--mantine-color-blue-3);
+  font-size: var(--mantine-font-size-xs);
 }
 
 .activityRail summary {

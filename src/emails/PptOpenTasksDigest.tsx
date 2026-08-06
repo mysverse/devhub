@@ -9,7 +9,13 @@ export default function PptOpenTasksDigest({
   totalCount,
 }: {
   userName: string;
-  tasks: { identifier: string; title: string; payoutLabel: string }[];
+  tasks: {
+    identifier: string;
+    title: string;
+    payoutLabel: string;
+    /** Why this task was picked for this developer, from the ranker. */
+    because?: string;
+  }[];
   totalCount: number;
 }) {
   return (
@@ -48,6 +54,14 @@ export default function PptOpenTasksDigest({
             <span style={{ color: "#69db7c", fontWeight: 600 }}>
               {task.payoutLabel}
             </span>
+            {task.because && (
+              <>
+                <br />
+                <span style={{ color: "#909296", fontSize: "12px" }}>
+                  {task.because}
+                </span>
+              </>
+            )}
           </Text>
         ))}
       </Section>

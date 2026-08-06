@@ -164,6 +164,7 @@ const CRON_ROUTES = [
   "incentives-weekly",
   "incentives-release",
   "ppt-admin-digest",
+  "ppt-open-tasks-digest",
   "ppt-eligibility",
   "ppt-assignment-watch",
   "data-retention",

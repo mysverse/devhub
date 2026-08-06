@@ -143,10 +143,14 @@ export async function seed() {
         name: user.name,
         email: user.email,
         emailVerified: true,
+        // Account age is load-bearing: the first-task invite holds off for a
+        // grace period after signup, so a "created now" user would be skipped
+        // and the never-activated path would look broken.
+        createdAt: daysAgo(user.userId === "dev-user-nadia" ? 30 : 500),
       },
     });
   }
-  const [bala, mei, ravi] = BACKGROUND_USERS;
+  const [bala, mei, ravi, nadia] = BACKGROUND_USERS;
 
   /** linearId → DB userId for everyone with a profile. */
   const userIdByLinearId = new Map<string, string>([
@@ -230,6 +234,17 @@ export async function seed() {
       rank: "JUNIOR_DEVELOPER" as const,
       specialties: ["SCRIPTING" as const],
       paymentMethod: "ROBUX" as const,
+      duitNowId: null,
+    },
+    {
+      // Never claimed anything: no watches, no transactions, nothing below
+      // references her. Deliberately left empty so the re-engagement path has
+      // a real subject.
+      user: nadia,
+      legalName: "Nadia binti Rahman",
+      rank: "PROBATIONARY_DEVELOPER" as const,
+      specialties: ["BUILDING" as const],
+      paymentMethod: "PAYPAL" as const,
       duitNowId: null,
     },
   ];

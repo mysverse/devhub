@@ -99,12 +99,12 @@ async function notifyOpenPptAvailable({
   issueTitle: string;
   issueUrl: string | null | undefined;
 }) {
+  // Deliberately not filtered on linearId. Onboarding doesn't guarantee one,
+  // and excluding those developers made them invisible to every push surface
+  // DevHub has — they could not learn a task existed. They get the broadcast
+  // and find the "connect Linear" step waiting when they act on it.
   const users = await prisma.userProfile.findMany({
-    where: {
-      id: { not: requesterId },
-      linearId: { not: null },
-      role: "DEVELOPER",
-    },
+    where: { id: { not: requesterId }, role: "DEVELOPER" },
     include: { user: { select: { email: true } } },
   });
 

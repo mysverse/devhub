@@ -102,4 +102,18 @@ export const BACKGROUND_USERS: BackgroundUser[] = [
     discordId: "100000000000000005",
     robloxId: "20000005",
   },
+  {
+    // Onboarded and then nothing: no claim, no transaction, no activity ever.
+    // This is the population the activation work targets, and the one the old
+    // digest audience filter excluded by construction — every other seeded
+    // developer has history, so without this fixture the re-engagement path
+    // has nobody to prove itself against.
+    userId: "dev-user-nadia",
+    email: "nadia@devhub.mock",
+    name: "Nadia Newcomer",
+    preferredName: "Nadia",
+    linearId: "linear-user-nadia",
+    discordId: "100000000000000006",
+    robloxId: "20000006",
+  },
 ];

@@ -16,6 +16,15 @@ type PageHeaderProps = {
  *
  * Vertical rhythm comes from the parent PageContainer's Stack — no margins
  * here.
+ *
+ * The subtitle renders as a `div`, not Mantine's default `p`. `subtitle` is a
+ * ReactNode and pages legitimately pass block content — the PPT board and
+ * Bonuses both pass a Stack wrapping a paragraph and a help-drawer trigger.
+ * Inside a `p` that is invalid nesting, which React resolves by discarding and
+ * regenerating the subtree on the client: a hydration error on every load of
+ * those pages. A `div` can legally contain either a string or block content,
+ * and looks identical (Mantine's reset zeroes paragraph margins, and the top
+ * margin here is explicit).
  */
 export default function PageHeader({
   title,
@@ -29,7 +38,7 @@ export default function PageHeader({
           <Title order={1}>{title}</Title>
         </PageTitleTransition>
         {subtitle && (
-          <Text c="dimmed" mt="xs">
+          <Text component="div" c="dimmed" mt="xs">
             {subtitle}
           </Text>
         )}

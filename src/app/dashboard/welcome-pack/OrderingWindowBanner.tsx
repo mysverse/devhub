@@ -27,16 +27,25 @@ function partsUntil(closesAt: Date, now: Date) {
  */
 export default function OrderingWindowBanner({
   closesAt,
+  serverNow,
 }: {
   closesAt: string; // ISO
+  /**
+   * Server clock at render. The first paint uses it on both sides so the
+   * markup matches; the live clock takes over on mount. Seeding from
+   * `new Date()` during render instead gave the server and the client two
+   * different countdowns and a hydration mismatch.
+   */
+  serverNow: string; // ISO
 }) {
   const deadline = new Date(closesAt);
-  const [now, setNow] = useState(() => new Date());
+  const [now, setNow] = useState(() => new Date(serverNow));
   const parts = partsUntil(deadline, now);
   const underDay = parts.totalSeconds < 86_400;
   const underHour = parts.totalSeconds < 3_600;
 
   useEffect(() => {
+    setNow(new Date());
     const interval = setInterval(
       () => setNow(new Date()),
       underDay ? 1_000 : 60_000,

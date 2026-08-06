@@ -152,6 +152,7 @@ export default async function ActiveTasks({
     },
   });
   const policy = getResolvedPayoutPolicy();
+  const renderedAt = new Date();
   const assignmentWatchByIssueId = new Map(
     assignmentWatches.map((watch) => {
       const timing = getAssignmentWatchTiming({
@@ -177,6 +178,11 @@ export default async function ActiveTasks({
             : null,
           selfBlockExpiresAt: watch.selfBlockExpiresAt?.toISOString() ?? null,
           selfBlockHours: policy.selfBlockHours,
+          // The clock the countdown's first paint is drawn from, so the
+          // server HTML and the client's hydration agree. Without it the
+          // progress bar reads Date.now() twice, milliseconds apart, and
+          // React reports a hydration mismatch on every load.
+          serverNow: renderedAt.toISOString(),
         },
       ] as const;
     }),

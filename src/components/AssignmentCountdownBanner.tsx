@@ -7,6 +7,11 @@ type AssignmentCountdownBannerProps = {
   lastActivityAt: string;
   unassignAt: string;
   warningAt: string;
+  /**
+   * Server clock at render. The first paint is drawn from this on both sides
+   * so the markup matches; the live clock takes over after mount.
+   */
+  serverNow: string;
   /** Snoozed or blocked — the clock isn't running. */
   isPaused?: boolean;
   pausedLabel?: string | null;
@@ -33,12 +38,19 @@ export default function AssignmentCountdownBanner({
   lastActivityAt,
   unassignAt,
   warningAt,
+  serverNow,
   isPaused = false,
   pausedLabel,
 }: AssignmentCountdownBannerProps) {
-  const [now, setNow] = useState(() => Date.now());
+  // Seeded from the server clock rather than Date.now(): the progress bar
+  // renders the elapsed fraction into an inline CSS variable, so reading the
+  // clock during render gave the server and the client two values that differ
+  // by however long the response took, and React reported a hydration mismatch
+  // on every load. The real clock takes over on mount, one tick later.
+  const [now, setNow] = useState(() => new Date(serverNow).getTime());
 
   useEffect(() => {
+    setNow(Date.now());
     const interval = setInterval(() => setNow(Date.now()), 60_000);
     return () => clearInterval(interval);
   }, []);

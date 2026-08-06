@@ -546,7 +546,10 @@ async function WelcomePackContent() {
       <Stack gap="md">
         {terminalAlert}
         {window.closesAt && (
-          <OrderingWindowBanner closesAt={window.closesAt.toISOString()} />
+          <OrderingWindowBanner
+            closesAt={window.closesAt.toISOString()}
+            serverNow={new Date().toISOString()}
+          />
         )}
         <Suspense fallback={<EligibilitySkeleton />}>
           <EligibilityGate

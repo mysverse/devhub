@@ -146,6 +146,8 @@ export type PptAssignmentWatchCardData = {
   selfBlockReasonLabel: string | null;
   selfBlockExpiresAt: string | null;
   selfBlockHours: number;
+  /** Server clock at render, so the countdown's first paint hydrates cleanly. */
+  serverNow: string;
 };
 
 function ComplexityDots({ points }: { points: number | null | undefined }) {
@@ -294,6 +296,7 @@ function AssignmentWatchPanel({
           lastActivityAt={watch.lastActivityAt}
           warningAt={watch.warningAt}
           unassignAt={watch.unassignAt}
+          serverNow={watch.serverNow}
           isPaused={watch.isPaused}
           pausedLabel={pausedLabel}
         />

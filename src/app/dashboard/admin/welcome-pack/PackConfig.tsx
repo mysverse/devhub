@@ -20,7 +20,7 @@ import {
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import IdCardPreview, {
   type IdCardAlign,
@@ -715,11 +715,28 @@ function OrderingStatusBadge({
 }) {
   // Reflects the *unsaved* form values so admins see the effect before
   // committing. Client time is fine here — enforcement is server-side.
-  const state = getOrderingWindowState({
-    orderingEnabled,
-    ordersOpenAt: ordersOpenAt ? new Date(ordersOpenAt) : null,
-    ordersCloseAt: ordersCloseAt ? new Date(ordersCloseAt) : null,
-  });
+  //
+  // Resolved after mount rather than during render: the window state depends
+  // on the clock, so rendering it on the server too produced a badge that
+  // could disagree with the client's and a hydration mismatch. Nothing is
+  // lost by deferring — this badge only ever describes unsaved form state,
+  // which the server cannot know anyway.
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
+  if (!now) return null;
+
+  const state = getOrderingWindowState(
+    {
+      orderingEnabled,
+      ordersOpenAt: ordersOpenAt ? new Date(ordersOpenAt) : null,
+      ordersCloseAt: ordersCloseAt ? new Date(ordersCloseAt) : null,
+    },
+    now,
+  );
 
   if (state.open) {
     return (

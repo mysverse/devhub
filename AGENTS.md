@@ -261,6 +261,13 @@ one place.
   this breaks; `llm-prompts.test.ts` asserts their shape.
 - **Output is schema-validated** with `zodOutputFormat` + `messages.parse`, so
   a caller gets a typed object or null, never prose to regex.
+- **The request shape is not uniform across models.** `MODELS` in `llm.ts` is
+  the allow-list: Sonnet 5 and Opus 5 take adaptive thinking plus an `effort`
+  level, Haiku 4.5 predates both and needs `budget_tokens` while rejecting
+  `effort`. Add a model there or it can't be selected; getting the pairing
+  wrong is a 400, not a worse answer. Effort defaults to `low` — this is
+  advisory output a human reviews, so cost beats depth unless a caller says
+  otherwise.
 - **Everything it produces is advisory.** Drafts prefill a form a human
   submits; triage produces a review queue. The adapter never writes to Linear,
   creates a transaction, or announces anything.
@@ -321,6 +328,7 @@ LINEAR_CLIENT_SECRET
 LINEAR_API_KEY                  # optional image-proxy fallback only
 LINEAR_WEBHOOK_SECRET
 ANTHROPIC_API_KEY               # optional; every LLM surface degrades without it
+ANTHROPIC_MODEL                 # optional; default claude-sonnet-5
 DISCORD_CLIENT_ID
 DISCORD_CLIENT_SECRET
 DISCORD_BOT_TOKEN

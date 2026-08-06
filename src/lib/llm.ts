@@ -19,14 +19,51 @@ import type * as z from "zod/v4";
 //     details, or KYC data. Prompt builders take explicitly narrowed inputs
 //     (see llm-prompts.ts) so this is enforced by shape, not by care.
 
-/** One model, named once. */
-export const LLM_MODEL = "claude-opus-5";
+/**
+ * Models DevHub is allowed to call, and how each one must be asked.
+ *
+ * The request shape is NOT uniform across tiers, so this can't just be a
+ * string. Sonnet 5 takes adaptive thinking and an effort level; Haiku 4.5
+ * predates both and takes a fixed thinking budget instead, rejecting `effort`
+ * outright. Getting this wrong is a 400, not a degraded answer.
+ */
+const MODELS = {
+  "claude-sonnet-5": { thinking: "adaptive", effort: true },
+  "claude-haiku-4-5": { thinking: "budget", effort: false },
+  "claude-opus-5": { thinking: "adaptive", effort: true },
+} as const satisfies Record<
+  string,
+  { thinking: "adaptive" | "budget"; effort: boolean }
+>;
+
+export type LlmModel = keyof typeof MODELS;
+
+/**
+ * Sonnet by default: near-Opus quality on this kind of scoping work at a
+ * fraction of the cost, and everything here is advisory anyway. Override with
+ * ANTHROPIC_MODEL — `claude-haiku-4-5` is cheaper again if drafts are good
+ * enough at that tier.
+ */
+const DEFAULT_MODEL: LlmModel = "claude-sonnet-5";
+
+export function resolveLlmModel(): LlmModel {
+  const configured = process.env.ANTHROPIC_MODEL;
+  if (!configured) return DEFAULT_MODEL;
+  if (configured in MODELS) return configured as LlmModel;
+  console.warn(
+    `[llm] ANTHROPIC_MODEL="${configured}" is not one of ${Object.keys(MODELS).join(", ")} — using ${DEFAULT_MODEL}.`,
+  );
+  return DEFAULT_MODEL;
+}
 
 /**
  * Non-streaming ceiling. Drafts are short; this is headroom, not a target.
  * Anything that could run long should stream instead.
  */
 const MAX_TOKENS = 16_000;
+
+/** Thinking budget for models without adaptive thinking. Must be < MAX_TOKENS. */
+const THINKING_BUDGET_TOKENS = 4_000;
 
 let cachedClient: Anthropic | null | undefined;
 
@@ -53,6 +90,12 @@ export type LlmRequest<Schema extends z.ZodType> = {
   prompt: string;
   /** Shape the reply must take. Validated before it reaches a caller. */
   schema: Schema;
+  /**
+   * How hard to think, on models that support it. Everything here is
+   * advisory output a human reviews, so the default is deliberately cheap —
+   * raise it per call for work where a bad draft wastes someone's time.
+   */
+  effort?: "low" | "medium" | "high";
 };
 
 /**
@@ -68,16 +111,27 @@ export async function generateStructured<Schema extends z.ZodType>(
   const client = getLlmClient();
   if (!client) return null;
 
+  const model = resolveLlmModel();
+  const capabilities = MODELS[model];
+
   try {
     const message = await client.messages.parse({
-      model: LLM_MODEL,
+      model,
       max_tokens: MAX_TOKENS,
-      // Drafting a well-scoped task from an issue is a judgement call, not an
-      // extraction — let the model decide how much thinking it needs.
-      thinking: { type: "adaptive" },
+      // Drafting a well-scoped task is a judgement call, not an extraction —
+      // so thinking stays on, but shaped to what the chosen model accepts.
+      thinking:
+        capabilities.thinking === "adaptive"
+          ? { type: "adaptive" }
+          : { type: "enabled", budget_tokens: THINKING_BUDGET_TOKENS },
       system: request.system,
       messages: [{ role: "user", content: request.prompt }],
-      output_config: { format: zodOutputFormat(request.schema) },
+      // effort and format share one object — keep them together, or the
+      // second output_config silently drops the first.
+      output_config: {
+        format: zodOutputFormat(request.schema),
+        ...(capabilities.effort ? { effort: request.effort ?? "low" } : {}),
+      },
     });
 
     // A refusal returns a normal 200 with no parsed output; treat it as

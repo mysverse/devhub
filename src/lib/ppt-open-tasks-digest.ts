@@ -78,10 +78,17 @@ export async function runPptOpenTasksDigest() {
         select: { createdAt: true },
       },
     },
+    // Deterministic order matters once an email cap can bite mid-run: without
+    // it, WHICH developers get cut is heap order, and the newest accounts —
+    // the cohort this exists for — are the likeliest to be at the tail.
+    orderBy: { id: "asc" },
   });
 
   const weekKey = new Date(now).toISOString().slice(0, 10);
   let sent = 0;
+  const notificationIds: string[] = [];
+  let skipped = 0;
+  let failed = 0;
   let eligible = 0;
 
   for (const developer of developers) {
@@ -100,75 +107,118 @@ export async function runPptOpenTasksDigest() {
     if (!cohort) continue;
 
     eligible++;
-    const currency = getCurrencyForPaymentMethod(developer.paymentMethod);
-    const userName = resolveDisplayName({
-      profile: developer,
-      fallback: "developer",
-    });
-    // Cohort is part of the dedupe key: a developer who crosses from
-    // "never activated" to "lapsed" should still hear from us that week
-    // rather than being swallowed by the previous cohort's send.
-    const dedupeKey = `ppt-task:open-digest:${developer.id}:${cohort}:${weekKey}`;
+    // One developer's failure must not cost everyone else their digest. The
+    // loop does ~13 sequential queries per person against a small pool, so a
+    // single timeout used to abort the run and 500 the cron.
+    try {
+      const currency = getCurrencyForPaymentMethod(developer.paymentMethod);
+      const userName = resolveDisplayName({
+        profile: developer,
+        fallback: "developer",
+      });
+      // Cohort is part of the dedupe key: a developer who crosses from
+      // "never activated" to "lapsed" should still hear from us that week
+      // rather than being swallowed by the previous cohort's send.
+      const dedupeKey = `ppt-task:open-digest:${developer.id}:${cohort}:${weekKey}`;
 
-    const ranked =
-      cohort === "unlinked"
-        ? []
-        : await rankPptsForUser(developer.id, openTasks);
-    const isFirstTask = cohort === "never-activated";
-    const tasks = ranked
-      .slice(0, isFirstTask ? FIRST_TASK_COUNT : DIGEST_TASK_COUNT)
-      .map(({ task, because }) => ({
-        identifier: task.identifier,
-        title: task.title,
-        payoutLabel: formatEstimate(task.estimate, currency),
-        because,
-      }));
+      const ranked =
+        cohort === "unlinked"
+          ? []
+          : await rankPptsForUser(developer.id, openTasks);
+      const isFirstTask = cohort === "never-activated";
+      const tasks = ranked
+        .slice(0, isFirstTask ? FIRST_TASK_COUNT : DIGEST_TASK_COUNT)
+        .map(({ task, because }) => ({
+          identifier: task.identifier,
+          title: task.title,
+          payoutLabel: formatEstimate(task.estimate, currency),
+          because,
+        }));
 
-    const result = await notifyWithPreferences({
-      userId: developer.id,
-      domain: "ppt_task",
-      type: "OPEN_TASKS_DIGEST",
-      title:
-        cohort === "unlinked"
-          ? "Connect Linear to start claiming tasks"
-          : isFirstTask
-            ? "A few tasks picked out for your first one"
-            : `${openTasks.length} open PPT${openTasks.length === 1 ? "" : "s"} worth a look`,
-      message:
-        cohort === "unlinked"
-          ? "Your DevHub account is ready — linking Linear is the last step before you can claim a task."
-          : isFirstTask
-            ? "You haven't claimed a task yet. These are the smallest ones on the board right now."
-            : "You have no active tasks right now — here are the top open PPTs on the board.",
-      href: cohort === "unlinked" ? "/dashboard/settings" : "/dashboard/ppts",
-      dedupeKey,
-      channels: [EMAIL_CHANNEL],
-      email: {
-        to: developer.user.email,
-        subject:
+      const result = await notifyWithPreferences({
+        userId: developer.id,
+        domain: "ppt_task",
+        type: "OPEN_TASKS_DIGEST",
+        title:
           cohort === "unlinked"
-            ? "One step left before you can claim a task"
+            ? "Connect Linear to start claiming tasks"
             : isFirstTask
-              ? "Your first PPT — a few picked out for you"
-              : `Open PPTs this week — ${openTasks.length} available`,
-        category: "ppt_open_tasks_digest",
-        idempotencyKey: dedupeKey,
-        react:
-          cohort === "unlinked" || isFirstTask
-            ? createElement(FirstTaskInvite, {
-                userName,
-                tasks,
-                needsLinearLink: cohort === "unlinked",
-              })
-            : createElement(PptOpenTasksDigest, {
-                userName,
-                tasks,
-                totalCount: openTasks.length,
-              }),
-      },
-    });
-    if (result) sent++;
+              ? "A few tasks picked out for your first one"
+              : `${openTasks.length} open PPT${openTasks.length === 1 ? "" : "s"} worth a look`,
+        message:
+          cohort === "unlinked"
+            ? "Your DevHub account is ready — linking Linear is the last step before you can claim a task."
+            : isFirstTask
+              ? "You haven't claimed a task yet. These are the smallest ones on the board right now."
+              : "You have no active tasks right now — here are the top open PPTs on the board.",
+        href: cohort === "unlinked" ? "/dashboard/settings" : "/dashboard/ppts",
+        dedupeKey,
+        channels: [EMAIL_CHANNEL],
+        email: {
+          to: developer.user.email,
+          subject:
+            cohort === "unlinked"
+              ? "One step left before you can claim a task"
+              : isFirstTask
+                ? "Your first PPT — a few picked out for you"
+                : `Open PPTs this week — ${openTasks.length} available`,
+          // Per-cohort category: the hourly per-category cap is shared, and
+          // lumping every cohort together lets a big lapsed run starve the
+          // first-task invites that matter most.
+          category: `ppt_open_tasks_digest_${cohort.replace("-", "_")}`,
+          idempotencyKey: dedupeKey,
+          react:
+            cohort === "unlinked" || isFirstTask
+              ? createElement(FirstTaskInvite, {
+                  userName,
+                  tasks,
+                  needsLinearLink: cohort === "unlinked",
+                })
+              : createElement(PptOpenTasksDigest, {
+                  userName,
+                  tasks,
+                  totalCount: openTasks.length,
+                }),
+        },
+      });
+      if (result) {
+        notificationIds.push(result.id);
+      } else {
+        // notifyWithPreferences returns null when the developer has muted
+        // every requested channel.
+        skipped++;
+      }
+    } catch (error) {
+      failed++;
+      console.error(
+        `[open-tasks-digest] failed for ${developer.id} (${cohort}):`,
+        error instanceof Error ? error.message : error,
+      );
+    }
   }
 
-  return { sent, eligible, openTasks: openTasks.length };
+  // `sent` used to count notifications created, which says nothing about
+  // whether mail left the building — notifyWithPreferences returns the record
+  // regardless of what the email did, so a fully rate-limited run reported
+  // total success. Ask the delivery rows instead, in one query.
+  const emailed =
+    notificationIds.length === 0
+      ? 0
+      : await prisma.notificationDelivery.count({
+          where: {
+            notificationId: { in: notificationIds },
+            channel: EMAIL_CHANNEL,
+            status: "SENT",
+          },
+        });
+  sent = notificationIds.length;
+
+  return {
+    notified: sent,
+    emailed,
+    skipped,
+    failed,
+    eligible,
+    openTasks: openTasks.length,
+  };
 }

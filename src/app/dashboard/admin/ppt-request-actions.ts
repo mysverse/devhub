@@ -373,24 +373,37 @@ export async function approvePptRequest(
       revalidatePath("/dashboard/admin");
       revalidatePath("/dashboard/ppts");
       updateTag(TAGS.workspacePpts);
-      if (selectedAssigneeId) {
-        updateTag(TAGS.userIssues(selectedAssigneeId));
-        await notifyAssignedPpt({
-          assigneeLinearId: selectedAssigneeId,
-          requesterId: request.requesterId,
-          actorId: adminUserId,
-          issueIdentifier,
-          issueTitle: request.linearIssueTitle,
-          issueUrl,
-        });
-      } else if (assigneeTarget.type === "open") {
-        await notifyOpenPptAvailable({
-          requesterId: request.requesterId,
-          actorId: adminUserId,
-          issueIdentifier,
-          issueTitle: request.linearIssueTitle,
-          issueUrl,
-        });
+      // The approval is already committed. Telling people about it is
+      // follow-up work — and it fans out across the whole developer roster
+      // with an email and a Discord round trip each, so it has real ways to
+      // fail. Letting it escape would report "Failed to approve request" for
+      // an approval that landed, and the retry then answers "Request is not
+      // pending".
+      try {
+        if (selectedAssigneeId) {
+          updateTag(TAGS.userIssues(selectedAssigneeId));
+          await notifyAssignedPpt({
+            assigneeLinearId: selectedAssigneeId,
+            requesterId: request.requesterId,
+            actorId: adminUserId,
+            issueIdentifier,
+            issueTitle: request.linearIssueTitle,
+            issueUrl,
+          });
+        } else if (assigneeTarget.type === "open") {
+          await notifyOpenPptAvailable({
+            requesterId: request.requesterId,
+            actorId: adminUserId,
+            issueIdentifier,
+            issueTitle: request.linearIssueTitle,
+            issueUrl,
+          });
+        }
+      } catch (err) {
+        console.error(
+          `PPT request ${requestId} approved, but announcing it failed:`,
+          err,
+        );
       }
 
       return { success: true };

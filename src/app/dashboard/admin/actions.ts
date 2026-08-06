@@ -76,11 +76,30 @@ export async function markTransactionAsPaid(transactionId: string) {
     }
 
     revalidatePath("/dashboard/admin");
-    await markIncentiveAwardsPaidForTransaction(transactionId);
+
+    // Everything past this point is follow-up work on a transaction that is
+    // ALREADY PAID. A throw here used to escape to the outer catch and report
+    // failure for a payment that went through — and because the status is no
+    // longer PENDING, retrying returns "not in PENDING status" and the
+    // developer never receives their confirmation. Each step fails
+    // independently, exactly as the automated path does (see payout.ts).
+    try {
+      await markIncentiveAwardsPaidForTransaction(transactionId);
+    } catch (err) {
+      console.error(
+        `Failed to mark incentive awards paid for ${transactionId}:`,
+        err,
+      );
+    }
+
     if (transaction.source === "PPT") {
-      await awardAchievement(transaction.userId, "FIRST_PAYOUT", {
-        transactionId,
-      });
+      try {
+        await awardAchievement(transaction.userId, "FIRST_PAYOUT", {
+          transactionId,
+        });
+      } catch (err) {
+        console.error("Failed to award FIRST_PAYOUT achievement:", err);
+      }
     }
 
     // Send payment confirmation email with PDF slip

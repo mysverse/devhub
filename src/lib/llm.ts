@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import type * as z from "zod/v4";
+import prisma from "@/lib/prisma";
 
 // DevHub's only LLM surface. Everything that reaches Claude goes through here
 // so there is exactly one place that knows the model, the request shape, and
@@ -57,13 +58,97 @@ export function resolveLlmModel(): LlmModel {
 }
 
 /**
- * Non-streaming ceiling. Drafts are short; this is headroom, not a target.
- * Anything that could run long should stream instead.
+ * Non-streaming ceiling, and the value every caller is charged up to when a
+ * response is truncated. Callers pass what they actually need — a one-sentence
+ * reason has no business reserving a draft's worth of output.
  */
-const MAX_TOKENS = 16_000;
+const DEFAULT_MAX_TOKENS = 2_000;
 
-/** Thinking budget for models without adaptive thinking. Must be < MAX_TOKENS. */
-const THINKING_BUDGET_TOKENS = 4_000;
+/**
+ * Hard cap. Above roughly this, non-streaming requests risk SDK HTTP timeouts
+ * and should stream instead.
+ */
+const MAX_TOKENS_CEILING = 16_000;
+
+/** Thinking budget for models without adaptive thinking. Must be < max_tokens. */
+const THINKING_BUDGET_TOKENS = 1_024;
+
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const DEFAULT_MAX_CALLS_PER_HOUR = 60;
+const DEFAULT_MAX_CALLS_PER_USER_PER_HOUR = 12;
+
+/** Mirrors getHourlyLimit in email.ts: 0 or invalid disables that scope. */
+function getHourlyLimit(name: string, fallback: number) {
+  const configured = Number(process.env[name] ?? String(fallback));
+  if (!Number.isFinite(configured) || configured <= 0) return 0;
+  return Math.floor(configured);
+}
+
+export type LlmRateLimitScope = "global" | "user";
+
+/**
+ * Rolling-window cap over the LlmCall ledger — the same shape email throttling
+ * already uses (`checkEmailRateLimits`), so there is no new infrastructure and
+ * no dependency on a KV store the repo doesn't have.
+ */
+async function checkLlmRateLimits(
+  userId: string | null,
+): Promise<{ limited: false } | { limited: true; scope: LlmRateLimitScope }> {
+  const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
+  const globalLimit = getHourlyLimit(
+    "LLM_MAX_CALLS_PER_HOUR",
+    DEFAULT_MAX_CALLS_PER_HOUR,
+  );
+  const userLimit = getHourlyLimit(
+    "LLM_MAX_CALLS_PER_USER_PER_HOUR",
+    DEFAULT_MAX_CALLS_PER_USER_PER_HOUR,
+  );
+
+  const [globalCount, userCount] = await Promise.all([
+    globalLimit > 0
+      ? prisma.llmCall.count({ where: { createdAt: { gte: since } } })
+      : Promise.resolve(0),
+    userLimit > 0 && userId
+      ? prisma.llmCall.count({ where: { userId, createdAt: { gte: since } } })
+      : Promise.resolve(0),
+  ]);
+
+  if (globalLimit > 0 && globalCount >= globalLimit) {
+    return { limited: true, scope: "global" };
+  }
+  if (userLimit > 0 && userId && userCount >= userLimit) {
+    return { limited: true, scope: "user" };
+  }
+  return { limited: false };
+}
+
+/** Never throws: metering must not be able to fail the thing it measures. */
+async function recordLlmCall(row: {
+  surface: string;
+  userId: string | null;
+  model: string;
+  inputTokens?: number;
+  outputTokens?: number;
+  ok: boolean;
+}) {
+  try {
+    await prisma.llmCall.create({
+      data: {
+        surface: row.surface,
+        userId: row.userId,
+        model: row.model,
+        inputTokens: row.inputTokens ?? 0,
+        outputTokens: row.outputTokens ?? 0,
+        ok: row.ok,
+      },
+    });
+  } catch (error) {
+    console.warn(
+      "[llm] could not record usage:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+}
 
 let cachedClient: Anthropic | null | undefined;
 
@@ -75,7 +160,18 @@ export function getLlmClient(): Anthropic | null {
   if (cachedClient !== undefined) return cachedClient;
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  cachedClient = apiKey ? new Anthropic({ apiKey }) : null;
+  cachedClient = apiKey
+    ? new Anthropic({
+        apiKey,
+        // The SDK retries twice by default, so one failed call could be billed
+        // three times. Every surface here already has a working manual
+        // fallback, so a retry buys far less than it costs. The timeout keeps
+        // a wedged call from holding a server action open past any function
+        // limit — the SDK's default is minutes.
+        maxRetries: 1,
+        timeout: 60_000,
+      })
+    : null;
   return cachedClient;
 }
 
@@ -84,6 +180,13 @@ export function isLlmConfigured() {
 }
 
 export type LlmRequest<Schema extends z.ZodType> = {
+  /**
+   * Which feature is asking. Recorded on every call and used to scope spend
+   * when reading the ledger back.
+   */
+  surface: string;
+  /** Whose action triggered this, for the per-user cap. Null for admin-wide work. */
+  userId?: string | null;
   /** Operator instructions. Never contains user or issue content. */
   system: string;
   /** The data being reasoned about, already narrowed and PII-free. */
@@ -96,6 +199,12 @@ export type LlmRequest<Schema extends z.ZodType> = {
    * raise it per call for work where a bad draft wastes someone's time.
    */
   effort?: "low" | "medium" | "high";
+  /**
+   * Output budget. Pass what the shape actually needs — this is what a
+   * truncated response bills up to, so a one-sentence reply asking for 16k is
+   * a real cost, not just wasted headroom.
+   */
+  maxTokens?: number;
 };
 
 /**
@@ -111,19 +220,41 @@ export async function generateStructured<Schema extends z.ZodType>(
   const client = getLlmClient();
   if (!client) return null;
 
+  const userId = request.userId ?? null;
+  const limit = await checkLlmRateLimits(userId);
+  if (limit.limited) {
+    // Same contract as every other failure: null, and the caller's manual
+    // path takes over. A cap must never surface as a broken feature.
+    console.warn(
+      `[llm] ${request.surface} skipped — hourly ${limit.scope} cap reached`,
+    );
+    return null;
+  }
+
   const model = resolveLlmModel();
   const capabilities = MODELS[model];
+  const maxTokens = Math.min(
+    request.maxTokens ?? DEFAULT_MAX_TOKENS,
+    MAX_TOKENS_CEILING,
+  );
 
   try {
     const message = await client.messages.parse({
       model,
-      max_tokens: MAX_TOKENS,
+      max_tokens: maxTokens,
       // Drafting a well-scoped task is a judgement call, not an extraction —
       // so thinking stays on, but shaped to what the chosen model accepts.
       thinking:
         capabilities.thinking === "adaptive"
           ? { type: "adaptive" }
-          : { type: "enabled", budget_tokens: THINKING_BUDGET_TOKENS },
+          : {
+              type: "enabled",
+              // Must stay under max_tokens, which is now per-surface.
+              budget_tokens: Math.min(
+                THINKING_BUDGET_TOKENS,
+                Math.floor(maxTokens / 2),
+              ),
+            },
       system: request.system,
       messages: [{ role: "user", content: request.prompt }],
       // effort and format share one object — keep them together, or the
@@ -134,10 +265,28 @@ export async function generateStructured<Schema extends z.ZodType>(
       },
     });
 
+    const parsed = message.parsed_output ?? null;
+    await recordLlmCall({
+      surface: request.surface,
+      userId,
+      model,
+      inputTokens: message.usage?.input_tokens,
+      outputTokens: message.usage?.output_tokens,
+      ok: parsed !== null,
+    });
+
     // A refusal returns a normal 200 with no parsed output; treat it as
     // "no suggestion available" like any other miss.
-    return message.parsed_output ?? null;
+    return parsed;
   } catch (error) {
+    // Failed calls are still billed, so they still belong in the ledger —
+    // otherwise the cap can be walked straight past by whatever is failing.
+    await recordLlmCall({
+      surface: request.surface,
+      userId,
+      model,
+      ok: false,
+    });
     console.warn(
       "[llm] structured generation failed, falling back to manual path:",
       error instanceof Error ? error.message : error,

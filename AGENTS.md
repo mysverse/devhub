@@ -329,6 +329,8 @@ LINEAR_API_KEY                  # optional image-proxy fallback only
 LINEAR_WEBHOOK_SECRET
 ANTHROPIC_API_KEY               # optional; every LLM surface degrades without it
 ANTHROPIC_MODEL                 # optional; default claude-sonnet-5
+LLM_MAX_CALLS_PER_HOUR          # optional; rolling-hour cap, 0 disables
+LLM_MAX_CALLS_PER_USER_PER_HOUR # optional; per-user cap, 0 disables
 DISCORD_CLIENT_ID
 DISCORD_CLIENT_SECRET
 DISCORD_BOT_TOKEN

@@ -121,6 +121,17 @@ export async function suggestTaskToDeveloper(input: {
   });
   if (!developer) return { error: "Developer not found" };
 
+  // Only an OPEN suggestion blocks another. One that went TAKEN or EXPIRED is
+  // history — if the task is back on the board, re-suggesting it is the right
+  // thing to do, not nagging.
+  const openSuggestion = await prisma.taskSuggestion.findFirst({
+    where: { linearIssueId: issueId, userId, outcome: "PENDING" },
+    select: { id: true },
+  });
+  if (openSuggestion) {
+    return { error: "They already have this task suggested and unanswered" };
+  }
+
   const ranked = await rankPptsForUser(userId, [issue]);
   const deterministicReason = ranked[0]?.because ?? "open on the board";
   // Grounded in the issue text where the adapter is available; falls straight
@@ -139,18 +150,8 @@ export async function suggestTaskToDeveloper(input: {
       developerRank: developer.developerRank,
     },
     deterministicReason,
+    adminId,
   );
-
-  // Only an OPEN suggestion blocks another. One that went TAKEN or EXPIRED is
-  // history — if the task is back on the board, re-suggesting it is the right
-  // thing to do, not nagging.
-  const openSuggestion = await prisma.taskSuggestion.findFirst({
-    where: { linearIssueId: issueId, userId, outcome: "PENDING" },
-    select: { id: true },
-  });
-  if (openSuggestion) {
-    return { error: "They already have this task suggested and unanswered" };
-  }
 
   await prisma.taskSuggestion.create({
     data: {

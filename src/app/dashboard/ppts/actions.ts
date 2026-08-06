@@ -29,13 +29,16 @@ export async function draftPptFromLinearIssue(issueId: string) {
     const draft = await withLinearFallback(userId, async (client) => {
       const [issue] = await fetchIssuesByIds(client, [issueId]);
       if (!issue) return null;
-      return draftPptFromIssue({
-        identifier: issue.identifier,
-        title: issue.title,
-        description: issue.description,
-        labelNames: issue.labelNames,
-        estimate: issue.estimate,
-      });
+      return draftPptFromIssue(
+        {
+          identifier: issue.identifier,
+          title: issue.title,
+          description: issue.description,
+          labelNames: issue.labelNames,
+          estimate: issue.estimate,
+        },
+        userId,
+      );
     });
 
     if (!draft) return { available: true as const, draft: null };

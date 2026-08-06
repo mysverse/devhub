@@ -1,8 +1,5 @@
 import { generateStructured } from "@/lib/llm";
 import {
-  BACKLOG_SUGGESTION_SCHEMA,
-  BACKLOG_SUGGESTION_SYSTEM,
-  buildBacklogSuggestionPrompt,
   buildPptDraftPrompt,
   buildTaskReasonPrompt,
   PPT_DRAFT_SCHEMA,
@@ -25,11 +22,16 @@ import {
  */
 export async function draftPptFromIssue(
   issue: PromptIssue,
+  userId: string | null,
 ): Promise<PptDraft | null> {
   return generateStructured({
+    surface: "ppt_draft",
+    userId,
     system: PPT_DRAFT_SYSTEM,
     prompt: buildPptDraftPrompt(issue),
     schema: PPT_DRAFT_SCHEMA,
+    // Scope + a handful of acceptance criteria. Generous, not open-ended.
+    maxTokens: 1_500,
   });
 }
 
@@ -43,27 +45,16 @@ export async function explainTaskForDeveloper(
   issue: PromptIssue,
   developer: PromptDeveloper,
   deterministicReason: string,
+  userId: string | null,
 ): Promise<string> {
   const result = await generateStructured({
+    surface: "task_reason",
+    userId,
     system: TASK_REASON_SYSTEM,
     prompt: buildTaskReasonPrompt(issue, developer, deterministicReason),
     schema: TASK_REASON_SCHEMA,
+    // One sentence under 140 characters.
+    maxTokens: 300,
   });
   return result?.reason?.trim() || deterministicReason;
-}
-
-/**
- * Which backlog issues could become paid tasks, and roughly for whom. Output
- * is a review queue: nothing here is created, assigned, or announced.
- */
-export async function triageBacklogForPpts(
-  issues: PromptIssue[],
-  roster: PromptDeveloper[],
-) {
-  if (issues.length === 0) return null;
-  return generateStructured({
-    system: BACKLOG_SUGGESTION_SYSTEM,
-    prompt: buildBacklogSuggestionPrompt(issues, roster),
-    schema: BACKLOG_SUGGESTION_SCHEMA,
-  });
 }

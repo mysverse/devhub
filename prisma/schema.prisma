@@ -164,6 +164,29 @@ model Invite {
   createdAt DateTime    @default(now())
 }
 
+/// Every model call DevHub makes, so spend is a number rather than a guess.
+/// Doubles as the rate-limit ledger — checkLlmRateLimits counts rows in a
+/// rolling window, the same shape EmailDelivery uses for email throttling.
+///
+/// userId is a plain column with no foreign key: deleting a user must not
+/// erase the record of what was spent on their behalf.
+model LlmCall {
+  id           String   @id @default(cuid())
+  /// Which feature asked. Rate limits are scoped per surface.
+  surface      String
+  userId       String?
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  /// False when the call failed or was refused — still billed, still counted.
+  ok           Boolean  @default(true)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([surface, createdAt])
+}
+
 model EmailDelivery {
   id             String              @id @default(cuid())
   dedupeKey      String              @unique

@@ -18,8 +18,8 @@ export default function AssistantPage() {
   return (
     <PageContainer>
       <PageHeader
-        title="Task Copilot"
-        subtitle="Shape an idea, understand your work, and prepare safe task changes for your confirmation."
+        title="DevHub Assistant"
+        subtitle="Shape an idea, understand your work, or prepare a task change."
       />
       <Suspense fallback={<PageSkeleton withHeader={false} />}>
         <AssistantContent />

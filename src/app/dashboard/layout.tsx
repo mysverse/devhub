@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { CampaignBannerData } from "@/components/CampaignBanner";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
+import { isAssistantConfigured } from "@/lib/llm";
 import {
   describeCampaignLabelScope,
   describeCampaignScopes,
@@ -84,6 +85,7 @@ export default function DashboardLayout({
     <DashboardLayoutClient
       adminPromise={getDashboardAdminStatus()}
       campaignPromise={getDashboardCampaign()}
+      assistantAvailable={isAssistantConfigured()}
     >
       {children}
     </DashboardLayoutClient>

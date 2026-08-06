@@ -26,6 +26,7 @@ import { motion } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, use } from "react";
+import AssistantOverlay from "@/components/assistant/AssistantOverlay";
 import CampaignBanner, {
   type CampaignBannerData,
 } from "@/components/CampaignBanner";
@@ -53,7 +54,7 @@ const PRIMARY_LINKS: NavLink[] = [
 // Lower-frequency destinations live in the avatar menu on desktop (and in the
 // full mobile navbar).
 const MENU_LINKS: NavLink[] = [
-  { href: "/dashboard/assistant", label: "Task Copilot" },
+  { href: "/dashboard/assistant", label: "AI Assistant" },
   { href: "/dashboard/documents", label: "Documents" },
   { href: "/dashboard/welcome-pack", label: "Welcome Pack" },
 ];
@@ -270,10 +271,12 @@ export default function DashboardLayoutClient({
   children,
   adminPromise,
   campaignPromise,
+  assistantAvailable,
 }: {
   children: React.ReactNode;
   adminPromise: Promise<boolean>;
   campaignPromise: Promise<CampaignBannerData | null>;
+  assistantAvailable: boolean;
 }) {
   const [opened, { toggle, close }] = useDisclosure();
   const { data: session } = useSession();
@@ -321,17 +324,20 @@ export default function DashboardLayoutClient({
               </Group>
 
               <Group gap="xs" wrap="nowrap">
-                <Tooltip label="Task Copilot">
-                  <ActionIcon
-                    component={Link}
-                    href="/dashboard/assistant"
-                    variant="subtle"
-                    color="gray"
-                    aria-label="Open Task Copilot"
-                  >
-                    <Bot size={18} />
-                  </ActionIcon>
-                </Tooltip>
+                {assistantAvailable && (
+                  <Tooltip label="Ask DevHub (Alt+A)">
+                    <ActionIcon
+                      variant="subtle"
+                      color="gray"
+                      aria-label="Open DevHub Assistant"
+                      onClick={() =>
+                        window.dispatchEvent(new Event("devhub:assistant-open"))
+                      }
+                    >
+                      <Bot size={18} />
+                    </ActionIcon>
+                  </Tooltip>
+                )}
                 <NotificationBell />
                 <Menu
                   shadow="md"
@@ -406,6 +412,9 @@ export default function DashboardLayoutClient({
           </Container>
         </AppShellMain>
         <NotificationPoller />
+        <Suspense fallback={null}>
+          <AssistantOverlay available={assistantAvailable} />
+        </Suspense>
       </AppShell>
     </NotificationsProvider>
   );

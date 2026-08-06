@@ -21,6 +21,7 @@
     "linear:validate": "tsx scripts/linear/validate-documents.ts",
     "linear:schema:update": "tsx scripts/linear/update-schema.ts",
     "smoke": "tsx scripts/dev/smoke.ts",
+    "assistant:e2e": "tsx scripts/dev/assistant-e2e.ts",
     "visual": "tsx scripts/dev/visual.ts",
     "simulate": "tsx scripts/dev/simulate.ts",
     "repair:ppt-payouts": "tsx scripts/dev/repair-ppt-payouts.ts",

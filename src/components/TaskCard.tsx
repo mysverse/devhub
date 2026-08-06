@@ -128,6 +128,12 @@ type TaskCardProps = {
    * when that specific task actually qualifies.
    */
   campaign?: CampaignBadgeInfo | null;
+  /**
+   * Why this task is being shown to this developer, from
+   * rankTasksForDeveloper(). A ranked list with no stated reason reads as a
+   * lottery, so recommendation surfaces always pass one.
+   */
+  recommendationReason?: string | null;
 };
 
 export type TaskAssignmentInfo = {
@@ -342,6 +348,7 @@ function TaskCard({
   assignmentInfo,
   recentlyReleasedByViewer,
   campaign,
+  recommendationReason,
 }: TaskCardProps) {
   const baseEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
   // What this task actually pays right now. The engine re-derives it
@@ -389,8 +396,17 @@ function TaskCard({
             {title}
           </Text>
           <div style={{ flex: 1, marginBottom: "var(--mantine-spacing-sm)" }}>
-            <DescriptionContent text={description} lines={2} size="xs" />
+            <DescriptionContent
+              text={description}
+              lines={recommendationReason ? 1 : 2}
+              size="xs"
+            />
           </div>
+          {recommendationReason && (
+            <Text fz="xs" c="dimmed" lineClamp={1} mb={6}>
+              {recommendationReason}
+            </Text>
+          )}
           <Group justify="space-between" mt="auto" align="center">
             <LinearIcon url={url} />
             <ClaimButton

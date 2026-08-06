@@ -7,6 +7,7 @@ import type { CurrencyCode } from "@/lib/currency";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
+import { rankPptsForUser } from "@/lib/task-recommendation-server";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 
 type Props = {
@@ -24,15 +25,21 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
     return null;
   }
 
-  const claimContext = await getClaimContext(userId);
-
   if (issues.length === 0) return null;
+
+  // Previously this was the whole board sorted by payout — the same list for
+  // everyone, labelled "Suggested for You". Rank it against what this
+  // developer actually does, and show why each task is here.
+  const [claimContext, ranked] = await Promise.all([
+    getClaimContext(userId),
+    rankPptsForUser(userId, issues),
+  ]);
 
   return (
     <>
       <DashboardSectionHeader
         title="Suggested for You"
-        subtitle="High-value tasks available to claim, sorted by payout"
+        subtitle="Open tasks matched to your specialties and the size of work you take on"
         icon={<Sparkles size={16} />}
         action={
           <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
@@ -42,9 +49,10 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
       />
       <Carousel
         gap={20}
-        items={issues
-          .slice(0, 6)
-          .map((issue) => (
+        items={ranked.slice(0, 6).map(({ task, because }) => {
+          const issue = issues.find((candidate) => candidate.id === task.id);
+          if (!issue) return null;
+          return (
             <TaskCard
               key={issue.id}
               issueId={issue.id}
@@ -56,8 +64,10 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
               variant="compact"
               currency={currency}
               claimContext={claimContext}
+              recommendationReason={because}
             />
-          ))}
+          );
+        })}
       />
     </>
   );

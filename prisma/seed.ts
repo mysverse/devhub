@@ -406,7 +406,7 @@ export async function seed() {
     data: {
       slug: "sprint-boost",
       name: "Sprint Boost",
-      headline: "3x on every PPT task this sprint",
+      headline: "Every PPT task pays extra this sprint",
       body: "Every PPT payout is tripled until the sprint closes. Nothing to opt into.",
       accentColor: "violet",
       multiplier: 3,
@@ -424,7 +424,7 @@ export async function seed() {
     data: {
       slug: "docs-week",
       name: "Docs Week",
-      headline: "2x on documentation tasks",
+      headline: "Documentation tasks pay extra this week",
       accentColor: "teal",
       multiplier: 2,
       scopes: ["PPT"],
@@ -440,7 +440,7 @@ export async function seed() {
     data: {
       slug: "launch-push",
       name: "Launch Push",
-      headline: "2x incentive awards through launch week",
+      headline: "Incentive awards boosted through launch week",
       accentColor: "orange",
       multiplier: 2,
       scopes: ["INCENTIVE"],
@@ -455,7 +455,7 @@ export async function seed() {
     data: {
       slug: "robux-blitz",
       name: "Robux Blitz",
-      headline: "2x Robux payouts",
+      headline: "Robux payouts boosted",
       accentColor: "grape",
       multiplier: 2,
       scopes: ["PPT"],

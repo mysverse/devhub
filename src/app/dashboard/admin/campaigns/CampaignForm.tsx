@@ -226,8 +226,8 @@ export default function CampaignForm({
 
           <TextInput
             label="Headline"
-            description="The first thing developers read, on the dashboard banner"
-            placeholder="3x on every PPT task this sprint"
+            description={`The first thing developers read, on the dashboard banner. The banner already shows "${formatMultiplier(draft.multiplier)}" beside it — don't repeat the multiplier here.`}
+            placeholder="Every PPT task pays extra this sprint"
             value={draft.headline}
             onChange={(e) => set("headline", e.currentTarget.value)}
             error={errors.headline}

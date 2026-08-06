@@ -35,6 +35,7 @@ import {
   Search,
   Send,
   SlidersHorizontal,
+  Sparkles,
   UserCheck,
   Users,
 } from "lucide-react";
@@ -58,6 +59,7 @@ import {
   formatMultiplier,
 } from "@/lib/payout-campaign";
 import {
+  draftPptFromLinearIssue,
   getLinearProjects,
   getLinearTeams,
   searchLinearIssues,
@@ -175,8 +177,43 @@ export default function PptRequestModal({
   const [selectedIssue, setSelectedIssue] = useState<LinearIssue | null>(null);
 
   const [description, setDescription] = useState("");
+  const [drafting, setDrafting] = useState(false);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+
+  /**
+   * Fill the description and estimate from the selected Linear issue. Purely
+   * additive: it prefills fields the developer then edits, and a null result
+   * (adapter unconfigured, refusal, anything) leaves the form untouched.
+   */
+  async function handleDraft() {
+    if (!selectedIssue) return;
+    setDrafting(true);
+    try {
+      const result = await draftPptFromLinearIssue(selectedIssue.id);
+      if ("error" in result && result.error) {
+        toast.error("Couldn't draft from this issue — write it manually.");
+        return;
+      }
+      if (!("draft" in result) || !result.draft) {
+        toast.info("No draft available — write it manually.");
+        return;
+      }
+      const { draft } = result;
+      setDescription(
+        [
+          draft.scope,
+          "",
+          "## Acceptance criteria",
+          ...draft.acceptanceCriteria.map((line) => `- ${line}`),
+        ].join("\n"),
+      );
+      setEstimate(String(draft.estimate));
+      toast.success("Drafted — review and edit before submitting.");
+    } finally {
+      setDrafting(false);
+    }
+  }
 
   const [assigneeIntent, setAssigneeIntent] = useState<AssigneeIntent>("SELF");
   const [userQuery, setUserQuery] = useState("");
@@ -628,6 +665,21 @@ export default function PptRequestModal({
                 <TabsList>
                   <TabsTab value="write">Write</TabsTab>
                   <TabsTab value="preview">Preview</TabsTab>
+                  {/* Drafting is optional everywhere: without the LLM adapter
+                      configured this simply never appears and the form is
+                      unchanged. */}
+                  {mode === "existing" && selectedIssue && (
+                    <Button
+                      size="compact-xs"
+                      variant="subtle"
+                      ml="auto"
+                      leftSection={<Sparkles size={13} />}
+                      loading={drafting}
+                      onClick={handleDraft}
+                    >
+                      Draft from issue
+                    </Button>
+                  )}
                 </TabsList>
                 <TabsPanel value="write" pt="sm">
                   <Textarea

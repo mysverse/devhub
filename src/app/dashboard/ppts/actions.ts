@@ -4,12 +4,50 @@ import { revalidatePath, updateTag } from "next/cache";
 import { getSession } from "@/lib/auth-utils";
 import { TAGS } from "@/lib/cache-tags";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { isLlmConfigured } from "@/lib/llm";
+import { draftPptFromIssue } from "@/lib/llm-suggestions";
 import {
   evaluatePptIssueById,
   postPptProofComment,
 } from "@/lib/ppt-eligibility";
 import { hasMeaningfulPptProgress } from "@/lib/ppt-progress";
 import prisma from "@/lib/prisma";
+
+/**
+ * Draft a PPT description and estimate from a Linear issue the developer has
+ * already picked. Optional by construction: returns { available: false } when
+ * the LLM adapter isn't configured, and the form works exactly as before.
+ */
+export async function draftPptFromLinearIssue(issueId: string) {
+  const { userId } = await getSession();
+  if (!userId) return { error: "Unauthorized" };
+
+  if (!isLlmConfigured()) return { available: false as const };
+
+  try {
+    const draft = await withLinearFallback(userId, async (client) => {
+      const [issue] = await fetchIssuesByIds(client, [issueId]);
+      if (!issue) return null;
+      return draftPptFromIssue({
+        identifier: issue.identifier,
+        title: issue.title,
+        description: issue.description,
+        labelNames: issue.labelNames,
+        estimate: issue.estimate,
+      });
+    });
+
+    if (!draft) return { available: true as const, draft: null };
+    return { available: true as const, draft };
+  } catch (e) {
+    if (e instanceof LinearReauthRequiredError) {
+      return { error: "reauth_required", reauth: true };
+    }
+    // Drafting is a convenience; never surface it as a failure of the form.
+    return { available: true as const, draft: null };
+  }
+}
 
 export async function getLinearTeams() {
   const { userId } = await getSession();

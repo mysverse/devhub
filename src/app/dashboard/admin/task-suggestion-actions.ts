@@ -6,6 +6,7 @@ import { requireAdmin } from "@/lib/authz";
 import { resolveDisplayName } from "@/lib/display-name";
 import { getLinearServiceClient } from "@/lib/linear";
 import { fetchSuggestedPpts } from "@/lib/linear-queries";
+import { explainTaskForDeveloper } from "@/lib/llm-suggestions";
 import {
   DISCORD_CHANNEL,
   EMAIL_CHANNEL,
@@ -110,12 +111,34 @@ export async function suggestTaskToDeveloper(input: {
 
   const developer = await prisma.userProfile.findUnique({
     where: { id: userId },
-    select: { ...PROFILE_DISPLAY_SELECT, user: { select: { email: true } } },
+    select: {
+      ...PROFILE_DISPLAY_SELECT,
+      specialties: true,
+      developerRank: true,
+      user: { select: { email: true } },
+    },
   });
   if (!developer) return { error: "Developer not found" };
 
   const ranked = await rankPptsForUser(userId, [issue]);
-  const because = ranked[0]?.because ?? "open on the board";
+  const deterministicReason = ranked[0]?.because ?? "open on the board";
+  // Grounded in the issue text where the adapter is available; falls straight
+  // back to the ranker's own reason otherwise, so this never blocks a send.
+  const because = await explainTaskForDeveloper(
+    {
+      identifier: issue.identifier,
+      title: issue.title,
+      description: issue.description,
+      labelNames: issue.labelNames,
+      estimate: issue.estimate,
+    },
+    {
+      ref: userId,
+      specialties: developer.specialties,
+      developerRank: developer.developerRank,
+    },
+    deterministicReason,
+  );
 
   const existing = await prisma.taskSuggestion.findUnique({
     where: { linearIssueId_userId: { linearIssueId: issueId, userId } },

@@ -33,6 +33,7 @@ export type SuggestableDeveloper = {
   name: string;
   /** The ranker's own reason, so an admin sees why before they send it. */
   because: string;
+  /** Has an unanswered suggestion for this task — not merely a past one. */
   alreadySuggested: boolean;
 };
 
@@ -59,7 +60,7 @@ export async function getSuggestionCandidates(
       select: PROFILE_DISPLAY_SELECT,
     }),
     prisma.taskSuggestion.findMany({
-      where: { linearIssueId: issueId },
+      where: { linearIssueId: issueId, outcome: "PENDING" },
       select: { userId: true },
     }),
   ]);
@@ -140,12 +141,15 @@ export async function suggestTaskToDeveloper(input: {
     deterministicReason,
   );
 
-  const existing = await prisma.taskSuggestion.findUnique({
-    where: { linearIssueId_userId: { linearIssueId: issueId, userId } },
+  // Only an OPEN suggestion blocks another. One that went TAKEN or EXPIRED is
+  // history — if the task is back on the board, re-suggesting it is the right
+  // thing to do, not nagging.
+  const openSuggestion = await prisma.taskSuggestion.findFirst({
+    where: { linearIssueId: issueId, userId, outcome: "PENDING" },
     select: { id: true },
   });
-  if (existing) {
-    return { error: "This task has already been suggested to them" };
+  if (openSuggestion) {
+    return { error: "They already have this task suggested and unanswered" };
   }
 
   await prisma.taskSuggestion.create({

@@ -143,7 +143,7 @@ export default function SuggestTaskConsole({
             data={candidates.map((candidate) => ({
               value: candidate.id,
               label: candidate.alreadySuggested
-                ? `${candidate.name} — already suggested`
+                ? `${candidate.name} — already waiting on this`
                 : `${candidate.name} — ${candidate.because}`,
               disabled: candidate.alreadySuggested,
             }))}

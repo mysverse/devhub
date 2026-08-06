@@ -681,8 +681,11 @@ model TaskSuggestion {
   createdAt             DateTime              @default(now())
   updatedAt             DateTime              @updatedAt
 
-  /// One suggestion per task per person: nudging twice is nagging.
-  @@unique([linearIssueId, userId])
+  /// Deliberately NOT unique on (linearIssueId, userId): a suggestion that
+  /// went TAKEN or EXPIRED should be re-sendable if the task comes back to the
+  /// board. The anti-nag rule is "one OPEN suggestion at a time", enforced in
+  /// suggestTaskToDeveloper against outcome PENDING.
+  @@index([linearIssueId, userId])
   @@index([userId, outcome])
   @@index([outcome, createdAt])
 }

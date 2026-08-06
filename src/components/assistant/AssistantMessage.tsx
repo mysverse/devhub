@@ -168,7 +168,7 @@ function ActionCard({
             <ThemeIcon variant="light" size="lg" radius="md">
               {actionIcon(action.kind)}
             </ThemeIcon>
-            <Stack gap={2}>
+            <Stack gap={2} style={{ minWidth: 0, flex: 1 }}>
               <Text fw={750} size="sm">
                 {action.preview.title}
               </Text>
@@ -177,7 +177,12 @@ function ActionCard({
               </Text>
             </Stack>
           </Group>
-          <Badge color={status.color} variant="light" radius="sm">
+          <Badge
+            color={status.color}
+            variant="light"
+            radius="sm"
+            style={{ flexShrink: 0 }}
+          >
             {status.label}
           </Badge>
         </Group>

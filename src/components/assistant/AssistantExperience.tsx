@@ -126,12 +126,30 @@ export default function AssistantExperience({
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
   const runMessageIdRef = useRef<string | null>(null);
+  const stickToBottomRef = useRef(true);
   const loadedRef = useRef(mode === "page");
+  const lastMessage = active?.messages.at(-1);
+  const scrollSignal = [
+    lastMessage?.id,
+    lastMessage?.content.length,
+    lastMessage?.status,
+    lastMessage?.actions
+      .map((action) => `${action.id}:${action.status}`)
+      .join(","),
+    activities.map((activity) => `${activity.id}:${activity.phase}`).join(","),
+  ].join(":");
 
   useEffect(() => {
+    if (!scrollSignal || !stickToBottomRef.current) return;
     const viewport = messagesViewportRef.current;
-    viewport?.scrollTo({ top: viewport.scrollHeight, behavior: "smooth" });
-  });
+    const frame = window.requestAnimationFrame(() => {
+      viewport?.scrollTo({
+        top: viewport.scrollHeight,
+        behavior: sending ? "smooth" : "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [scrollSignal, sending]);
 
   useEffect(() => {
     if (mode === "overlay" && enabled) {
@@ -159,6 +177,7 @@ export default function AssistantExperience({
       setProviderTrail([]);
       setRunMessageId(null);
       runMessageIdRef.current = null;
+      stickToBottomRef.current = true;
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : "Could not load this chat.",
@@ -201,6 +220,7 @@ export default function AssistantExperience({
     setProviderTrail([]);
     setRunMessageId(null);
     runMessageIdRef.current = null;
+    stickToBottomRef.current = true;
     return conversation;
   }
 
@@ -357,6 +377,7 @@ export default function AssistantExperience({
     if (!content || sending || !available) return;
     setSending(true);
     setDraft("");
+    stickToBottomRef.current = true;
     const controller = new AbortController();
     controllerRef.current = controller;
     try {
@@ -443,7 +464,7 @@ export default function AssistantExperience({
 
   const chat = (
     <Card className={shellClass.join(" ")} padding={0}>
-      <Stack gap={0} style={{ flex: 1, minWidth: 0 }}>
+      <Stack gap={0} className={classes.chatColumn}>
         <Group
           className={classes.chatHeader}
           px={compact ? "sm" : "md"}
@@ -451,7 +472,7 @@ export default function AssistantExperience({
           justify="space-between"
           wrap="nowrap"
         >
-          <Group gap="sm" wrap="nowrap" style={{ minWidth: 0 }}>
+          <Group className={classes.chatIdentity} gap="sm" wrap="nowrap">
             <motion.div
               animate={sending ? { rotate: [0, -8, 8, 0] } : { rotate: 0 }}
               transition={{ duration: 1.8, repeat: sending ? Infinity : 0 }}
@@ -465,7 +486,12 @@ export default function AssistantExperience({
                 <Text fw={750} size="sm" truncate>
                   {active?.title ?? "DevHub Assistant"}
                 </Text>
-                <Badge size="xs" color="teal" variant="dot">
+                <Badge
+                  className={classes.readyBadge}
+                  size="xs"
+                  color="teal"
+                  variant="dot"
+                >
                   Ready
                 </Badge>
               </Group>
@@ -475,7 +501,7 @@ export default function AssistantExperience({
             </Stack>
           </Group>
 
-          <Group gap={3} wrap="nowrap">
+          <Group gap={3} wrap="nowrap" style={{ flexShrink: 0 }}>
             {loading && <Loader size="xs" />}
             {compact && (
               <Menu position="bottom-end" withinPortal width={260}>
@@ -574,6 +600,15 @@ export default function AssistantExperience({
           className={classes.messages}
           px={compact ? "sm" : "md"}
           py="md"
+          onScrollPositionChange={() => {
+            const viewport = messagesViewportRef.current;
+            if (!viewport) return;
+            stickToBottomRef.current =
+              viewport.scrollHeight -
+                viewport.scrollTop -
+                viewport.clientHeight <
+              80;
+          }}
         >
           <Stack gap="md">
             {active?.messages.map((message) => (
@@ -711,6 +746,10 @@ export default function AssistantExperience({
                 aria-label={sending ? "Stop reply" : "Send message"}
                 disabled={!sending && !draft.trim()}
                 onClick={sending ? stopReply : () => sendMessage()}
+                style={{
+                  right: compact ? 18 : 22,
+                  bottom: compact ? 18 : 22,
+                }}
               >
                 {sending ? <CircleStop size={17} /> : <Send size={17} />}
               </ActionIcon>

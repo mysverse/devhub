@@ -33,6 +33,69 @@ async function send(page: Page, message: string) {
   await composer.press("Enter");
 }
 
+async function assertChatBounds(page: Page, viewportWidth: number) {
+  const dialog = page.getByRole("dialog", { name: "DevHub Assistant" });
+  const audit = await dialog.evaluate((root) => {
+    const box = root.getBoundingClientRect();
+    const shell = root.firstElementChild?.getBoundingClientRect();
+    const outside = [...root.querySelectorAll("button, textarea, input")]
+      .filter((node) => {
+        const rect = node.getBoundingClientRect();
+        return (
+          rect.left < box.left - 1 ||
+          rect.right > box.right + 1 ||
+          rect.top < box.top - 1 ||
+          rect.bottom > box.bottom + 1
+        );
+      })
+      .map(
+        (node) =>
+          node.getAttribute("aria-label") ||
+          node.textContent?.trim().slice(0, 40) ||
+          node.tagName,
+      );
+    return {
+      outside,
+      panelOverflow: root.scrollHeight - root.clientHeight,
+      shellGap: shell
+        ? Math.abs(box.bottom - shell.bottom)
+        : Number.POSITIVE_INFINITY,
+      left: box.left,
+      right: box.right,
+    };
+  });
+  assert.deepEqual(audit.outside, []);
+  assert.ok(
+    audit.panelOverflow <= 1,
+    "The assistant panel itself must not scroll",
+  );
+  assert.ok(
+    audit.shellGap <= 1,
+    "The chat shell must fill the assistant panel",
+  );
+  assert.ok(audit.left >= -1 && audit.right <= viewportWidth + 1);
+}
+
+async function assertManualScrollHolds(page: Page) {
+  const dialog = page.getByRole("dialog", { name: "DevHub Assistant" });
+  const viewport = dialog.locator(".mantine-ScrollArea-viewport").first();
+  const canScroll = await viewport.evaluate(
+    (element) => element.scrollHeight - element.clientHeight > 20,
+  );
+  if (!canScroll) return;
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const composer = page.getByRole("textbox", {
+    name: "Message DevHub Assistant",
+  });
+  await composer.fill("Keep my place");
+  await page.waitForTimeout(100);
+  const scrollTop = await viewport.evaluate((element) => element.scrollTop);
+  assert.ok(scrollTop < 5, "Typing must not yank a reader back to the bottom");
+  await composer.fill("");
+}
+
 async function main() {
   const browser = await chromium.launch();
   const context = await browser.newContext({
@@ -46,6 +109,16 @@ async function main() {
 
   try {
     await page.goto(`${BASE_URL}/api/dev/login?as=admin`, {
+      waitUntil: "load",
+      timeout: 60_000,
+    });
+    await page.goto(`${BASE_URL}/dashboard`, {
+      waitUntil: "load",
+      timeout: 60_000,
+    });
+    // The dashboard layout persists session state across pages. This round trip
+    // catches server/client greeting drift that a single page load misses.
+    await page.goto(`${BASE_URL}/dashboard/ppts`, {
       waitUntil: "load",
       timeout: 60_000,
     });
@@ -70,6 +143,7 @@ async function main() {
       page.getByText("Create ordinary Linear issue: Audit spawn points"),
     );
     await waitForText(page.getByRole("button", { name: "Confirm" }));
+    await assertManualScrollHolds(page);
 
     await newChat(page);
     await send(page, "Test fallback");
@@ -85,6 +159,15 @@ async function main() {
     await page
       .getByRole("img", { name: "Assistant diagram" })
       .waitFor({ state: "visible", timeout: 30_000 });
+    await assertChatBounds(page, 1280);
+    fs.mkdirSync(path.join(process.cwd(), "screenshots"), { recursive: true });
+    await page.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "assistant-overlay-desktop-e2e.png",
+      ),
+    });
 
     await page.setViewportSize({ width: 390, height: 844 });
     const dialog = page.getByRole("dialog", { name: "DevHub Assistant" });
@@ -94,19 +177,18 @@ async function main() {
       box.width <= 390,
       `Assistant dialog overflows mobile by ${box.width - 390}px`,
     );
+    await assertChatBounds(page, 390);
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - window.innerWidth,
     );
     assert.ok(overflow <= 1, `Page overflows horizontally by ${overflow}px`);
 
-    fs.mkdirSync(path.join(process.cwd(), "screenshots"), { recursive: true });
     await page.screenshot({
       path: path.join(
         process.cwd(),
         "screenshots",
-        "assistant-overlay-e2e.png",
+        "assistant-overlay-mobile-e2e.png",
       ),
-      fullPage: true,
     });
     assert.deepEqual(pageErrors, []);
     console.log("✓ read tool activity");

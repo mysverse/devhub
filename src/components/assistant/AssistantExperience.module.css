@@ -15,8 +15,8 @@
     );
   background:
     radial-gradient(circle at 90% 0%, rgba(76, 110, 245, 0.12), transparent 34%),
-    color-mix(in srgb, var(--mantine-color-dark-7) 96%, transparent);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    var(--mantine-color-dark-7);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
 }
 
 .historyCard {
@@ -42,6 +42,14 @@
   box-shadow: none;
 }
 
+.chatColumn {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
 .chatHeader {
   position: relative;
   z-index: 2;
@@ -49,6 +57,12 @@
   border-bottom: 1px solid var(--mantine-color-dark-4);
   background: rgba(26, 27, 30, 0.84);
   backdrop-filter: blur(18px);
+  flex: 0 0 auto;
+}
+
+.chatIdentity {
+  flex: 1;
+  min-width: 0;
 }
 
 .assistantOrb {
@@ -73,18 +87,17 @@
 }
 
 .messages {
-  flex: 1;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
   background:
     linear-gradient(rgba(37, 38, 43, 0.25) 1px, transparent 1px),
     linear-gradient(90deg, rgba(37, 38, 43, 0.25) 1px, transparent 1px);
   background-size: 28px 28px;
-  mask-image: linear-gradient(
-    to bottom,
-    transparent,
-    black 8%,
-    black 94%,
-    transparent
-  );
+}
+
+.messages :global(.mantine-ScrollArea-viewport) {
+  overscroll-behavior: contain;
 }
 
 .messageRow {
@@ -127,7 +140,7 @@
     );
   border-radius: 6px 16px 16px 16px;
   background: rgba(37, 38, 43, 0.88);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.1);
 }
 
 .userBubble {
@@ -139,7 +152,7 @@
     var(--mantine-color-blue-7),
     var(--mantine-color-indigo-8)
   );
-  box-shadow: 0 8px 28px rgba(34, 139, 230, 0.18);
+  box-shadow: 0 4px 14px rgba(34, 139, 230, 0.14);
 }
 
 .markdown {
@@ -354,14 +367,9 @@
 
 .quickPrompts {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
   padding: 8px 12px 0;
-  overflow-x: auto;
-  scrollbar-width: none;
-}
-
-.quickPrompts::-webkit-scrollbar {
-  display: none;
 }
 
 .composer {
@@ -370,6 +378,8 @@
   border-top: 1px solid var(--mantine-color-dark-4);
   background: rgba(26, 27, 30, 0.9);
   backdrop-filter: blur(18px);
+  flex: 0 0 auto;
+  overflow: hidden;
 }
 
 .composerInput textarea {
@@ -389,8 +399,6 @@
 
 .sendButton {
   position: absolute;
-  right: 8px;
-  bottom: 8px;
 }
 
 .diagram {
@@ -411,7 +419,7 @@
   overflow: hidden;
   border: 1px solid rgba(116, 143, 252, 0.3);
   border-radius: 22px;
-  box-shadow: 0 26px 90px rgba(0, 0, 0, 0.48);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
   transform-origin: bottom right;
 }
 
@@ -458,6 +466,11 @@
     height: 680px;
     min-height: 580px;
   }
+
+  .chatShellCompact {
+    height: 100%;
+    min-height: 0;
+  }
 }
 
 @media (max-width: 48em) {
@@ -467,6 +480,7 @@
     height: 100dvh;
     border: 0;
     border-radius: 0;
+    box-shadow: none;
     transform-origin: bottom center;
   }
 
@@ -483,6 +497,11 @@
   .chatShell {
     height: 660px;
     min-height: 540px;
+  }
+
+  .chatShellCompact {
+    height: 100%;
+    min-height: 0;
   }
 
   .bubble {
@@ -505,6 +524,10 @@
 
   .messageMeta {
     opacity: 1;
+  }
+
+  .readyBadge {
+    display: none;
   }
 }
 

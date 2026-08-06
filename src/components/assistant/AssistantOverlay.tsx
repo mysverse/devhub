@@ -33,7 +33,10 @@ export default function AssistantOverlay({
   const { data: session } = useSession();
   const [opened, setOpened] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const onAssistantPage = pathname.startsWith("/dashboard/assistant");
+
+  useEffect(() => setHydrated(true), []);
 
   const rememberNudge = useCallback(() => {
     setShowNudge(false);
@@ -111,7 +114,7 @@ export default function AssistantOverlay({
           available={available}
           enabled={opened}
           onClose={() => setOpened(false)}
-          displayName={session?.user?.name}
+          displayName={hydrated ? session?.user?.name : null}
           quickPrompts={assistantPromptsForPath(pathname)}
         />
       </motion.div>
@@ -160,25 +163,30 @@ export default function AssistantOverlay({
         )}
       </AnimatePresence>
 
-      <motion.div
-        className={classes.launcher}
-        whileHover={{ scale: 1.03 }}
-        whileTap={{ scale: 0.97 }}
-      >
-        <Button
-          className={classes.launcherButton}
-          radius="xl"
-          size="md"
-          leftSection={opened ? <X size={18} /> : <Bot size={18} />}
-          onClick={() => (opened ? setOpened(false) : openAssistant())}
-          aria-expanded={opened}
-          aria-label={
-            opened ? "Close DevHub Assistant" : "Ask DevHub Assistant"
-          }
-        >
-          {opened ? "Close" : "Ask DevHub"}
-        </Button>
-      </motion.div>
+      <AnimatePresence>
+        {!opened && (
+          <motion.div
+            className={classes.launcher}
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+          >
+            <Button
+              className={classes.launcherButton}
+              radius="xl"
+              size="md"
+              leftSection={<Bot size={18} />}
+              onClick={openAssistant}
+              aria-expanded={false}
+              aria-label="Ask DevHub Assistant"
+            >
+              Ask DevHub
+            </Button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </>
   );
 }

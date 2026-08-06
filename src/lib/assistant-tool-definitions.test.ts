@@ -35,6 +35,17 @@ describe("assistant tool policy", () => {
     assert.equal("estimate" in parsed, false);
   });
 
+  it("can resolve a named product without listing every team by hand", () => {
+    const resolver = ASSISTANT_TOOLS.find(
+      (tool) => tool.name === "resolve_task_destination",
+    );
+    assert.ok(resolver);
+    assert.equal(resolver.mutation, false);
+    assert.deepEqual(resolver.schema.parse({ query: "Lebuhraya" }), {
+      query: "Lebuhraya",
+    });
+  });
+
   it("emits OpenAI strict tool schemas without unsupported formats", () => {
     const schemas = JSON.stringify(openAiAssistantTools());
 

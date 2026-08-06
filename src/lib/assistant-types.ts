@@ -22,6 +22,21 @@ export type AssistantActionDto = {
   error: string | null;
 };
 
+export type AssistantLinearIssueReference = {
+  kind: "linear_issue";
+  id: string;
+  identifier: string;
+  title: string;
+  url: string;
+  description: string | null;
+  estimate: number | null;
+  stateName: string;
+  labelNames: string[];
+  imageUrl: string | null;
+};
+
+export type AssistantReferenceDto = AssistantLinearIssueReference;
+
 export type AssistantMessageDto = {
   id: string;
   role: "user" | "assistant";
@@ -31,6 +46,7 @@ export type AssistantMessageDto = {
   model: string | null;
   createdAt: string;
   actions: AssistantActionDto[];
+  references: AssistantReferenceDto[];
 };
 
 export type AssistantConversationSummary = {
@@ -53,6 +69,7 @@ export type AssistantStreamEvent =
     }
   | { type: "delta"; delta: string }
   | { type: "action"; action: AssistantActionDto }
+  | { type: "references"; references: AssistantReferenceDto[] }
   | { type: "provider"; provider: string; model: string }
   | {
       type: "tool";

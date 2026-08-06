@@ -5,6 +5,7 @@ import type {
   AssistantConversationSummary,
   AssistantMessageDto,
   AssistantPreview,
+  AssistantReferenceDto,
 } from "@/lib/assistant-types";
 import { hasAdminAccess } from "@/lib/authz";
 import type { AssistantHistoryMessage } from "@/lib/llm-agent";
@@ -36,6 +37,45 @@ function preview(value: Prisma.JsonValue): AssistantPreview {
   };
 }
 
+function messageReferences(
+  value: Prisma.JsonValue | null,
+): AssistantReferenceDto[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return [];
+    const row = item as Record<string, Prisma.JsonValue>;
+    if (
+      row.kind !== "linear_issue" ||
+      typeof row.id !== "string" ||
+      typeof row.identifier !== "string" ||
+      typeof row.title !== "string" ||
+      typeof row.url !== "string" ||
+      typeof row.stateName !== "string"
+    ) {
+      return [];
+    }
+    return [
+      {
+        kind: "linear_issue" as const,
+        id: row.id,
+        identifier: row.identifier,
+        title: row.title,
+        url: row.url,
+        description:
+          typeof row.description === "string" ? row.description : null,
+        estimate: typeof row.estimate === "number" ? row.estimate : null,
+        stateName: row.stateName,
+        labelNames: Array.isArray(row.labelNames)
+          ? row.labelNames.filter(
+              (label): label is string => typeof label === "string",
+            )
+          : [],
+        imageUrl: typeof row.imageUrl === "string" ? row.imageUrl : null,
+      },
+    ];
+  });
+}
+
 export function serializeAssistantAction(
   action: MessageWithActions["actions"][number],
 ): AssistantActionDto {
@@ -64,6 +104,7 @@ export function serializeAssistantMessage(
     model: message.model,
     createdAt: message.createdAt.toISOString(),
     actions: message.actions.map(serializeAssistantAction),
+    references: messageReferences(message.references),
   };
 }
 
@@ -338,6 +379,7 @@ export async function finishAssistantMessage(input: {
   status: "COMPLETE" | "INTERRUPTED" | "FAILED";
   provider?: string | null;
   model?: string | null;
+  references?: AssistantReferenceDto[];
 }) {
   const message = await prisma.assistantMessage.update({
     where: {
@@ -349,6 +391,9 @@ export async function finishAssistantMessage(input: {
       status: input.status,
       provider: input.provider,
       model: input.model,
+      ...(input.references
+        ? { references: input.references as Prisma.InputJsonValue }
+        : {}),
       conversation: { update: { updatedAt: new Date() } },
     },
     include: { actions: { orderBy: { createdAt: "asc" } } },

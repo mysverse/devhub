@@ -46,6 +46,15 @@ export const LINEAR_PROJECT = {
   health: "onTrack",
 };
 
+export const LINEAR_PROJECT_LEBUHRAYA = {
+  id: "project-lebuhraya",
+  name: "Lebuhraya",
+  startDaysAgo: 120,
+  targetDaysAhead: 120,
+  progress: 0.58,
+  health: "onTrack",
+};
+
 export type DevLinearStateType =
   | "backlog"
   | "unstarted"
@@ -184,7 +193,7 @@ export const LINEAR_ISSUES: DevLinearIssue[] = [
     identifier: "MYS-201",
     title: "Implement convoy escort mission flow",
     description:
-      "Build the convoy escort mission loop: spawn logic, checkpoints, and reward hand-off.",
+      "![Convoy reference](https://uploads.linear.app/devhub/seed/car-wash-reference.png)\n\nBuild the convoy escort mission loop: spawn logic, checkpoints, and reward hand-off.",
     estimate: 3,
     stateType: "started",
     assigneeId: ALEX,

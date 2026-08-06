@@ -5,7 +5,10 @@ import {
   getAssistantActionDto,
   prepareAssistantTurn,
 } from "@/lib/assistant";
-import type { AssistantStreamEvent } from "@/lib/assistant-types";
+import type {
+  AssistantReferenceDto,
+  AssistantStreamEvent,
+} from "@/lib/assistant-types";
 import { getSession } from "@/lib/auth-utils";
 import { isAssistantConfigured } from "@/lib/llm";
 import { runAssistantTurn } from "@/lib/llm-agent";
@@ -48,6 +51,7 @@ export async function POST(request: Request, { params }: { params: Params }) {
       let accumulated = "";
       let provider: string | null = null;
       let model: string | null = null;
+      let references: AssistantReferenceDto[] = [];
       let closed = false;
       const send = (event: AssistantStreamEvent) => {
         if (closed) return;
@@ -92,6 +96,18 @@ export async function POST(request: Request, { params }: { params: Params }) {
               send(event);
               return;
             }
+            if (event.type === "references") {
+              references = [
+                ...new Map(
+                  [...references, ...event.references].map((reference) => [
+                    `${reference.kind}:${reference.id}`,
+                    reference,
+                  ]),
+                ).values(),
+              ];
+              send(event);
+              return;
+            }
             const action = await getAssistantActionDto(userId, event.actionId);
             if (action) send({ type: "action", action });
           },
@@ -104,6 +120,7 @@ export async function POST(request: Request, { params }: { params: Params }) {
           status: "COMPLETE",
           provider: result.provider,
           model: result.model,
+          references,
         });
         send({ type: "done", message });
       } catch (error) {
@@ -120,6 +137,7 @@ export async function POST(request: Request, { params }: { params: Params }) {
           status: interrupted ? "INTERRUPTED" : "FAILED",
           provider,
           model,
+          references,
         });
         send({ type: "error", error: publicMessage, message });
       } finally {

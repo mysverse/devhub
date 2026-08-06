@@ -11,6 +11,7 @@
 
 import type { DevHandler } from "@/dev/intercept";
 import { getDevState } from "@/dev/state";
+import { CAR_PPT_PAYLOAD } from "./assistant-fixtures";
 
 type MessageRequest = {
   system?: string;
@@ -18,6 +19,8 @@ type MessageRequest = {
   output_config?: { format?: { schema?: Record<string, unknown> } };
   stream?: boolean;
 };
+
+type AssistantToolRequest = { name: string; input: Record<string, unknown> };
 
 function promptText(body: MessageRequest) {
   return (
@@ -95,6 +98,142 @@ function streamReply(id: string, text: string) {
   return new Response(body, {
     headers: { "Content-Type": "text/event-stream" },
   });
+}
+
+function toolResultCount(body: MessageRequest) {
+  return (
+    body.messages?.reduce((count, message) => {
+      if (!Array.isArray(message.content)) return count;
+      return (
+        count +
+        message.content.filter(
+          (block) =>
+            block &&
+            typeof block === "object" &&
+            (block as { type?: string }).type === "tool_result",
+        ).length
+      );
+    }, 0) ?? 0
+  );
+}
+
+function latestUserText(body: MessageRequest) {
+  for (const message of [...(body.messages ?? [])].reverse()) {
+    if (message.role !== "user") continue;
+    if (typeof message.content === "string") return message.content;
+    if (!Array.isArray(message.content)) continue;
+    const text = message.content.find(
+      (block) =>
+        block &&
+        typeof block === "object" &&
+        (block as { type?: string }).type === "text",
+    ) as { text?: unknown } | undefined;
+    if (typeof text?.text === "string") return text.text;
+  }
+  return "";
+}
+
+function assistantToolRequest(
+  body: MessageRequest,
+): AssistantToolRequest | null {
+  const text = promptText(body).toLowerCase();
+  const latest = latestUserText(body).trim().toLowerCase();
+  const carIdea = /(?:proton x90|civilian car|car for lebuhraya)/.test(text);
+  const hasDueDate = /(?:2026-08-31|august 31|end of (?:this|the) month)/.test(
+    text,
+  );
+  const hasEstimate =
+    /(?:estimate|level|complexity)\s*(?:is|of|:)?\s*3\b/.test(text) ||
+    latest === "3";
+  if (!carIdea || !hasDueDate || !hasEstimate) return null;
+  const resultCount = toolResultCount(body);
+  if (resultCount === 0) {
+    return {
+      name: "resolve_task_destination",
+      input: { query: "Lebuhraya" },
+    };
+  }
+  if (resultCount === 1) {
+    return { name: "propose_ppt_request", input: CAR_PPT_PAYLOAD };
+  }
+  return null;
+}
+
+function streamToolReply(id: string, tool: AssistantToolRequest) {
+  const model = "claude-sonnet-5";
+  const toolUseId = `toolu_${id}`;
+  const events = [
+    {
+      type: "message_start",
+      message: {
+        id,
+        type: "message",
+        role: "assistant",
+        model,
+        content: [],
+        container: null,
+        stop_details: null,
+        stop_reason: null,
+        stop_sequence: null,
+        usage: {
+          cache_creation: null,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          inference_geo: null,
+          input_tokens: 12,
+          output_tokens: 0,
+          output_tokens_details: null,
+          server_tool_use: null,
+          service_tier: "standard",
+        },
+      },
+    },
+    {
+      type: "content_block_start",
+      index: 0,
+      content_block: {
+        type: "tool_use",
+        id: toolUseId,
+        name: tool.name,
+        input: {},
+      },
+    },
+    {
+      type: "content_block_delta",
+      index: 0,
+      delta: {
+        type: "input_json_delta",
+        partial_json: JSON.stringify(tool.input),
+      },
+    },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "message_delta",
+      delta: {
+        container: null,
+        stop_details: null,
+        stop_reason: "tool_use",
+        stop_sequence: null,
+      },
+      usage: {
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        input_tokens: 12,
+        output_tokens: 18,
+        output_tokens_details: null,
+        server_tool_use: null,
+      },
+    },
+    { type: "message_stop" },
+  ];
+  return new Response(
+    events
+      .map(
+        (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+      )
+      .join(""),
+    { headers: { "Content-Type": "text/event-stream" } },
+  );
 }
 
 function field(prompt: string, label: string) {
@@ -207,6 +346,14 @@ export const handleAnthropic: DevHandler = async (req, url) => {
     const id = `msg_dev_${++getDevState().counters.llm}`;
     if (body.stream) {
       console.log(`[dev-mode] anthropic → canned streamed reply (${id})`);
+      const tool = assistantToolRequest(body);
+      if (tool) return streamToolReply(id, tool);
+      if (/proton x90|civilian car|car for lebuhraya/i.test(promptText(body))) {
+        return streamReply(
+          id,
+          "The backup finished the job. Your PPT request is ready to review below—check the scope, estimate, and due date, then confirm.",
+        );
+      }
       return streamReply(
         id,
         "OpenAI paused, so I switched to the backup. We can keep going.",

@@ -321,6 +321,18 @@ model request shape live at these boundaries, never at call sites.
   transitions the action before calling existing domain actions. Payouts,
   payment details, KYC, access, labels, estimates, and bulk/destructive changes
   are outside the tool set.
+- **Rough ideas should converge, not become interviews.** The assistant writes
+  a working draft immediately, asks at most one material scoping question, and
+  collects any remaining PPT due date + estimate in one reply. Named products
+  resolve through `resolve_task_destination` instead of a team/project loop.
+- **A failed tool is data, not a failed provider turn.** The agent returns a
+  safe tool error to the active model so it can continue from conversation
+  context or offer a manual choice. Provider fallback remains available for
+  provider and transport failures and must be able to continue tool rounds.
+- **Linear issue references are first-class message data.** Safe issue reads
+  are persisted on `AssistantMessage.references` and rendered as cards after
+  reload; only Linear-hosted description images may use the authenticated
+  image proxy.
 - **Every call is metered and capped.** `LlmCall` is both the usage record and
   the rate-limit ledger; `checkLlmRateLimits` counts a rolling hour, copied from
   `checkEmailRateLimits`. Hitting a cap returns null, which every caller already

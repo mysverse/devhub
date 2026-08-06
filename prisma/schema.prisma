@@ -271,6 +271,7 @@ model AssistantMessage {
   status         AssistantMessageStatus @default(COMPLETE)
   provider       String?
   model          String?
+  references     Json?
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 

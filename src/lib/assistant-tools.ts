@@ -42,6 +42,33 @@ function safeIssue(issue: {
   };
 }
 
+function normalizedWords(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((word) => word.length > 1);
+}
+
+function destinationScore(query: string, name: string) {
+  const normalizedQuery = normalizedWords(query).join(" ");
+  const normalizedName = normalizedWords(name).join(" ");
+  if (!normalizedQuery || !normalizedName) return 0;
+  if (normalizedName === normalizedQuery) return 100;
+  if (
+    normalizedQuery.includes(normalizedName) ||
+    normalizedName.includes(normalizedQuery)
+  ) {
+    return 70;
+  }
+  const queryWords = new Set(normalizedWords(query));
+  return normalizedWords(name).reduce(
+    (score, word) => score + (queryWords.has(word) ? 10 : 0),
+    0,
+  );
+}
+
 type HelpTopic =
   | "ppt"
   | "task_ideas"
@@ -269,6 +296,53 @@ async function executeReadTool(
         id: project.id,
         name: project.name,
       }));
+    });
+  }
+  if (name === "resolve_task_destination") {
+    return withLinearFallback(context.userId, async (client) => {
+      const query = String(payload.query);
+      const teams = (await client.teams()).nodes;
+      const destinations = (
+        await Promise.all(
+          teams.map(async (team) => {
+            try {
+              const projects = await team.projects({ first: 50 });
+              return projects.nodes.map((project) => ({
+                teamId: team.id,
+                teamKey: team.key,
+                teamName: team.name,
+                projectId: project.id,
+                projectName: project.name,
+                score: destinationScore(query, project.name),
+              }));
+            } catch (error) {
+              console.warn(
+                `[assistant] could not list projects for team ${team.id}:`,
+                error instanceof Error ? error.message : error,
+              );
+              return [];
+            }
+          }),
+        )
+      ).flat();
+      const matches = destinations
+        .filter((destination) => destination.score > 0)
+        .sort(
+          (left, right) =>
+            right.score - left.score ||
+            left.projectName.localeCompare(right.projectName),
+        )
+        .slice(0, 8)
+        .map(({ score: _score, ...destination }) => destination);
+      return {
+        query,
+        matches,
+        teams: teams.slice(0, 20).map((team) => ({
+          id: team.id,
+          key: team.key,
+          name: team.name,
+        })),
+      };
     });
   }
   if (name === "list_my_tasks") {

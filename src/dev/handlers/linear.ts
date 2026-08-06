@@ -9,6 +9,7 @@ import {
   getLinearUser,
   LINEAR_ORG_URL,
   LINEAR_PROJECT,
+  LINEAR_PROJECT_LEBUHRAYA,
   LINEAR_PROJECT_SECONDARY,
   LINEAR_STATES,
   LINEAR_TEAM,
@@ -270,7 +271,11 @@ function workflowStateNode(stateId: string): Json {
 }
 
 const ALL_TEAMS = [LINEAR_TEAM, LINEAR_TEAM_SECONDARY];
-const ALL_PROJECTS = [LINEAR_PROJECT, LINEAR_PROJECT_SECONDARY];
+const ALL_PROJECTS = [
+  LINEAR_PROJECT,
+  LINEAR_PROJECT_LEBUHRAYA,
+  LINEAR_PROJECT_SECONDARY,
+];
 
 /**
  * Resolve by id. This used to ignore its argument and always return the
@@ -668,7 +673,10 @@ function executeOperation(
       const projects =
         teamId === LINEAR_TEAM_SECONDARY.id
           ? [projectNode(LINEAR_PROJECT_SECONDARY.id)]
-          : [projectNode(LINEAR_PROJECT.id)];
+          : [
+              projectNode(LINEAR_PROJECT.id),
+              projectNode(LINEAR_PROJECT_LEBUHRAYA.id),
+            ];
       return { team: { projects: connection(projects) } };
     }
     case "project":

@@ -13,6 +13,9 @@ const SearchTasksSchema = z.object({
 });
 const EmptySchema = z.object({});
 const TeamSchema = z.object({ teamId: z.string().min(1) });
+const DestinationSchema = z.object({
+  query: z.string().trim().min(1).max(160),
+});
 const HelpSchema = z.object({
   topic: z.enum([
     "ppt",
@@ -138,6 +141,17 @@ export const ASSISTANT_TOOLS: AssistantToolDefinition[] = [
     activity: {
       running: "Loading team projects",
       complete: "Projects ready",
+    },
+  },
+  {
+    name: "resolve_task_destination",
+    description:
+      "Resolve a product or project name from a rough idea to exact Linear team/project IDs in one check. Prefer this over separately listing teams and projects when the user names where the work belongs.",
+    schema: DestinationSchema,
+    mutation: false,
+    activity: {
+      running: "Finding the right project",
+      complete: "Project destination ready",
     },
   },
   {

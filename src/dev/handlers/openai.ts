@@ -4,6 +4,7 @@ import { LINEAR_PROJECT, LINEAR_TEAM } from "@/dev/fixtures/linear";
 import type { DevHandler } from "@/dev/intercept";
 import { getDevState } from "@/dev/state";
 import { buildReply } from "./anthropic";
+import { CAR_PPT_PAYLOAD } from "./assistant-fixtures";
 
 type ResponsesRequest = {
   model?: string;
@@ -46,6 +47,18 @@ function inputText(input: unknown): string {
       return "";
     })
     .join("\n");
+}
+
+function latestUserText(input: unknown) {
+  if (!Array.isArray(input)) return typeof input === "string" ? input : "";
+  for (const item of [...input].reverse()) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as Record<string, unknown>;
+    if (row.role === "user" && typeof row.content === "string") {
+      return row.content;
+    }
+  }
+  return "";
 }
 
 function baseResponse(id: string, body: ResponsesRequest) {
@@ -102,6 +115,7 @@ function textItem(id: string, text: string) {
 
 function toolRequest(body: ResponsesRequest) {
   const text = inputText(body.input).toLowerCase();
+  const latestUser = latestUserText(body.input).trim().toLowerCase();
   const resultCount = Array.isArray(body.input)
     ? body.input.filter(
         (item) =>
@@ -110,6 +124,28 @@ function toolRequest(body: ResponsesRequest) {
           (item as { type?: string }).type === "function_call_output",
       ).length
     : 0;
+  const carIdea = /(?:proton x90|civilian car|car for lebuhraya)/.test(text);
+  const hasDueDate = /(?:2026-08-31|august 31|end of (?:this|the) month)/.test(
+    text,
+  );
+  const hasEstimate =
+    /(?:estimate|level|complexity)\s*(?:is|of|:)?\s*3\b/.test(text) ||
+    latestUser === "3";
+  if (carIdea && hasDueDate && hasEstimate) {
+    if (resultCount === 0) {
+      return {
+        name: "resolve_task_destination",
+        arguments: { query: "Lebuhraya" },
+      };
+    }
+    if (resultCount === 1) {
+      return {
+        name: "propose_ppt_request",
+        arguments: CAR_PPT_PAYLOAD,
+      };
+    }
+    return null;
+  }
   if (/prepare an ordinary task/.test(text)) {
     if (resultCount === 0) return { name: "list_teams", arguments: {} };
     if (resultCount === 1) {
@@ -128,6 +164,9 @@ function toolRequest(body: ResponsesRequest) {
     return null;
   }
   if (resultCount > 0) return null;
+  if (/\bmys-201\b|find (?:a )?task|search tasks?/.test(text)) {
+    return { name: "search_tasks", arguments: { query: "MYS-201" } };
+  }
   if (/assigned|my tasks|working on/.test(text)) {
     return { name: "list_my_tasks", arguments: {} };
   }
@@ -151,7 +190,16 @@ function chatText(body: ResponsesRequest) {
         (item as { type?: string }).type === "function_call_output",
     );
   if (hasToolOutput) {
+    if (/proton x90|civilian car|car for lebuhraya/i.test(text)) {
+      return "Your PPT request is ready to review below. Check the scope, estimate, and due date, then confirm when it looks right.";
+    }
     return "I checked the current DevHub data. The results above are the source of truth; tell me which item you want to develop or act on.";
+  }
+  if (/make this a ppt|enough (?:to make|for) a ppt/i.test(text)) {
+    return "Almost. Send the **due date + estimate (1–5)** in one reply. I’ll use the draft’s existing scope and prepare the review card—no more setup questions.";
+  }
+  if (/proton x90|civilian car|car for lebuhraya/i.test(text)) {
+    return "**Working draft**\n\n**Create one realistic civilian car for Lebuhraya**\n\n- Roblox-ready Proton X90-inspired SUV\n- Realistic exterior with a basic interior\n- Correct scale, materials, pivots, and organized model\n- Driving physics and animations stay out of scope\n\n**Done when:** it imports cleanly, looks complete from all sides, and is optimized for later vehicle setup.\n\nI assumed one finished car variant. You can make this a PPT now or change the scope.";
   }
   if (/diagram|flow/i.test(text)) {
     return "Here’s the short version.\n\n```mermaid\nflowchart LR\n  Idea --> Scope\n  Scope --> Review\n  Review --> Done\n```\n\nStart by naming the outcome you want.";

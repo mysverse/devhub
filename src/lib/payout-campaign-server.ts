@@ -314,6 +314,22 @@ export async function revertCampaignApplications(
   });
 }
 
+/**
+ * Release uplift for a rejected payout. Keyed by transaction rather than scope
+ * so one call covers a PPT payout, a grouped monthly bonus, and a grouped
+ * incentive release alike — an admin rejecting a payout should return the
+ * budget no matter which path earned it.
+ */
+export async function revertCampaignApplicationsForTransaction(
+  transactionId: string,
+  tx: Prisma.TransactionClient = prisma,
+) {
+  return tx.payoutCampaignApplication.updateMany({
+    where: { transactionId, reverted: false },
+    data: { reverted: true, revertedAt: new Date() },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Cost preview
 // ---------------------------------------------------------------------------

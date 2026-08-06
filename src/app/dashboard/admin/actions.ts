@@ -19,6 +19,7 @@ import {
   initiateRobloxPayout,
   initiateXenditPayout,
 } from "@/lib/payout";
+import { revertCampaignApplicationsForTransaction } from "@/lib/payout-campaign-server";
 import {
   canConfirmManualPayment,
   classifyPayoutRoute,
@@ -139,6 +140,8 @@ export async function rejectTransaction(
 
     revalidatePath("/dashboard/admin");
     await cancelIncentiveAwardsForTransaction(transactionId, reason || null);
+    // The money never went out, so return its uplift to the campaign pool.
+    await revertCampaignApplicationsForTransaction(transactionId);
 
     // Fetch the transaction for email and PDF generation
     const transaction = await prisma.transaction.findUnique({

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import type { DeveloperRank, Prisma } from "@prisma/client";
 import { createElement } from "react";
 import PptPayoutAdminAlert from "@/emails/PptPayoutAdminAlert";
 import PptPayoutBlocked from "@/emails/PptPayoutBlocked";
@@ -24,6 +24,12 @@ import {
 } from "@/lib/linear";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { initiateAutoPayout } from "@/lib/payout";
+import {
+  applyLockedCampaign,
+  type CampaignResolution,
+  recordCampaignApplication,
+  resolveCampaignForAmount,
+} from "@/lib/payout-campaign-server";
 import { PROOF_TAG } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { shouldEvaluatePptWebhookHint } from "@/lib/ppt-eligibility-gate";
@@ -1438,8 +1444,18 @@ async function handleEstimateChange(
     return "RECORDED" as const;
   }
 
-  const amount = estimateToAmount(snapshot.estimate, currency);
-  const withinLimit = await isWithinCreditLimit(userId, currency, amount);
+  const baseAmount = estimateToAmount(snapshot.estimate, currency);
+  // Recompute against the LOCKED campaign, never a fresh resolution: the
+  // developer earned this payout while the campaign was live, and an estimate
+  // correction days later must not quietly reprice it to 1x.
+  const campaign = await applyLockedCampaign({
+    campaignId: existingState?.campaignId ?? null,
+    multiplier: existingState?.campaignMultiplier ?? null,
+    baseAmount,
+    currency,
+  });
+  const amount = campaign?.finalAmount ?? baseAmount;
+  const withinLimit = await isWithinCreditLimit(userId, currency, baseAmount);
   await prisma.transaction.update({
     where: { id: existingTransaction.id },
     data: {
@@ -1448,6 +1464,9 @@ async function handleEstimateChange(
       linearIssueTitle: snapshot.title,
       linearIssueUrl: snapshot.url,
       amount,
+      baseAmount,
+      campaignId: campaign?.campaign.id ?? null,
+      campaignMultiplier: campaign?.multiplier ?? null,
       currency,
       autoApproved: withinLimit,
     },
@@ -1459,12 +1478,26 @@ async function handleEstimateChange(
       lastEstimateChangeAt: snapshot.updatedAt ?? new Date(),
     },
   });
+  if (campaign) {
+    await chargeCampaignForPayout(campaign, {
+      stateId,
+      userId,
+      currency,
+      transactionId: existingTransaction.id,
+    });
+  }
   await appendEvent({
     stateId,
     linearIssueId: snapshot.id,
     type: "ESTIMATE_RECALCULATED",
     reason: "ESTIMATE_CHANGED_RECALCULATED",
-    metadata: { amount, currency, withinLimit },
+    metadata: {
+      amount,
+      baseAmount,
+      campaign: campaign?.campaign.slug ?? null,
+      currency,
+      withinLimit,
+    },
   });
   await notifyDeveloper(
     stateId,
@@ -1482,15 +1515,116 @@ async function handleEstimateChange(
   return "UPDATED" as const;
 }
 
+/**
+ * The campaign multiplier for this payout, locked onto the state row the first
+ * time it resolves.
+ *
+ * Locking matters because a PPT amount is decided once but rewritten several
+ * times afterwards — an estimate change, an ON_HOLD release, a re-evaluation
+ * triggered by any later webhook. Re-resolving against the clock on those paths
+ * would silently reprice a developer's live payout down to 1x the moment the
+ * campaign expired, days after they earned it. Once locked, the campaign sticks
+ * to the payout until it is paid.
+ */
+async function resolvePptCampaign(input: {
+  stateId: string;
+  snapshot: LinearIssueSnapshot;
+  userId: string;
+  rank: DeveloperRank | null;
+  currency: CurrencyCode;
+  baseAmount: number;
+}): Promise<CampaignResolution | null> {
+  const locked = await prisma.pptPayoutState.findUnique({
+    where: { id: input.stateId },
+    select: { campaignId: true, campaignMultiplier: true },
+  });
+
+  if (locked?.campaignId && locked.campaignMultiplier) {
+    return applyLockedCampaign({
+      campaignId: locked.campaignId,
+      multiplier: locked.campaignMultiplier,
+      baseAmount: input.baseAmount,
+      currency: input.currency,
+    });
+  }
+
+  const resolved = await resolveCampaignForAmount({
+    scope: "PPT",
+    userId: input.userId,
+    currency: input.currency,
+    baseAmount: input.baseAmount,
+    rank: input.rank,
+    labels: input.snapshot.labels,
+  });
+  if (!resolved) return null;
+
+  await prisma.pptPayoutState.update({
+    where: { id: input.stateId },
+    data: {
+      campaignId: resolved.campaign.id,
+      campaignMultiplier: resolved.multiplier,
+    },
+  });
+  return resolved;
+}
+
+/**
+ * Charge the campaign's uplift pool for this payout.
+ *
+ * Recorded after the transaction rather than inside it, and swallowing its own
+ * errors, because a ledger write must never be the reason a developer's payout
+ * fails. The unique (campaignId, scope, entityId) makes it idempotent, and the
+ * PPT engine re-evaluates on every webhook, so a row missed here is written on
+ * the next evaluation rather than lost.
+ */
+async function chargeCampaignForPayout(
+  campaign: CampaignResolution,
+  input: {
+    stateId: string;
+    userId: string;
+    currency: CurrencyCode;
+    transactionId: string;
+  },
+) {
+  try {
+    await recordCampaignApplication({
+      campaignId: campaign.campaign.id,
+      scope: "PPT",
+      entityId: input.stateId,
+      userId: input.userId,
+      currency: input.currency,
+      baseAmount: campaign.baseAmount,
+      multiplier: campaign.multiplier,
+      upliftAmount: campaign.upliftAmount,
+      transactionId: input.transactionId,
+    });
+  } catch (error) {
+    console.error(
+      "[ppt-eligibility] Failed to record campaign application:",
+      error,
+    );
+  }
+}
+
 async function handleEligiblePayout(
   snapshot: LinearIssueSnapshot,
   stateId: string,
   userId: string,
   currency: CurrencyCode,
-  amount: number,
+  baseAmount: number,
   proof: LinearCommentSnapshot | null,
+  rank: DeveloperRank | null,
 ) {
   const proofData = getProofData(proof);
+  const campaign = await resolvePptCampaign({
+    stateId,
+    snapshot,
+    userId,
+    rank,
+    currency,
+    baseAmount,
+  });
+  const amount = campaign?.finalAmount ?? baseAmount;
   const existing = await prisma.transaction.findUnique({
     where: { linearIssueId: snapshot.id },
     include: { payout: true },
@@ -1541,7 +1675,7 @@ async function handleEligiblePayout(
   }
 
   if (existing?.status === "PENDING") {
-    const withinLimit = await isWithinCreditLimit(userId, currency, amount);
+    const withinLimit = await isWithinCreditLimit(userId, currency, baseAmount);
     const transactionChanged =
       existing.userId !== userId ||
       !estimatesMatch(existing.amount, amount) ||
@@ -1563,16 +1697,33 @@ async function handleEligiblePayout(
           linearIssueTitle: snapshot.title,
           linearIssueUrl: snapshot.url,
           amount,
+          baseAmount,
+          campaignId: campaign?.campaign.id ?? null,
+          campaignMultiplier: campaign?.multiplier ?? null,
           currency,
           autoApproved: withinLimit,
         },
       });
+      if (campaign) {
+        await chargeCampaignForPayout(campaign, {
+          stateId,
+          userId,
+          currency,
+          transactionId: existing.id,
+        });
+      }
       await appendEvent({
         stateId,
         linearIssueId: snapshot.id,
         type: "ESTIMATE_RECALCULATED",
         reason: "ESTIMATE_CHANGED_RECALCULATED",
-        metadata: { amount, currency, withinLimit },
+        metadata: {
+          amount,
+          baseAmount,
+          campaign: campaign?.campaign.slug ?? null,
+          currency,
+          withinLimit,
+        },
       });
     }
 
@@ -1645,7 +1796,7 @@ async function handleEligiblePayout(
     return;
   }
 
-  const withinLimit = await isWithinCreditLimit(userId, currency, amount);
+  const withinLimit = await isWithinCreditLimit(userId, currency, baseAmount);
 
   let transactionId: string;
   if (existing?.status === "ON_HOLD") {
@@ -1658,6 +1809,9 @@ async function handleEligiblePayout(
           linearIssueTitle: snapshot.title,
           linearIssueUrl: snapshot.url,
           amount,
+          baseAmount,
+          campaignId: campaign?.campaign.id ?? null,
+          campaignMultiplier: campaign?.multiplier ?? null,
           currency,
           status: "PENDING",
           autoApproved: withinLimit,
@@ -1698,6 +1852,9 @@ async function handleEligiblePayout(
             linearIssueTitle: snapshot.title,
             linearIssueUrl: snapshot.url,
             amount,
+            baseAmount,
+            campaignId: campaign?.campaign.id ?? null,
+            campaignMultiplier: campaign?.multiplier ?? null,
             currency,
             source: "PPT",
             status: "PENDING",
@@ -1750,7 +1907,21 @@ async function handleEligiblePayout(
       linearIssueId: snapshot.id,
       type: "TRANSACTION_CREATED",
       reason: "TRANSACTION_CREATED",
-      metadata: { amount, currency },
+      metadata: {
+        amount,
+        baseAmount,
+        campaign: campaign?.campaign.slug ?? null,
+        currency,
+      },
+    });
+  }
+
+  if (campaign) {
+    await chargeCampaignForPayout(campaign, {
+      stateId,
+      userId,
+      currency,
+      transactionId,
     });
   }
 
@@ -2209,14 +2380,15 @@ async function evaluatePptSnapshot(
     });
 
     const currency = getCurrencyForPaymentMethod(linkedUser.paymentMethod);
-    const amount = estimateToAmount(snapshot.estimate, currency);
+    const baseAmount = estimateToAmount(snapshot.estimate, currency);
     await handleEligiblePayout(
       snapshot,
       base.id,
       linkedUser.id,
       currency,
-      amount,
+      baseAmount,
       null,
+      linkedUser.developerRank,
     );
     return { status: "READY_FOR_PAYOUT" as const };
   }
@@ -2334,7 +2506,7 @@ async function evaluatePptSnapshot(
   }
 
   const currency = getCurrencyForPaymentMethod(linkedUser.paymentMethod);
-  const amount = estimateToAmount(snapshot.estimate, currency);
+  const baseAmount = estimateToAmount(snapshot.estimate, currency);
   await prisma.pptPayoutState.update({
     where: { id: base.id },
     data: { status: "READY_FOR_PAYOUT", reason: "READY_FOR_PAYOUT" },
@@ -2350,8 +2522,9 @@ async function evaluatePptSnapshot(
     base.id,
     linkedUser.id,
     currency,
-    amount,
+    baseAmount,
     proof,
+    linkedUser.developerRank,
   );
 
   return { status: "READY_FOR_PAYOUT" as const };

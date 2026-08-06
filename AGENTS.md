@@ -241,6 +241,50 @@ already broken once:
   Claiming resolves outcomes (`CLAIMED` / `TAKEN`), which is the only read on
   whether pushing work at people works.
 
+## Bonus × PPT (money invariant)
+
+PPT and bonus are mutually exclusive, and the collision is bidirectional.
+Both directions used to resolve silently in favour of destroying one side.
+
+- **PPT is a hardcoded bonus exclusion** (`SYSTEM_EXCLUDED_LABELS` in
+  `src/lib/bonus.ts`). Approval stamps the label, the Linear webhook re-syncs,
+  and the candidate is recomputed — but `isTerminalCandidate` protects only
+  `APPROVED`/`REJECTED`, so `ELIGIBLE` and `READY_FOR_REVIEW` are both
+  overwritten.
+- **An ineligible candidate must keep its `userId`.** `/dashboard/bonuses`
+  queries `where: { userId, status: "INELIGIBLE" }`, so writing null orphans
+  the row and it vanishes from the page entirely — including the "not eligible"
+  list that exists to explain it.
+- **Check bonuses BEFORE `client.updateIssue` in `approvePptRequest`.** After
+  that call the destroying webhook is already in flight. `APPROVED` and
+  `READY_FOR_REVIEW` refuse; `ELIGIBLE` warns and names the amount.
+- **An `APPROVED` bonus blocks the PPT payout permanently** —
+  `ppt-eligibility.ts` raises `APPROVED_BONUS_EXISTS` and the sync can never
+  clear it. That is why approval refuses rather than warns there.
+- **`approveMonthlyBonus` checks for a PPT transaction inside its
+  `$transaction`.** The bonus-side guard only runs on webhook sync, so a
+  dropped webhook would otherwise leave both payable. That check is the last
+  point where double payment is catchable.
+- Dev mode can exercise all of this: `pnpm simulate linear --action label`.
+
+## Activation Events
+
+`src/lib/activation-events.ts`. Records first-time crossings only.
+
+- **It duplicates nothing.** Claims live in `PptAssignmentWatch`, proof in
+  `PptPayoutState`, rejected proof in `PptPayoutEvent`, payouts in
+  `Transaction`, pushed work in `TaskSuggestion.outcome`. This adds one shape
+  and one clock over the moments that leave no other trace.
+- **The writer never throws**, same contract as `logPiiAccess` — it is called
+  from claiming, proof and payout. P2002 is a normal outcome, not an error:
+  webhooks, crons and retries replay the same moment and the unique constraint
+  is what makes that idempotent.
+- **No impression tracking.** Next prefetches routes and `cacheComponents`
+  renders ahead of time, so "viewed the board" would be recorded for people who
+  never looked. Do not add it without solving that first.
+- Payout is instrumented on **both** `payout.ts` and the manual admin path;
+  they diverge.
+
 ## LLM Adapter
 
 `src/lib/llm.ts` (transport), `llm-prompts.ts` (prompts + schemas),
@@ -271,6 +315,19 @@ one place.
 - **Everything it produces is advisory.** Drafts prefill a form a human
   submits; triage produces a review queue. The adapter never writes to Linear,
   creates a transaction, or announces anything.
+- **Every call is metered and capped.** `LlmCall` is both the usage record and
+  the rate-limit ledger; `checkLlmRateLimits` counts a rolling hour, copied from
+  `checkEmailRateLimits`. Hitting a cap returns null, which every caller already
+  handles as "do it manually" — a cap must never surface as a broken feature.
+  Failed calls are recorded too: they are billed, and omitting them would let
+  whatever is failing walk past the limit.
+- **`maxTokens` is per-surface.** It is what a truncated response bills up to,
+  so a one-sentence reply must not reserve a draft's worth of output.
+- **No cron calls the LLM.** Every surface is user- or admin-triggered, which is
+  what keeps spend bounded by human action. Keep it that way.
+- **The model is never trusted with a reference.** It receives issue identifiers
+  and returns identifiers; the server re-anchors against exactly what it sent,
+  and an unknown identifier is demoted, never believed.
 - **Dev mode intercepts `api.anthropic.com`** (`src/dev/handlers/anthropic.ts`)
   and returns a canned reply shaped to the requested schema. `pnpm dev:mock`
   must never make a real model call.
@@ -309,7 +366,9 @@ src/app/
 - **Transaction/Payout**: payout ledger. `Transaction.source` distinguishes `PPT`, `BONUS`, and `MANUAL`; statuses are `PENDING`, `PAID`, `CANCELLED`, and `REJECTED`.
 - **BonusConfig/BonusCandidate/BonusNotification**: bonus scale/config, synced Linear bonus candidates, and unread developer notification events.
 - **PptRequest**: developer requests for admins to create or mark Linear issues as PPT.
-- **TaskSuggestion**: an admin pointing one developer at one open task, with the reason and the outcome (`CLAIMED`/`TAKEN`). Unique per `(linearIssueId, userId)`.
+- **TaskSuggestion**: an admin pointing one developer at one open task, with the reason and the outcome (`CLAIMED`/`TAKEN`). Deliberately NOT unique per `(linearIssueId, userId)` — the anti-nag rule is "one PENDING suggestion at a time", so a task that went stale can be re-suggested.
+- **ActivationEvent**: first-time funnel crossings that leave no other trace. Unique per `(userId, kind, entityId)`.
+- **LlmCall**: every model call — usage record and rate-limit ledger.
 - **KycVerification/KycAuditLog**: KYC review and audit history.
 - **SignedDocument/CoiEntry**: NDA/COI document acceptance and conflict disclosures.
 - **WelcomePack/WelcomePackOrder/...**: welcome pack configuration, assets, orders, and item selections.

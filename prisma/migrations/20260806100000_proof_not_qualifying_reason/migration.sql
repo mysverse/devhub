@@ -9,4 +9,8 @@
 -- developer.
 
 -- AlterEnum
-ALTER TYPE "PptReason" ADD VALUE 'PROOF_NOT_QUALIFYING';
+-- The Postgres type is PptPayoutReason; PptReason is only the TypeScript
+-- alias in ppt-reason-copy.ts. Dev mode uses `prisma db push` and never runs
+-- this file, so the wrong name here would have passed every local gate and
+-- failed on deploy.
+ALTER TYPE "PptPayoutReason" ADD VALUE 'PROOF_NOT_QUALIFYING';

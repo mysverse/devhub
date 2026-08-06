@@ -107,30 +107,32 @@ model UserProfile {
 
   // Relationships
   transactions            Transaction[]
-  pptPayoutStates         PptPayoutState[]        @relation("PptPayoutStateUser")
-  pptAssignmentWatches    PptAssignmentWatch[]    @relation("PptAssignmentWatchUser")
-  notificationsReceived   Notification[]         @relation("NotificationRecipient")
-  notificationsActed      Notification[]         @relation("NotificationActor")
+  pptPayoutStates         PptPayoutState[]            @relation("PptPayoutStateUser")
+  pptAssignmentWatches    PptAssignmentWatch[]        @relation("PptAssignmentWatchUser")
+  notificationsReceived   Notification[]              @relation("NotificationRecipient")
+  notificationsActed      Notification[]              @relation("NotificationActor")
   notificationPreferences NotificationPreference[]
-  bonusCandidates         BonusCandidate[]        @relation("BonusCandidateUser")
-  bonusReviews            BonusCandidate[]        @relation("BonusCandidateReviewer")
-  issueCompletions        IssueCompletion[]       @relation("IssueCompletionUser")
-  incentiveAwards         IncentiveAward[]        @relation("IncentiveAwardUser")
-  incentiveAwardsDisputed IncentiveAward[]        @relation("IncentiveAwardDisputer")
+  bonusCandidates         BonusCandidate[]            @relation("BonusCandidateUser")
+  bonusReviews            BonusCandidate[]            @relation("BonusCandidateReviewer")
+  issueCompletions        IssueCompletion[]           @relation("IssueCompletionUser")
+  incentiveAwards         IncentiveAward[]            @relation("IncentiveAwardUser")
+  incentiveAwardsDisputed IncentiveAward[]            @relation("IncentiveAwardDisputer")
   incentiveActivityDays   UserActivityDay[]
-  incentiveClawbackDebts  IncentiveClawbackDebt[] @relation("IncentiveClawbackDebtUser")
+  incentiveClawbackDebts  IncentiveClawbackDebt[]     @relation("IncentiveClawbackDebtUser")
   invites                 Invite[]
   signedDocuments         SignedDocument[]
-  pptRequestsMade         PptRequest[]            @relation("PptRequestRequester")
-  pptRequestsReviewed     PptRequest[]            @relation("PptRequestReviewer")
-  pptRequestAttachments   PptRequestAttachment[]  @relation("PptRequestAttachmentUploader")
+  pptRequestsMade         PptRequest[]                @relation("PptRequestRequester")
+  pptRequestsReviewed     PptRequest[]                @relation("PptRequestReviewer")
+  pptRequestAttachments   PptRequestAttachment[]      @relation("PptRequestAttachmentUploader")
   kycVerifications        KycVerification[]
   welcomePackOrders       WelcomePackOrder[]
-  projectMemberships      ProjectMembership[]     @relation("ProjectMember")
-  projectAssignmentsMade  ProjectMembership[]     @relation("ProjectAssignmentActor")
-  accessSyncLogs          AccessSyncLog[]         @relation("AccessSyncUser")
-  accessSyncActions       AccessSyncLog[]         @relation("AccessSyncActor")
-  achievements            DeveloperAchievement[]  @relation("DeveloperAchievementUser")
+  projectMemberships      ProjectMembership[]         @relation("ProjectMember")
+  projectAssignmentsMade  ProjectMembership[]         @relation("ProjectAssignmentActor")
+  accessSyncLogs          AccessSyncLog[]             @relation("AccessSyncUser")
+  accessSyncActions       AccessSyncLog[]             @relation("AccessSyncActor")
+  achievements            DeveloperAchievement[]      @relation("DeveloperAchievementUser")
+  payoutCampaignsCreated  PayoutCampaign[]            @relation("PayoutCampaignCreator")
+  campaignApplications    PayoutCampaignApplication[] @relation("PayoutCampaignApplicationUser")
 }
 
 // Persisted, peer-visible recognition. Keys live in src/lib/achievements.ts
@@ -189,11 +191,11 @@ enum EmailDeliveryStatus {
 }
 
 model Notification {
-  id         String      @id @default(cuid())
-  userId     String
-  user       UserProfile @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
-  actorId    String?
-  actor      UserProfile? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  id      String       @id @default(cuid())
+  userId  String
+  user    UserProfile  @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actorId String?
+  actor   UserProfile? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
 
   domain     String
   type       String
@@ -222,7 +224,7 @@ model NotificationDelivery {
   notification   Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
 
   channel          String
-  status           String   @default("PENDING")
+  status           String    @default("PENDING")
   readAt           DateTime?
   seenAt           DateTime?
   sentAt           DateTime?
@@ -241,9 +243,9 @@ model NotificationDelivery {
 }
 
 model NotificationPreference {
-  id      String      @id @default(cuid())
-  userId  String
-  user    UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String      @id @default(cuid())
+  userId String
+  user   UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   domain  String
   type    String
@@ -409,20 +411,26 @@ enum PaymentMethod {
 }
 
 model Transaction {
-  id                    String            @id @default(cuid())
+  id                    String                      @id @default(cuid())
   userId                String
-  user                  UserProfile       @relation(fields: [userId], references: [id])
-  linearIssueId         String?           @unique // To prevent double crediting
+  user                  UserProfile                 @relation(fields: [userId], references: [id])
+  linearIssueId         String?                     @unique // To prevent double crediting
   linearIssueIdentifier String? // e.g. "DEV-123"
   linearIssueTitle      String?
   linearIssueUrl        String?
   amount                Float
-  currency              String            @default("USD") // Or "R$"
-  source                TransactionSource @default(PPT)
+  /// Pre-multiplier amount. Equals `amount` outside a campaign. The weekly
+  /// credit limit aggregates this column, never `amount`, so a promo cannot
+  /// push developers past their auto-approval limit.
+  baseAmount            Float?
+  campaignId            String?
+  campaignMultiplier    Float?
+  currency              String                      @default("USD") // Or "R$"
+  source                TransactionSource           @default(PPT)
   bonusPeriod           String? // YYYY-MM for grouped monthly bonus payouts
-  status                TxStatus          @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
-  autoApproved          Boolean           @default(false) // Pre-vetted under weekly credit limit
-  createdAt             DateTime          @default(now())
+  status                TxStatus                    @default(PENDING) // PENDING, PAID, CANCELLED, REJECTED
+  autoApproved          Boolean                     @default(false) // Pre-vetted under weekly credit limit
+  createdAt             DateTime                    @default(now())
   paidAt                DateTime?
   rejectedAt            DateTime?
   rejectionReason       String?
@@ -431,6 +439,7 @@ model Transaction {
   bonusCandidates       BonusCandidate[]
   incentiveAwards       IncentiveAward[]
   pptPayoutState        PptPayoutState?
+  campaignApplications  PayoutCampaignApplication[]
 }
 
 enum TransactionSource {
@@ -520,6 +529,12 @@ model PptPayoutState {
 
   transactionId String?      @unique
   transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  /// Campaign locked in at first payout eligibility. Recompute paths (estimate
+  /// changed, ON_HOLD release) reuse this instead of re-resolving against the
+  /// clock, so an expiring campaign never silently reprices a live payout.
+  campaignId         String?
+  campaignMultiplier Float?
 
   warningCount            Int              @default(0)
   lastDeveloperNotifiedAt DateTime?
@@ -640,7 +655,7 @@ enum PptAssignmentWatchStatus {
 }
 
 model PptAssignmentWatch {
-  id                    String                   @id @default(cuid())
+  id                    String  @id @default(cuid())
   linearIssueId         String
   linearIssueIdentifier String?
   linearIssueTitle      String?
@@ -671,9 +686,9 @@ model PptAssignmentWatch {
   selfBlockExpiresAt DateTime?
   selfBlockCount     Int                 @default(0)
 
-  releasedBySelfAt DateTime?
+  releasedBySelfAt       DateTime?
   // Prevents repeat idle nudges within one activity window.
-  idleNudgedAt     DateTime?
+  idleNudgedAt           DateTime?
   // Takeover provenance ("Reassign to me"): who previously held the task and
   // the required reason the taker gave.
   reassignedFromLinearId String?
@@ -772,6 +787,10 @@ model BonusCandidate {
 
   currency            String               @default("MYR")
   maxAmount           Float                @default(0)
+  /// Pre-multiplier cap. Equals `maxAmount` outside a campaign.
+  baseMaxAmount       Float?
+  campaignId          String?
+  campaignMultiplier  Float?
   approvedAmount      Float?
   status              BonusCandidateStatus @default(INELIGIBLE)
   ineligibilityReason String?
@@ -885,33 +904,37 @@ model IssueCompletion {
 }
 
 model IncentiveAward {
-  id              String                  @id @default(cuid())
-  userId          String
-  user            UserProfile             @relation("IncentiveAwardUser", fields: [userId], references: [id], onDelete: Cascade)
-  type            IncentiveType
-  period          String
-  thresholdMet    Int
-  detail          Json?
-  amount          Float
-  netAmount       Float?
-  clawbackApplied Float                   @default(0)
-  currency        String                  @default("MYR")
-  status          IncentiveAwardStatus    @default(PENDING)
-  heldReason      String?
-  transactionId   String?
-  transaction     Transaction?            @relation(fields: [transactionId], references: [id], onDelete: SetNull)
-  releaseAt       DateTime?
-  claimedAt       DateTime?
-  releaseClaimId  String?
-  disputedById    String?
-  disputedBy      UserProfile?            @relation("IncentiveAwardDisputer", fields: [disputedById], references: [id], onDelete: SetNull)
-  disputedAt      DateTime?
-  disputeReason   String?
-  awardIssues     IncentiveAwardIssue[]
-  events          IncentiveEvent[]
-  clawbackDebts   IncentiveClawbackDebt[] @relation("OriginalClawbackAward")
-  createdAt       DateTime                @default(now())
-  updatedAt       DateTime                @updatedAt
+  id                 String                  @id @default(cuid())
+  userId             String
+  user               UserProfile             @relation("IncentiveAwardUser", fields: [userId], references: [id], onDelete: Cascade)
+  type               IncentiveType
+  period             String
+  thresholdMet       Int
+  detail             Json?
+  amount             Float
+  /// Pre-multiplier award amount. Equals `amount` outside a campaign.
+  baseAmount         Float?
+  campaignId         String?
+  campaignMultiplier Float?
+  netAmount          Float?
+  clawbackApplied    Float                   @default(0)
+  currency           String                  @default("MYR")
+  status             IncentiveAwardStatus    @default(PENDING)
+  heldReason         String?
+  transactionId      String?
+  transaction        Transaction?            @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+  releaseAt          DateTime?
+  claimedAt          DateTime?
+  releaseClaimId     String?
+  disputedById       String?
+  disputedBy         UserProfile?            @relation("IncentiveAwardDisputer", fields: [disputedById], references: [id], onDelete: SetNull)
+  disputedAt         DateTime?
+  disputeReason      String?
+  awardIssues        IncentiveAwardIssue[]
+  events             IncentiveEvent[]
+  clawbackDebts      IncentiveClawbackDebt[] @relation("OriginalClawbackAward")
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
 
   @@unique([userId, type, period])
   @@index([userId, status])
@@ -1006,6 +1029,94 @@ enum IncentiveClawbackStatus {
   MANUAL_ADJUSTMENT
 }
 
+// ── Payout campaign tables ──────────────────────────────────────────────────
+
+enum PayoutCampaignScope {
+  PPT
+  BONUS
+  INCENTIVE
+}
+
+/// A limited-time payout multiplier ("3x PPT this sprint"). Campaigns never
+/// stack — the highest multiplier wins. `enabled` is a master switch that wins
+/// over the schedule; within the schedule `startsAt` is inclusive and `endsAt`
+/// is exclusive (see getCampaignWindowState in src/lib/payout-campaign.ts).
+model PayoutCampaign {
+  id         String                @id @default(cuid())
+  slug       String                @unique
+  name       String
+  multiplier Float
+  scopes     PayoutCampaignScope[]
+  enabled    Boolean               @default(false)
+  startsAt   DateTime
+  endsAt     DateTime
+
+  // Targeting. Empty arrays mean "no restriction on this dimension".
+  includedLabels     String[]        @default([])
+  excludedLabels     String[]        @default([])
+  ranks              DeveloperRank[] @default([])
+  participantUserIds String[]        @default([])
+
+  // Guardrails, per currency. 0 means unlimited.
+  upliftPoolMyr           Float   @default(0)
+  upliftPoolRobux         Float   @default(0)
+  perUserUpliftCapMyr     Float   @default(0)
+  perUserUpliftCapRobux   Float   @default(0)
+  /// When true (default) the PPT weekly credit limit is evaluated against the
+  /// pre-multiplier amount, so a promo never changes who gets auto-approved.
+  creditLimitOnBaseAmount Boolean @default(true)
+
+  // Presentation
+  headline    String
+  body        String?
+  accentColor String  @default("violet")
+
+  createdById String?
+  createdBy   UserProfile? @relation("PayoutCampaignCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  applications PayoutCampaignApplication[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([enabled, startsAt, endsAt])
+}
+
+/// One row per multiplied amount: the audit trail, the uplift pool ledger, and
+/// the idempotency key. Written when the amount is decided, which for bonuses
+/// and incentives happens long before a Transaction exists.
+model PayoutCampaignApplication {
+  id         String              @id @default(cuid())
+  campaignId String
+  campaign   PayoutCampaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  scope      PayoutCampaignScope
+  /// PptPayoutState.id | BonusCandidate.id | IncentiveAward.id
+  entityId   String
+
+  userId String
+  user   UserProfile @relation("PayoutCampaignApplicationUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  currency     String
+  baseAmount   Float
+  multiplier   Float
+  /// final - base; the amount charged against the campaign uplift pool.
+  upliftAmount Float
+
+  reverted   Boolean   @default(false)
+  revertedAt DateTime?
+
+  transactionId String?
+  transaction   Transaction? @relation(fields: [transactionId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([campaignId, scope, entityId])
+  @@index([campaignId, currency, reverted])
+  @@index([userId, campaignId, currency])
+  @@index([transactionId])
+}
+
 enum DocumentType {
   COI
   NDA
@@ -1075,11 +1186,11 @@ model PptRequest {
   linearProjectName     String?
 
   // Request details
-  requestedEstimate      Int
-  projectedDueDate       DateTime
-  description            String?
-  note                   String?
-  assigneeIntent         PptRequestAssigneeIntent @default(SELF)
+  requestedEstimate        Int
+  projectedDueDate         DateTime
+  description              String?
+  note                     String?
+  assigneeIntent           PptRequestAssigneeIntent @default(SELF)
   intendedAssigneeLinearId String?
   intendedAssigneeName     String?
   intendedAssigneeEmail    String?
@@ -1098,9 +1209,9 @@ model PptRequest {
 }
 
 model PptRequestAttachment {
-  id          String     @id @default(cuid())
-  requestId   String
-  request     PptRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  id           String      @id @default(cuid())
+  requestId    String
+  request      PptRequest  @relation(fields: [requestId], references: [id], onDelete: Cascade)
   uploadedById String
   uploadedBy   UserProfile @relation("PptRequestAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
 
@@ -1110,7 +1221,7 @@ model PptRequestAttachment {
   width          Int?
   height         Int?
   linearAssetUrl String
-  sortOrder      Int      @default(0)
+  sortOrder      Int    @default(0)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1157,25 +1268,31 @@ model KycVerification {
  * src/lib/pii-audit.ts.
  */
 model PiiAccessLog {
-  id String @id @default(cuid())
+  id         String   @id @default(cuid())
   /**
    * UserProfile id of the reader, and of the subject whose data was read
    * (null for aggregate, page-level rows). Plain strings with no relation,
    * like WelcomePackOrderEvent.actorId — deleting a user must not cascade away
    * the record of what they read.
    */
-  actorId   String
-  subjectId String?
-  /** KYC_ID_DOCUMENT | KYC_SELFIE | BANK_DETAILS | WELCOME_PACK_ADDRESS */
+  actorId    String
+  subjectId  String?
+  /**
+   * KYC_ID_DOCUMENT | KYC_SELFIE | BANK_DETAILS | WELCOME_PACK_ADDRESS
+   */
   resource   String
-  /** verificationId | transactionId | orderId */
+  /**
+   * verificationId | transactionId | orderId
+   */
   resourceId String?
-  /** Route path or action name. */
-  context   String?
-  details   String?
-  ipAddress String?
-  userAgent String?
-  createdAt DateTime @default(now())
+  /**
+   * Route path or action name.
+   */
+  context    String?
+  details    String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
 
   @@index([actorId, createdAt])
   @@index([subjectId, createdAt])
@@ -1236,11 +1353,11 @@ model WelcomePack {
   // existing packs stay "not export-ready" until an admin sets real values
   // rather than shipping guessed parcel data. Currency must be one of the
   // template-supported codes (see EASYPARCEL_CURRENCIES).
-  defaultParcelWeightKg  Float?
-  defaultParcelLengthCm  Float?
-  defaultParcelWidthCm   Float?
-  defaultParcelHeightCm  Float?
-  defaultParcelCurrency  String?
+  defaultParcelWeightKg Float?
+  defaultParcelLengthCm Float?
+  defaultParcelWidthCm  Float?
+  defaultParcelHeightCm Float?
+  defaultParcelCurrency String?
 
   // ID card overlay configuration
   idCardTemplateBlobUrl String?
@@ -1301,14 +1418,14 @@ model WelcomePackItem {
 }
 
 model WelcomePackOrder {
-  id     String      @id @default(cuid())
-  userId String
-  user   UserProfile @relation(fields: [userId], references: [id])
+  id           String      @id @default(cuid())
+  userId       String
+  user         UserProfile @relation(fields: [userId], references: [id])
   // Equals userId while the order is active (PENDING/APPROVED/SHIPPED/
   // DELIVERED), NULL once CANCELLED or REJECTED. Postgres allows many NULLs
   // in a unique index, so a user can have many terminal orders but at most
   // one active order. Every status transition MUST keep this in sync.
-  activeUserId String? @unique
+  activeUserId String?     @unique
   packId       String
   pack         WelcomePack @relation(fields: [packId], references: [id])
 
@@ -1317,33 +1434,35 @@ model WelcomePackOrder {
 
   idCardName String
 
-  region        ShippingRegion
+  region          ShippingRegion
   // Shipping PII. Nullable because the data-retention cron clears it once the
   // order is settled — see WELCOME_PACK_ADDRESS_FIELDS in
   // src/lib/welcome-pack-events.ts and addressPurgedAt below. Nullable rather
   // than a "[purged]" tombstone so `pnpm typecheck` enumerates every reader
   // and a purged order can never silently reach a courier workbook.
-  recipientName String?
-  phone         String?
-  addressLine1  String?
-  addressLine2  String?
-  city          String?
-  stateProvince String?
-  postalCode    String?
-  country       String
-  /** Set when the retention sweep cleared the shipping fields above. */
+  recipientName   String?
+  phone           String?
+  addressLine1    String?
+  addressLine2    String?
+  city            String?
+  stateProvince   String?
+  postalCode      String?
+  country         String
+  /**
+   * Set when the retention sweep cleared the shipping fields above.
+   */
   addressPurgedAt DateTime?
 
-  trackingNumber  String?
-  trackingUrl     String?
-  carrierName     String?
+  trackingNumber         String?
+  trackingUrl            String?
+  carrierName            String?
   estimatedFulfillmentAt DateTime?
   estimatedDeliveryAt    DateTime?
   logisticsNote          String?
   delayedAt              DateTime?
   delayReason            String?
-  notes           String?
-  rejectionReason String?
+  notes                  String?
+  rejectionReason        String?
 
   // Per-order EasyParcel logistics. Parcel dims/weight override the pack
   // defaults when the actual parcel differs; null = fall back to pack default.
@@ -1404,9 +1523,9 @@ model WelcomePackOrderEvent {
   actorRole String // "ADMIN" | "USER" | "SYSTEM"
   // See WelcomePackOrderEventType in src/lib/welcome-pack-events.ts for the
   // full set of values.
-  type     String
-  message  String?
-  metadata Json? // { before, after } diffs for edits; reason for reject/cancel
+  type      String
+  message   String?
+  metadata  Json? // { before, after } diffs for edits; reason for reject/cancel
 
   createdAt DateTime @default(now())
 

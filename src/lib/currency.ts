@@ -86,6 +86,23 @@ export function estimateToAmount(
   return estimate * CURRENCY_CONFIG[currency].multiplier;
 }
 
+/**
+ * Clamp a computed amount to what the currency can actually pay out: whole
+ * Robux (FinSys takes an integer) and two decimals for MYR (Billplz takes
+ * cents). Negative results are floored at 0 — no caller has a legitimate
+ * reason to produce one, and a negative payout would be sent as a real
+ * disbursement.
+ *
+ * Always route amounts through this after any multiplication that is not by a
+ * whole number — the base `estimate * rate` math happens to be integral, but a
+ * campaign multiplier (1.5x) is not.
+ */
+export function roundAmount(amount: number, currency: CurrencyCode): number {
+  if (!Number.isFinite(amount)) return 0;
+  if (currency === "ROBUX") return Math.max(0, Math.round(amount));
+  return Math.max(0, Math.round(amount * 100) / 100);
+}
+
 export function formatAmount(amount: number, currency: CurrencyCode): string {
   return CURRENCY_CONFIG[currency].format(amount);
 }

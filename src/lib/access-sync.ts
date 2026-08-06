@@ -17,6 +17,7 @@ import {
   PROJECT_ACCESS_LEVELS,
   rankAtLeast,
 } from "@/lib/developer-access";
+import { discordFetch } from "@/lib/discord";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import prisma from "@/lib/prisma";
 
@@ -733,20 +734,6 @@ async function syncRobloxLegacy(params: {
       actionKind,
     },
   };
-}
-
-async function discordFetch(path: string, options: RequestInit = {}) {
-  const token = process.env.DISCORD_BOT_TOKEN;
-  if (!token) throw new Error("DISCORD_BOT_TOKEN is not set");
-
-  return fetch(`https://discord.com/api/v10${path}`, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bot ${token}`,
-      ...(options.headers as Record<string, string> | undefined),
-    },
-  });
 }
 
 async function syncDiscord(params: {

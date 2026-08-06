@@ -68,7 +68,13 @@ export type DevState = {
   /** Discord guild member roles: userId → role ids. */
   discordRoles: Map<string, Set<string>>;
   blobs: Map<string, { contentType: string; bytes: Uint8Array }>;
-  counters: { email: number; finsys: number; billplz: number; xendit: number };
+  counters: {
+    email: number;
+    finsys: number;
+    billplz: number;
+    xendit: number;
+    discordMessage: number;
+  };
 };
 
 export function stateForType(type: DevLinearStateType) {
@@ -137,7 +143,7 @@ function createDevState(): DevState {
     xendit: new Map(),
     discordRoles: new Map(),
     blobs: new Map(),
-    counters: { email: 0, finsys: 0, billplz: 0, xendit: 0 },
+    counters: { email: 0, finsys: 0, billplz: 0, xendit: 0, discordMessage: 0 },
   };
 }
 

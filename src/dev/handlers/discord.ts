@@ -35,6 +35,30 @@ export const handleDiscord: DevHandler = async (req, url) => {
     return new Response(null, { status: 204 });
   }
 
+  // DM channel open (src/lib/discord.ts sendDirectMessage).
+  if (url.pathname === "/api/v10/users/@me/channels" && req.method === "POST") {
+    const body = (await req.json()) as { recipient_id?: string };
+    return Response.json({
+      id: `dm-${body.recipient_id ?? "unknown"}`,
+      type: 1,
+      recipients: [{ id: body.recipient_id }],
+    });
+  }
+
+  // Message post — logged like the mock email handler so DM and channel
+  // delivery are verifiable in dev mode rather than silently succeeding.
+  const messageMatch = /^\/api\/v10\/channels\/([^/]+)\/messages$/.exec(
+    url.pathname,
+  );
+  if (messageMatch && req.method === "POST") {
+    const body = (await req.json()) as { content?: string };
+    const id = `msg_dev_${++getDevState().counters.discordMessage}`;
+    console.log(
+      `[dev-mode] discord → ${messageMatch[1]} | ${body.content?.split("\n")[0]} (${id})`,
+    );
+    return Response.json({ id, channel_id: messageMatch[1] });
+  }
+
   if (url.pathname === "/api/users/@me" && req.method === "GET") {
     return Response.json({
       id: "100000000000000000",

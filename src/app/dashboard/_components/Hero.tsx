@@ -8,6 +8,11 @@ import {
   getBankDisplayName,
   getPaymentMethodLabel,
 } from "@/lib/payment-validation";
+import {
+  getCampaignWindowState,
+  selectCampaignBadge,
+} from "@/lib/payout-campaign";
+import { getCampaignRows } from "@/lib/payout-campaign-server";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import prisma from "@/lib/prisma";
 import HeroPrimary from "./HeroPrimary";
@@ -155,6 +160,15 @@ export default async function Hero({
     timeZone: "UTC",
   })} 23:59 UTC`;
 
+  // Board-wide PPT campaign for the rate table in the help drawer. Label
+  // filters are not applied here: this answers "what is the rate right now",
+  // while the per-task badge answers "does this task qualify".
+  const campaignRows = await getCampaignRows();
+  const campaign = selectCampaignBadge(
+    campaignRows.filter((row) => getCampaignWindowState(row).active),
+    { scope: "PPT", userId, rank: userProfile.developerRank },
+  );
+
   return (
     <HeroPrimary
       firstName={firstName}
@@ -175,6 +189,7 @@ export default async function Hero({
       isPaymentMethodSet={isPaymentMethodSet(userProfile)}
       todayLabel={todayLabel}
       policy={getResolvedPayoutPolicy()}
+      campaign={campaign}
     />
   );
 }

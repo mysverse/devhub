@@ -24,6 +24,7 @@ import InfoTip from "@/components/InfoTip";
 import LinkAnchor from "@/components/LinkAnchor";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
+import type { CampaignBadgeInfo } from "@/lib/payout-campaign";
 import type { PayoutPolicy } from "@/lib/payout-policy";
 import HelpDrawer from "./HelpDrawer";
 
@@ -46,6 +47,8 @@ type Props = {
   isPaymentMethodSet: boolean;
   todayLabel: string;
   policy: PayoutPolicy;
+  /** Live PPT campaign, so the help drawer's rate table stays honest. */
+  campaign?: CampaignBadgeInfo | null;
 };
 
 function AnimatedAmount({
@@ -123,6 +126,7 @@ export default function HeroPrimary({
   isPaymentMethodSet,
   todayLabel,
   policy,
+  campaign = null,
 }: Props) {
   const pendingAmount = pendingTransactionsAmount + estimatedActiveAmount;
   const usagePct = weeklyLimit > 0 ? (weeklyUsed / weeklyLimit) * 100 : 0;
@@ -227,6 +231,7 @@ export default function HeroPrimary({
                     currency={currency}
                     weeklyLimit={weeklyLimit}
                     policy={policy}
+                    campaign={campaign}
                   />
                 </StaggerItem>
               </Stack>

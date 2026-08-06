@@ -66,6 +66,7 @@ function toSelectable(campaign: PayoutCampaign): SelectableCampaign {
     slug: campaign.slug,
     name: campaign.name,
     multiplier: campaign.multiplier,
+    accentColor: campaign.accentColor,
     scopes: campaign.scopes,
     enabled: campaign.enabled,
     startsAt: campaign.startsAt,

@@ -5,6 +5,11 @@ import HelpDrawerShell from "@/components/HelpDrawerShell";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount, getRateMultiplier } from "@/lib/currency";
 import {
+  applyMultiplier,
+  type CampaignBadgeInfo,
+  formatMultiplier,
+} from "@/lib/payout-campaign";
+import {
   DEFAULT_PAYOUT_POLICY,
   describeProofRequirement,
   describeStabilityWindow,
@@ -17,12 +22,15 @@ type Props = {
   weeklyLimit: number;
   /** Resolved server-side (env overrides applied) and threaded down. */
   policy?: PayoutPolicy;
+  /** Live PPT campaign, so the rate table shows what tasks actually pay. */
+  campaign?: CampaignBadgeInfo | null;
 };
 
 export default function HelpDrawer({
   currency,
   weeklyLimit,
   policy = DEFAULT_PAYOUT_POLICY,
+  campaign = null,
 }: Props) {
   const multiplier = getRateMultiplier(currency);
   const points = [1, 2, 3, 4, 5];
@@ -58,11 +66,35 @@ export default function HelpDrawer({
           </Text>
           <Group gap="xs" wrap="wrap">
             {points.map((pt) => (
-              <Badge key={pt} variant="light" color="blue" size="lg">
-                {pt}pt = {formatAmount(pt * multiplier, currency)}
+              <Badge
+                key={pt}
+                variant="light"
+                color={campaign ? campaign.accentColor : "blue"}
+                size="lg"
+              >
+                {pt}pt ={" "}
+                {formatAmount(
+                  campaign
+                    ? applyMultiplier(
+                        pt * multiplier,
+                        campaign.multiplier,
+                        currency,
+                      )
+                    : pt * multiplier,
+                  currency,
+                )}
               </Badge>
             ))}
           </Group>
+          {campaign && (
+            <Text fz="xs" c={campaign.accentColor} fw={600}>
+              {campaign.name} is live: these are{" "}
+              {formatMultiplier(campaign.multiplier)} the normal rate of{" "}
+              {formatAmount(multiplier, currency)} per point, until{" "}
+              {new Date(campaign.endsAt).toLocaleString()}. Tasks completed
+              after that pay the normal rate again.
+            </Text>
+          )}
           <Text fz="xs" c="dimmed" mt="xs">
             <strong>Projected earnings</strong> = pending transactions +
             estimated value of your active tasks. <strong>Total Earned</strong>{" "}

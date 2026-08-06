@@ -94,6 +94,7 @@ export type SelectableCampaign = CampaignWindow & {
   slug: string;
   name: string;
   multiplier: number;
+  accentColor: string;
   scopes: CampaignScope[];
   includedLabels: string[];
   excludedLabels: string[];
@@ -101,6 +102,28 @@ export type SelectableCampaign = CampaignWindow & {
   participantUserIds: string[];
   createdAt: Date;
 };
+
+/** The serializable slice a client badge needs. */
+export type CampaignBadgeInfo = {
+  slug: string;
+  name: string;
+  multiplier: number;
+  accentColor: string;
+  /** ISO — the RSC boundary cannot carry a Date into a client component. */
+  endsAt: string;
+};
+
+export function toCampaignBadge(
+  campaign: SelectableCampaign,
+): CampaignBadgeInfo {
+  return {
+    slug: campaign.slug,
+    name: campaign.name,
+    multiplier: campaign.multiplier,
+    accentColor: campaign.accentColor,
+    endsAt: campaign.endsAt.toISOString(),
+  };
+}
 
 export type CampaignSelectionContext = {
   scope: CampaignScope;
@@ -188,6 +211,21 @@ export function selectCampaign(
       b.createdAt.getTime() - a.createdAt.getTime() ||
       a.id.localeCompare(b.id),
   )[0];
+}
+
+/**
+ * Display-only shortcut for server components that already hold the campaign
+ * rows: resolve the campaign for one item and hand the client just enough to
+ * render a badge. Never a substitute for resolveCampaignForAmount — this
+ * ignores the uplift pool, because a preview showing 3x while the budget is
+ * exhausted is a smaller sin than an N+1 aggregate per task card.
+ */
+export function selectCampaignBadge(
+  campaigns: SelectableCampaign[],
+  context: CampaignSelectionContext,
+): CampaignBadgeInfo | null {
+  const selected = selectCampaign(campaigns, context);
+  return selected ? toCampaignBadge(selected) : null;
 }
 
 // ---------------------------------------------------------------------------

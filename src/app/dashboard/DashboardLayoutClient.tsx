@@ -24,6 +24,9 @@ import { motion } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, use } from "react";
+import CampaignBanner, {
+  type CampaignBannerData,
+} from "@/components/CampaignBanner";
 import { Logo } from "@/components/Logo";
 import NotificationPoller from "@/components/NotificationPoller";
 import NotificationBell from "@/components/notifications/NotificationBell";
@@ -247,12 +250,27 @@ function MobileNavLinksWithAdmin({
   );
 }
 
+/**
+ * The live payout campaign, if any. Rendered above the page content rather
+ * than in the header — the header is a fixed 60px single row and `pnpm visual`
+ * fails when anything wraps out of it.
+ */
+function CampaignBannerSlot({
+  campaignPromise,
+}: {
+  campaignPromise: Promise<CampaignBannerData | null>;
+}) {
+  return <CampaignBanner campaign={use(campaignPromise)} />;
+}
+
 export default function DashboardLayoutClient({
   children,
   adminPromise,
+  campaignPromise,
 }: {
   children: React.ReactNode;
   adminPromise: Promise<boolean>;
+  campaignPromise: Promise<CampaignBannerData | null>;
 }) {
   const [opened, { toggle, close }] = useDisclosure();
   const { data: session } = useSession();
@@ -365,6 +383,9 @@ export default function DashboardLayoutClient({
 
         <AppShellMain>
           <Container size="lg" py="xl">
+            <Suspense fallback={null}>
+              <CampaignBannerSlot campaignPromise={campaignPromise} />
+            </Suspense>
             {children}
           </Container>
         </AppShellMain>

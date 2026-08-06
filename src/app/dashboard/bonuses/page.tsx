@@ -24,6 +24,7 @@ import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import { getSession } from "@/lib/auth-utils";
 import { formatAmount } from "@/lib/currency";
+import { formatMultiplier } from "@/lib/payout-campaign";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import {
@@ -45,6 +46,9 @@ type BonusCandidateCardData = {
   estimate: number | null;
   currency: string;
   maxAmount: number;
+  /** Pre-multiplier cap, when a campaign raised this candidate's ceiling. */
+  baseMaxAmount: number | null;
+  campaignMultiplier: number | null;
   approvedAmount: number | null;
   status: string;
   period: string | null;
@@ -82,6 +86,13 @@ function BonusCandidateCard({
   candidate: BonusCandidateCardData;
 }) {
   const meta = statusCopy(BONUS_CANDIDATE_STATUS, candidate.status);
+  // A campaign raises the ceiling an admin can award, not the award itself —
+  // so the badge says "cap", not a promised amount.
+  const boostedCap =
+    candidate.campaignMultiplier != null &&
+    candidate.campaignMultiplier > 1 &&
+    candidate.status !== "APPROVED" &&
+    candidate.status !== "REJECTED";
   return (
     <Card withBorder radius="md" padding="lg" h="100%">
       <Stack gap="sm" h="100%">
@@ -94,12 +105,19 @@ function BonusCandidateCard({
             )}
             <StatusBadge copy={meta} />
           </Group>
-          <Text
-            fw={700}
-            c={candidate.status === "REJECTED" ? "dimmed" : "green"}
-          >
-            {formatCandidateAmount(candidate)}
-          </Text>
+          <Group gap={6} wrap="nowrap">
+            {boostedCap && (
+              <Badge variant="light" color="violet" size="xs">
+                {formatMultiplier(candidate.campaignMultiplier ?? 1)} cap
+              </Badge>
+            )}
+            <Text
+              fw={700}
+              c={candidate.status === "REJECTED" ? "dimmed" : "green"}
+            >
+              {formatCandidateAmount(candidate)}
+            </Text>
+          </Group>
         </Group>
 
         <Text fw={600} lineClamp={2}>

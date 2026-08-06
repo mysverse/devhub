@@ -36,6 +36,14 @@ import {
 import { getPptBoardIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { PptBoardIssueDTO } from "@/lib/linear-queries";
+import {
+  applyMultiplier,
+  type CampaignBadgeInfo,
+  formatMultiplier,
+  getCampaignWindowState,
+  selectCampaignBadge,
+} from "@/lib/payout-campaign";
+import { getCampaignRows } from "@/lib/payout-campaign-server";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
@@ -61,6 +69,9 @@ type EnrichedIssue = {
   subIssueCount: number;
   assignmentInfo: TaskAssignmentInfo | null;
   recentlyReleasedByViewer: boolean;
+  /** Resolved per issue: label filters mean a campaign can cover some tasks
+   *  on the board and not others. */
+  campaign: CampaignBadgeInfo | null;
 };
 
 function agoLabel(from: Date, now: Date) {
@@ -254,6 +265,7 @@ function IssueGrid({
               claimContext={claimContext}
               assignmentInfo={item.assignmentInfo}
               recentlyReleasedByViewer={item.recentlyReleasedByViewer}
+              campaign={item.campaign}
             />
           </StaggerItem>
         ))}
@@ -301,11 +313,17 @@ function ProjectSection({
   currency: CurrencyCode;
   claimContext: ClaimButtonContext;
 }) {
-  const totalPayout = items.reduce(
-    (s, i) =>
-      s + (i.issue.estimate ? estimateToAmount(i.issue.estimate, currency) : 0),
-    0,
-  );
+  // Campaign-aware so the project total agrees with the sum of its cards.
+  const totalPayout = items.reduce((sum, item) => {
+    if (!item.issue.estimate) return sum;
+    const base = estimateToAmount(item.issue.estimate, currency);
+    return (
+      sum +
+      (item.campaign
+        ? applyMultiplier(base, item.campaign.multiplier, currency)
+        : base)
+    );
+  }, 0);
   return (
     <section>
       <ProjectSectionHeader
@@ -355,6 +373,20 @@ async function PPTList({
       />
     );
   }
+
+  // One campaign fetch for the whole board; label filters are then applied per
+  // issue, so a campaign scoped to "Docs" badges only the Docs cards.
+  const campaignRows = await getCampaignRows();
+  const liveCampaigns = campaignRows.filter(
+    (row) => getCampaignWindowState(row).active,
+  );
+  const developerRank =
+    (
+      await prisma.userProfile.findUnique({
+        where: { id: userId },
+        select: { developerRank: true },
+      })
+    )?.developerRank ?? null;
 
   const projectMap = new Map<string, ProjectInfo>();
 
@@ -465,6 +497,12 @@ async function PPTList({
       assignmentInfo,
       recentlyReleasedByViewer:
         !assignee && recentlyReleasedIssueIds.has(issue.id),
+      campaign: selectCampaignBadge(liveCampaigns, {
+        scope: "PPT",
+        userId,
+        rank: developerRank,
+        labels: issue.labelNames,
+      }),
     };
   });
 
@@ -567,8 +605,21 @@ async function PPTList({
                   <Text size="sm" fw={500} style={{ whiteSpace: "nowrap" }}>
                     {item.issue.title}
                   </Text>
-                  <Text size="xs" c="green" fw={700}>
-                    {formatEstimate(item.issue.estimate, currency)}
+                  <Text
+                    size="xs"
+                    c={item.campaign ? item.campaign.accentColor : "green"}
+                    fw={700}
+                  >
+                    {item.campaign && item.issue.estimate
+                      ? `${formatMultiplier(item.campaign.multiplier)} · ${formatAmount(
+                          applyMultiplier(
+                            estimateToAmount(item.issue.estimate, currency),
+                            item.campaign.multiplier,
+                            currency,
+                          ),
+                          currency,
+                        )}`
+                      : formatEstimate(item.issue.estimate, currency)}
                   </Text>
                   <Text size="xs" c="dimmed" mx="sm">
                     |

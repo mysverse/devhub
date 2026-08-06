@@ -17,8 +17,12 @@ import { motion } from "motion/react";
 import { memo, useState } from "react";
 import Markdown from "react-markdown";
 import { SPRING } from "@/components/animations";
+import CampaignBadge, {
+  type CampaignBadgeInfo,
+} from "@/components/CampaignBadge";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
+import { applyMultiplier } from "@/lib/payout-campaign";
 import { PPT_OWNER_COPY, type PptNextStepOwner } from "@/lib/ppt-reason-copy";
 import {
   PPT_ASSIGNMENT_WATCH_STATUS,
@@ -118,6 +122,12 @@ type TaskCardProps = {
   assignmentInfo?: TaskAssignmentInfo | null;
   /** Viewer recently held this now-unassigned task — show a reclaim hint. */
   recentlyReleasedByViewer?: boolean;
+  /**
+   * Live payout campaign covering THIS task. Resolved server-side (label
+   * filters and all) and threaded down, so a card only shows the multiplier
+   * when that specific task actually qualifies.
+   */
+  campaign?: CampaignBadgeInfo | null;
 };
 
 export type TaskAssignmentInfo = {
@@ -328,9 +338,24 @@ function TaskCard({
   claimContext,
   assignmentInfo,
   recentlyReleasedByViewer,
+  campaign,
 }: TaskCardProps) {
-  const pptEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
-  const estimateLabel = estimate ? formatEstimate(estimate, currency) : null;
+  const baseEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
+  // What this task actually pays right now. The engine re-derives it
+  // server-side at payout time; this is the honest preview of that number.
+  const pptEstimate = campaign
+    ? applyMultiplier(baseEstimate, campaign.multiplier, currency)
+    : baseEstimate;
+  const estimateLabel = estimate
+    ? campaign
+      ? formatAmount(pptEstimate, currency)
+      : formatEstimate(estimate, currency)
+    : null;
+  const payoutLabel = estimate
+    ? campaign
+      ? formatAmount(pptEstimate, currency)
+      : formatEstimate(estimate, currency)
+    : formatEstimate(estimate, currency);
 
   if (variant === "compact") {
     return (
@@ -350,9 +375,12 @@ function TaskCard({
             <Badge size="sm" variant="light">
               {identifier}
             </Badge>
-            <Text fw={700} c="green">
-              {formatEstimate(estimate, currency)}
-            </Text>
+            <Group gap={6} wrap="nowrap">
+              {campaign && <CampaignBadge campaign={campaign} />}
+              <Text fw={700} c={campaign ? campaign.accentColor : "green"}>
+                {payoutLabel}
+              </Text>
+            </Group>
           </Group>
           <Text fw={600} lineClamp={1} mb="sm">
             {title}
@@ -388,10 +416,15 @@ function TaskCard({
               {identifier}
             </Badge>
             {(earningsText || pptEstimate > 0) && (
-              <Text fw={700} c={earningsColor} fz="sm">
-                {earningsText ??
-                  `${formatAmount(pptEstimate, currency)} (Pending)`}
-              </Text>
+              <Group gap={6} wrap="nowrap">
+                {campaign && !earningsText && (
+                  <CampaignBadge campaign={campaign} />
+                )}
+                <Text fw={700} c={earningsColor} fz="sm">
+                  {earningsText ??
+                    `${formatAmount(pptEstimate, currency)} (Pending)`}
+                </Text>
+              </Group>
             )}
           </Group>
           <Text fw={600} lineClamp={1} mb="md">
@@ -476,9 +509,16 @@ function TaskCard({
               </Tooltip>
             )}
           </Group>
-          <Text fw={700} c="green" fz="sm">
-            {formatEstimate(estimate, currency)}
-          </Text>
+          <Group gap={6} wrap="nowrap">
+            {campaign && <CampaignBadge campaign={campaign} />}
+            <Text
+              fw={700}
+              c={campaign ? campaign.accentColor : "green"}
+              fz="sm"
+            >
+              {payoutLabel}
+            </Text>
+          </Group>
         </Group>
 
         {(assignmentInfo || recentlyReleasedByViewer) && (

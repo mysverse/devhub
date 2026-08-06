@@ -147,6 +147,11 @@ export function buildGlossary(
       definition:
         "A non-guaranteed monthly payout for eligible non-PPT Linear work. Admins review candidates monthly and decide the final amount, up to each task's cap.",
     },
+    campaign: {
+      term: "Payout campaign",
+      definition:
+        "A limited-time multiplier (for example 2x or 3x) on payouts, running between a fixed start and end. The multiplier is locked in when your payout becomes eligible, so it still pays the promoted rate even if the campaign ends before the money goes out. Campaigns never stack — if two apply, you get the higher one.",
+    },
   };
 }
 

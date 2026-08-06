@@ -28,6 +28,7 @@ function campaign(
     slug: "raya-sprint",
     name: "Raya Sprint",
     multiplier: 3,
+    accentColor: "violet",
     scopes: ["PPT"],
     enabled: true,
     startsAt: START,

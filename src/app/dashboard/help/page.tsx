@@ -1,16 +1,73 @@
-import { Badge, Card, Group, SimpleGrid, Stack, Text } from "@mantine/core";
+import {
+  Alert,
+  Badge,
+  Card,
+  Group,
+  SimpleGrid,
+  Stack,
+  Text,
+} from "@mantine/core";
+import { Sparkles } from "lucide-react";
 import type { Metadata } from "next";
+import { connection } from "next/server";
+import { Suspense } from "react";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PolicyPage from "@/components/PolicyPage";
 import { formatAmount, getRateMultiplier } from "@/lib/currency";
 import { getGuideTemplate, renderTemplate } from "@/lib/documents";
 import { NOTIFICATION_CATALOG } from "@/lib/notifications/catalog";
+import {
+  describeCampaignRemaining,
+  describeCampaignScopes,
+  formatMultiplier,
+  getCampaignWindowState,
+} from "@/lib/payout-campaign";
+import { getCampaignRows } from "@/lib/payout-campaign-server";
 import { buildGlossary, WEEKLY_CREDIT_LIMITS } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { buildSocialMetadata } from "@/lib/social-previews";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/help");
+
+/**
+ * The rate table above is the permanent rate. When a campaign is live the
+ * numbers developers actually see on the board are higher, so say so here
+ * rather than letting the guide quietly contradict the dashboard.
+ *
+ * Cache Components: this subtree reads uncached Prisma data and no request
+ * data of its own, so it must defer to request time first (AGENTS.md).
+ */
+async function LiveCampaignNotice() {
+  await connection();
+
+  const rows = await getCampaignRows();
+  const live = rows.filter((row) => getCampaignWindowState(row).active);
+  if (live.length === 0) return null;
+
+  return (
+    <Stack gap="sm">
+      {live.map((campaign) => (
+        <Alert
+          key={campaign.id}
+          variant="light"
+          color={campaign.accentColor}
+          icon={<Sparkles size={16} />}
+          title={`${formatMultiplier(campaign.multiplier)} — ${campaign.headline}`}
+        >
+          <Text fz="sm">
+            {campaign.body ??
+              `${describeCampaignScopes(campaign.scopes)} are multiplied while this campaign runs.`}{" "}
+            The rates below are the normal ones; this campaign{" "}
+            {describeCampaignRemaining(campaign.endsAt)}. The multiplier is
+            locked in when a payout becomes eligible, so work finished during
+            the campaign still pays the promoted rate.
+          </Text>
+        </Alert>
+      ))}
+    </Stack>
+  );
+}
 
 export default function HelpPage() {
   const policy = getResolvedPayoutPolicy();
@@ -47,6 +104,10 @@ export default function HelpPage() {
         title="Help & Guide"
         subtitle="How earning works on DevHub — the full lifecycle, the fairness rules, and every term explained."
       />
+      <Suspense fallback={null}>
+        <LiveCampaignNotice />
+      </Suspense>
+
       <PolicyPage title="" content={content} />
 
       <Stack gap="md">

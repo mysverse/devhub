@@ -14,6 +14,12 @@
  *   pnpm scrub:legal-names
  *   pnpm scrub:legal-names --only=linear --apply
  *   DATABASE_URL=<prod> pnpm scrub:legal-names --apply
+ *
+ * Dev-mode caveat: the Linear mock keeps issue state in memory, per process.
+ * A second dev-mode run therefore re-reports the same issue — the fixture has
+ * reset, not the guard failed. Against real Linear the description persists
+ * and the marker check skips it. Notification and profile phases read the
+ * database, so their idempotency is observable across runs as normal.
  */
 import { config } from "dotenv";
 import { resolveDisplayName } from "@/lib/display-name";
@@ -290,6 +296,21 @@ async function scrubProfiles() {
   }
 }
 
+/**
+ * The fetch interceptor is installed by src/instrumentation.ts, which only
+ * runs inside the Next server — a standalone tsx process would otherwise call
+ * the REAL Linear workspace. Installing it here keeps a dev-mode invocation
+ * genuinely offline, and is what makes the linear phase verifiable at all.
+ */
+async function installDevMocksIfDevMode() {
+  if (process.env.DEV_MODE !== "true") return;
+  const { assertDevModeSafety } = await import("@/lib/dev-mode");
+  assertDevModeSafety();
+  const { installDevFetchInterceptor } = await import("@/dev/intercept");
+  installDevFetchInterceptor();
+  console.log("[dev-mode] Outbound fetch interceptor installed");
+}
+
 async function main() {
   console.log(
     apply
@@ -297,6 +318,8 @@ async function main() {
       : "🔍 scrub-legal-name-leaks — dry run (pass --apply to write)",
   );
   if (only) console.log(`Scoped to phase: ${only}`);
+
+  await installDevMocksIfDevMode();
 
   if (runs("linear")) await scrubLinearDescriptions();
   if (runs("notifications")) await scrubNotifications();

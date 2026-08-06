@@ -315,6 +315,28 @@ export async function revertCampaignApplications(
 }
 
 /**
+ * Attach ledger rows to the transaction that eventually pays them. Bonus and
+ * incentive uplift is decided per candidate/award, long before those are
+ * grouped into a single payout, so the link is made when the transaction is
+ * created — that is what lets a later rejection return the uplift by
+ * transaction id.
+ */
+export async function linkCampaignApplicationsToTransaction(
+  input: {
+    scope: CampaignScope;
+    entityIds: string[];
+    transactionId: string;
+  },
+  tx: Prisma.TransactionClient = prisma,
+) {
+  if (input.entityIds.length === 0) return { count: 0 };
+  return tx.payoutCampaignApplication.updateMany({
+    where: { scope: input.scope, entityId: { in: input.entityIds } },
+    data: { transactionId: input.transactionId },
+  });
+}
+
+/**
  * Release uplift for a rejected payout. Keyed by transaction rather than scope
  * so one call covers a PPT payout, a grouped monthly bonus, and a grouped
  * incentive release alike — an admin rejecting a payout should return the

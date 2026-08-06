@@ -9,7 +9,12 @@ import {
   syncBonusCandidateFromLinearSdkIssue,
 } from "@/lib/bonus";
 import { TAGS } from "@/lib/cache-tags";
+import type { CurrencyCode } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import {
+  recordCampaignApplication,
+  revertCampaignApplications,
+} from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 
 function revalidateBonusPaths() {
@@ -159,7 +164,11 @@ export async function approveMonthlyBonus(data: {
         ]),
       );
 
+      const currencyCode: CurrencyCode =
+        data.currency === "ROBUX" ? "ROBUX" : "MYR";
+
       let total = 0;
+      let totalBase = 0;
       for (const candidate of candidates) {
         const amount = amountByCandidate.get(candidate.id);
         if (!amount || amount <= 0) {
@@ -171,16 +180,38 @@ export async function approveMonthlyBonus(data: {
           );
         }
         total += amount;
+        // A campaign raises the cap; the uplift it actually costs is only the
+        // part of the approved amount that the normal cap could not have
+        // covered. Approving below the old cap under a 3x campaign spends
+        // nothing from the pool.
+        totalBase += Math.min(amount, candidate.baseMaxAmount ?? amount);
       }
 
       total = normalizeApprovedAmount(total, data.currency);
+      totalBase = normalizeApprovedAmount(totalBase, data.currency);
       const periodLabel = formatBonusPeriod(data.period);
       const taskLabel = `${candidates.length} task${candidates.length === 1 ? "" : "s"}`;
+
+      // A grouped bonus can in principle span candidates priced under
+      // different campaigns; only attribute the transaction when they agree.
+      const campaignIds = new Set(
+        candidates.map((candidate) => candidate.campaignId).filter(Boolean),
+      );
+      const sharedCampaignId =
+        campaignIds.size === 1 ? [...campaignIds][0] : null;
+      const sharedMultiplier = sharedCampaignId
+        ? (candidates.find(
+            (candidate) => candidate.campaignId === sharedCampaignId,
+          )?.campaignMultiplier ?? null)
+        : null;
 
       const transaction = await tx.transaction.create({
         data: {
           userId: data.userId,
           amount: total,
+          baseAmount: totalBase,
+          campaignId: sharedCampaignId,
+          campaignMultiplier: sharedMultiplier,
           currency: data.currency,
           source: "BONUS",
           bonusPeriod: data.period,
@@ -192,17 +223,44 @@ export async function approveMonthlyBonus(data: {
       });
 
       for (const candidate of candidates) {
+        const amount = amountByCandidate.get(candidate.id) ?? 0;
         await tx.bonusCandidate.update({
           where: { id: candidate.id },
           data: {
             status: "APPROVED",
-            approvedAmount: amountByCandidate.get(candidate.id),
+            approvedAmount: amount,
             reviewedById: adminUserId,
             reviewedAt: new Date(),
             transactionId: transaction.id,
             rejectionReason: null,
           },
         });
+
+        const base = candidate.baseMaxAmount ?? amount;
+        const uplift = normalizeApprovedAmount(
+          Math.max(0, amount - base),
+          data.currency,
+        );
+        if (
+          candidate.campaignId &&
+          candidate.campaignMultiplier &&
+          uplift > 0
+        ) {
+          await recordCampaignApplication(
+            {
+              campaignId: candidate.campaignId,
+              scope: "BONUS",
+              entityId: candidate.id,
+              userId: data.userId,
+              currency: currencyCode,
+              baseAmount: Math.min(amount, base),
+              multiplier: candidate.campaignMultiplier,
+              upliftAmount: uplift,
+              transactionId: transaction.id,
+            },
+            tx,
+          );
+        }
       }
 
       return transaction;
@@ -240,6 +298,12 @@ export async function rejectBonusCandidate(
   if (result.count === 0) {
     return { error: "Bonus item is not reviewable" };
   }
+
+  // Nothing is paid, so any uplift held for this candidate goes back.
+  await revertCampaignApplications({
+    scope: "BONUS",
+    entityIds: [candidateId],
+  });
 
   revalidateBonusPaths();
   return { success: true };

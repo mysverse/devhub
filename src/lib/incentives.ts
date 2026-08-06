@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import type {
+  DeveloperRank,
   IncentiveAward,
   IncentiveAwardStatus,
   IncentiveConfig,
@@ -34,6 +35,12 @@ import {
   incentiveStatusCopy,
 } from "@/lib/incentive-copy";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import {
+  linkCampaignApplicationsToTransaction,
+  recordCampaignApplication,
+  resolveCampaignForAmount,
+  revertCampaignApplications,
+} from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
@@ -981,6 +988,23 @@ async function guardrailHoldReason({
   return null;
 }
 
+/**
+ * Which instant decides whether a campaign covers this award.
+ *
+ * An incentive award belongs to a period, not to the moment the cron happens
+ * to run, so the campaign is resolved at the END of the award period (clamped
+ * to now, for an admin re-triggering the current week). That makes membership
+ * predictable, at the cost of a campaign ending mid-week not boosting that
+ * week — the admin form warns when an incentive campaign's window is not
+ * aligned to the Monday-to-Sunday UTC week.
+ */
+function campaignClockForPeriod(period: string): Date {
+  const now = new Date();
+  if (!/^\d{4}-W\d{2}$/.test(period)) return now;
+  const { weekEnd } = getWeekBoundsFor(period);
+  return weekEnd < now ? weekEnd : now;
+}
+
 async function createIncentiveAward({
   userId,
   type,
@@ -992,6 +1016,7 @@ async function createIncentiveAward({
   issueIds = [],
   config,
   activatedAt,
+  rank = null,
 }: {
   userId: string;
   type: IncentiveType;
@@ -1003,9 +1028,24 @@ async function createIncentiveAward({
   issueIds?: string[];
   config: IncentiveConfig;
   activatedAt: Date;
+  rank?: DeveloperRank | null;
 }) {
-  const normalizedAmount = normalizeAmount(amount, currency);
-  if (normalizedAmount <= 0) return null;
+  const baseAmount = normalizeAmount(amount, currency);
+  if (baseAmount <= 0) return null;
+
+  // Multiply BEFORE the guardrails so the per-user caps and program budgets in
+  // IncentiveConfig evaluate the real amount — a 3x award must count triple
+  // against the incentive program's own budget, not just against the campaign
+  // pool.
+  const campaign = await resolveCampaignForAmount({
+    scope: "INCENTIVE",
+    userId,
+    currency,
+    baseAmount,
+    rank,
+    now: campaignClockForPeriod(period),
+  });
+  const normalizedAmount = campaign?.finalAmount ?? baseAmount;
 
   const issueCount = issueIds.length || thresholdMet;
   const heldReason =
@@ -1037,6 +1077,9 @@ async function createIncentiveAward({
         thresholdMet,
         detail,
         amount: normalizedAmount,
+        baseAmount,
+        campaignId: campaign?.campaign.id ?? null,
+        campaignMultiplier: campaign?.multiplier ?? null,
         netAmount: normalizedAmount,
         currency,
         status,
@@ -1056,6 +1099,19 @@ async function createIncentiveAward({
       },
     });
 
+    if (campaign) {
+      await recordCampaignApplication({
+        campaignId: campaign.campaign.id,
+        scope: "INCENTIVE",
+        entityId: award.id,
+        userId,
+        currency,
+        baseAmount,
+        multiplier: campaign.multiplier,
+        upliftAmount: campaign.upliftAmount,
+      });
+    }
+
     await createAwardNotification(award.id, userId);
     await appendIncentiveEvent({
       awardId: award.id,
@@ -1063,7 +1119,13 @@ async function createIncentiveAward({
       type: status === "HELD" ? "HELD" : "AWARD_CREATED",
       period,
       message: heldReason,
-      metadata: { type, amount: normalizedAmount, currency },
+      metadata: {
+        type,
+        amount: normalizedAmount,
+        baseAmount,
+        campaign: campaign?.campaign.slug ?? null,
+        currency,
+      },
     });
     await notifyDeveloperAward(award.id);
     if (heldReason) {
@@ -1105,6 +1167,7 @@ export async function evaluateMilestones(userId: string) {
       amount: currencyAmount(milestone, currency),
       config,
       activatedAt: config.activatedAt,
+      rank: user.developerRank,
     });
     if (award) created++;
   }
@@ -1140,6 +1203,7 @@ export async function evaluateWeeklyIncentives(
     currency: CurrencyCode;
     count: number;
     issueIds: string[];
+    rank: DeveloperRank;
   }[] = [];
   let created = 0;
   let held = 0;
@@ -1164,6 +1228,7 @@ export async function evaluateWeeklyIncentives(
       currency,
       count: issues.length,
       issueIds,
+      rank: user.developerRank,
     });
 
     if (config.weeklyEnabled) {
@@ -1197,6 +1262,7 @@ export async function evaluateWeeklyIncentives(
           issueIds,
           config,
           activatedAt: config.activatedAt,
+          rank: user.developerRank,
         });
         if (award) {
           created++;
@@ -1234,6 +1300,7 @@ export async function evaluateWeeklyIncentives(
           issueIds,
           config,
           activatedAt: config.activatedAt,
+          rank: user.developerRank,
         });
         if (award) {
           created++;
@@ -1263,6 +1330,7 @@ export async function evaluateWeeklyIncentives(
         issueIds: entry.issueIds,
         config,
         activatedAt: config.activatedAt,
+        rank: entry.rank,
       });
       if (award) {
         created++;
@@ -1529,10 +1597,29 @@ async function releaseAwardGroup(
     return { released: valid.length, skipped: false };
   }
 
+  // A release groups several awards, which may or may not share a campaign;
+  // only attribute the transaction when they agree. baseAmount is the sum of
+  // the pre-multiplier award amounts, so the payout slip can explain itself.
+  const campaignIds = new Set(
+    valid.map((award) => award.campaignId).filter(Boolean),
+  );
+  const sharedCampaignId = campaignIds.size === 1 ? [...campaignIds][0] : null;
+  const sharedMultiplier = sharedCampaignId
+    ? (valid.find((award) => award.campaignId === sharedCampaignId)
+        ?.campaignMultiplier ?? null)
+    : null;
+  const baseTotal = normalizeAmount(
+    valid.reduce((sum, award) => sum + (award.baseAmount ?? award.amount), 0),
+    currency,
+  );
+
   const transaction = await prisma.transaction.create({
     data: {
       userId,
       amount: netAmount,
+      baseAmount: baseTotal,
+      campaignId: sharedCampaignId,
+      campaignMultiplier: sharedMultiplier,
       currency,
       source: "INCENTIVE",
       status: "PENDING",
@@ -1540,6 +1627,12 @@ async function releaseAwardGroup(
       linearIssueIdentifier: `INCENTIVE-${dateOnlyUtc(now)}`,
       linearIssueTitle: `Incentive Awards - ${valid.length} item${valid.length === 1 ? "" : "s"}`,
     },
+  });
+
+  await linkCampaignApplicationsToTransaction({
+    scope: "INCENTIVE",
+    entityIds: validIds,
+    transactionId: transaction.id,
   });
 
   await prisma.incentiveAward.updateMany({
@@ -1665,6 +1758,11 @@ export async function cancelIncentiveAwardsForTransaction(
   await prisma.incentiveAward.updateMany({
     where: { id: { in: awards.map((award) => award.id) } },
     data: { status: "CANCELLED", disputeReason: reason ?? null },
+  });
+  // Nothing was paid, so any campaign uplift these awards held goes back.
+  await revertCampaignApplications({
+    scope: "INCENTIVE",
+    entityIds: awards.map((award) => award.id),
   });
   await prisma.incentiveEvent.createMany({
     data: awards.map((award) => ({

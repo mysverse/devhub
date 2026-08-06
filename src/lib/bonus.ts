@@ -10,6 +10,7 @@ import {
   linearEstimateToComplexityLevel,
 } from "@/lib/currency";
 import { IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import { resolveCampaignForAmount } from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 
 export const DEFAULT_BONUS_EXCLUDED_LABELS = [
@@ -179,6 +180,9 @@ export async function syncBonusCandidateFromLinearIssue(
   let userId: string | null = null;
   let currency: CurrencyCode = "MYR";
   let maxAmount = 0;
+  let baseMaxAmount = 0;
+  let campaignId: string | null = null;
+  let campaignMultiplier: number | null = null;
   let period: string | null = null;
 
   const normalizedLabels = new Set(labels.map(normalizeLabel));
@@ -222,7 +226,22 @@ export async function syncBonusCandidateFromLinearIssue(
       } else {
         userId = user.id;
         currency = getCurrencyForPaymentMethod(user.paymentMethod);
-        maxAmount = estimate * getBonusRateForCurrency(config, currency);
+        baseMaxAmount = estimate * getBonusRateForCurrency(config, currency);
+        // A campaign raises the CAP, not the payout: admins still enter the
+        // final amount, up to this ceiling. The uplift pool is charged at
+        // approval time (bonus-actions.ts), not here, because a candidate that
+        // is never approved must not hold budget hostage.
+        const campaign = await resolveCampaignForAmount({
+          scope: "BONUS",
+          userId: user.id,
+          currency,
+          baseAmount: baseMaxAmount,
+          rank: user.developerRank,
+          labels,
+        });
+        maxAmount = campaign?.finalAmount ?? baseMaxAmount;
+        campaignId = campaign?.campaign.id ?? null;
+        campaignMultiplier = campaign?.multiplier ?? null;
         const periodDate =
           stateType === "completed" ? (completedAt ?? new Date()) : new Date();
         period = getBonusPeriod(periodDate);
@@ -239,6 +258,9 @@ export async function syncBonusCandidateFromLinearIssue(
           userId,
           currency,
           maxAmount,
+          baseMaxAmount,
+          campaignId,
+          campaignMultiplier,
           approvedAmount: null,
           status,
           ineligibilityReason,
@@ -256,6 +278,9 @@ export async function syncBonusCandidateFromLinearIssue(
           userId,
           currency,
           maxAmount,
+          baseMaxAmount,
+          campaignId,
+          campaignMultiplier,
           status,
           ineligibilityReason,
           period,

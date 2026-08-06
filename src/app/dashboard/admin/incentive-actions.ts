@@ -12,6 +12,7 @@ import {
   sendIncentiveActivationAlert,
 } from "@/lib/incentives";
 import { IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import { revertCampaignApplications } from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 
 type IncentiveConfigInput = {
@@ -214,6 +215,11 @@ export async function disputeIncentiveAward(awardId: string, reason?: string) {
   });
 
   if (result.count === 0) return { error: "Award is no longer cancellable" };
+  // Cancelled before payout, so its campaign uplift returns to the pool.
+  await revertCampaignApplications({
+    scope: "INCENTIVE",
+    entityIds: [awardId],
+  });
   await prisma.incentiveEvent.create({
     data: {
       awardId,

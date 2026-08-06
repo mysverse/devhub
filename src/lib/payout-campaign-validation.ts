@@ -176,6 +176,18 @@ export function collectCampaignFieldErrors(
   return errors;
 }
 
+/** Monday 00:00:00.000 UTC — the boundary the incentive week runs on. */
+function isWeekBoundaryUtc(date: Date | null | undefined): boolean {
+  if (!date || Number.isNaN(date.getTime())) return true;
+  return (
+    date.getUTCDay() === 1 &&
+    date.getUTCHours() === 0 &&
+    date.getUTCMinutes() === 0 &&
+    date.getUTCSeconds() === 0 &&
+    date.getUTCMilliseconds() === 0
+  );
+}
+
 /**
  * Non-blocking advice shown next to the form. These are configurations that
  * are legal but will not do what the admin probably expects — surfacing them
@@ -188,6 +200,8 @@ export function campaignConfigWarnings(draft: {
   upliftPoolMyr: number;
   upliftPoolRobux: number;
   multiplier: number;
+  startsAt?: Date | null;
+  endsAt?: Date | null;
 }): string[] {
   const warnings: string[] = [];
   const hasLabelFilter =
@@ -201,6 +215,15 @@ export function campaignConfigWarnings(draft: {
   } else if (hasLabelFilter && draft.scopes.includes("INCENTIVE")) {
     warnings.push(
       "Label filters apply to PPT and bonus amounts only. Incentive awards under this campaign are multiplied regardless of labels.",
+    );
+  }
+
+  if (
+    draft.scopes.includes("INCENTIVE") &&
+    (!isWeekBoundaryUtc(draft.startsAt) || !isWeekBoundaryUtc(draft.endsAt))
+  ) {
+    warnings.push(
+      "Incentive awards are decided at the end of their week, so a window that does not start and end on Monday 00:00 UTC will skip the part-weeks at each edge.",
     );
   }
 

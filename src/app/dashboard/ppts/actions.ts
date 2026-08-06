@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getSession } from "@/lib/auth-utils";
 import { TAGS } from "@/lib/cache-tags";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
@@ -259,8 +259,8 @@ export async function submitPptProgress(issueId: string, body: string) {
       },
     });
 
-    updateTag(TAGS.userIssues(profile.linearId));
-    updateTag(TAGS.workspacePpts);
+    revalidateTag(TAGS.userIssues(profile.linearId), { expire: 0 });
+    revalidateTag(TAGS.workspacePpts, { expire: 0 });
     revalidatePath("/dashboard");
     revalidatePath("/dashboard/ppts");
     revalidatePath("/dashboard/admin");

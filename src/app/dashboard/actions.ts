@@ -1,7 +1,7 @@
 "use server";
 
 import type { PptSelfBlockReason } from "@prisma/client";
-import { revalidatePath, updateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { awardAchievement, markAchievementsSeen } from "@/lib/achievements";
 import { recordActivationEvent } from "@/lib/activation-events";
 import { getSession } from "@/lib/auth-utils";
@@ -26,8 +26,8 @@ import { getUserProfile } from "@/lib/user-profile";
 function revalidateBoards(viewerLinearId: string) {
   revalidatePath("/dashboard/ppts");
   revalidatePath("/dashboard");
-  updateTag(TAGS.workspacePpts);
-  updateTag(TAGS.userIssues(viewerLinearId));
+  revalidateTag(TAGS.workspacePpts, { expire: 0 });
+  revalidateTag(TAGS.userIssues(viewerLinearId), { expire: 0 });
 }
 
 export async function claimIssue(

@@ -135,6 +135,8 @@ model UserProfile {
   campaignApplications    PayoutCampaignApplication[] @relation("PayoutCampaignApplicationUser")
   taskSuggestions         TaskSuggestion[]            @relation("TaskSuggestionUser")
   taskSuggestionsMade     TaskSuggestion[]            @relation("TaskSuggestionActor")
+  assistantConversations  AssistantConversation[]
+  assistantActions        AssistantAction[]
 }
 
 // Persisted, peer-visible recognition. Keys live in src/lib/achievements.ts
@@ -195,20 +197,113 @@ model ActivationEvent {
 /// userId is a plain column with no foreign key: deleting a user must not
 /// erase the record of what was spent on their behalf.
 model LlmCall {
-  id           String   @id @default(cuid())
+  id                String   @id @default(cuid())
   /// Which feature asked. Rate limits are scoped per surface.
-  surface      String
-  userId       String?
-  model        String
-  inputTokens  Int      @default(0)
-  outputTokens Int      @default(0)
+  surface           String
+  userId            String?
+  model             String
+  provider          String   @default("anthropic")
+  inputTokens       Int      @default(0)
+  outputTokens      Int      @default(0)
+  cachedInputTokens Int      @default(0)
+  reasoningTokens   Int      @default(0)
+  latencyMs         Int?
+  failureKind       String?
+  conversationId    String?
+  runId             String?
+  fallbackFromId    String?
   /// False when the call failed or was refused — still billed, still counted.
-  ok           Boolean  @default(true)
-  createdAt    DateTime @default(now())
+  ok                Boolean  @default(true)
+  createdAt         DateTime @default(now())
 
   @@index([createdAt])
   @@index([userId, createdAt])
   @@index([surface, createdAt])
+  @@index([provider, createdAt])
+  @@index([conversationId, createdAt])
+}
+
+enum AssistantMessageRole {
+  USER
+  ASSISTANT
+}
+
+enum AssistantMessageStatus {
+  PENDING
+  COMPLETE
+  INTERRUPTED
+  FAILED
+}
+
+enum AssistantActionStatus {
+  PENDING
+  EXECUTING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+/// A private, user-owned assistant thread. Provider-side conversation objects
+/// are deliberately not used; DevHub is the canonical store and deletion
+/// therefore has one unambiguous meaning.
+model AssistantConversation {
+  id         String      @id @default(cuid())
+  userId     String
+  user       UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title      String
+  archivedAt DateTime?
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  messages AssistantMessage[]
+  actions  AssistantAction[]
+
+  @@index([userId, archivedAt, updatedAt])
+}
+
+model AssistantMessage {
+  id             String                 @id @default(cuid())
+  conversationId String
+  conversation   AssistantConversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           AssistantMessageRole
+  content        String                 @db.Text
+  status         AssistantMessageStatus @default(COMPLETE)
+  provider       String?
+  model          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  actions AssistantAction[]
+
+  @@index([conversationId, createdAt])
+}
+
+/// A model may propose a write, but only this persisted, user-confirmed record
+/// may execute one. Confirmation revalidates current state and transitions the
+/// row with a compare-and-set update, making retries idempotent.
+model AssistantAction {
+  id             String                @id @default(cuid())
+  conversationId String
+  conversation   AssistantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messageId      String?
+  message        AssistantMessage?     @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  userId         String
+  user           UserProfile           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind           String
+  payload        Json
+  preview        Json
+  status         AssistantActionStatus @default(PENDING)
+  expiresAt      DateTime
+  executedAt     DateTime?
+  result         Json?
+  error          String?
+  idempotencyKey String                @unique
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([conversationId, createdAt])
+  @@index([userId, status, expiresAt])
 }
 
 model EmailDelivery {

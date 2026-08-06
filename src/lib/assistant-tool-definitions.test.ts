@@ -1,0 +1,31 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { ASSISTANT_TOOLS } from "@/lib/assistant-tool-definitions";
+
+describe("assistant tool policy", () => {
+  it("makes every write a proposal and exposes no money/compliance tool", () => {
+    const mutations = ASSISTANT_TOOLS.filter((tool) => tool.mutation);
+    assert.ok(mutations.length > 0);
+    assert.ok(mutations.every((tool) => tool.name.startsWith("propose_")));
+    const names = ASSISTANT_TOOLS.map((tool) => tool.name).join(" ");
+    assert.doesNotMatch(names, /payout|payment|kyc|bank|access|delete|bulk/);
+  });
+
+  it("strips labels and estimates from ordinary issue proposals", () => {
+    const create = ASSISTANT_TOOLS.find(
+      (tool) => tool.name === "propose_create_task",
+    );
+    assert.ok(create);
+    const parsed = create.schema.parse({
+      title: "Audit spawn points",
+      description: null,
+      teamId: "team-1",
+      projectId: null,
+      dueDate: null,
+      labels: ["PPT"],
+      estimate: 5,
+    }) as Record<string, unknown>;
+    assert.equal("labels" in parsed, false);
+    assert.equal("estimate" in parsed, false);
+  });
+});

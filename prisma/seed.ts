@@ -396,6 +396,117 @@ export async function seed() {
     },
   });
 
+  // ── Payout campaigns ───────────────────────────────────────────────────────
+  // Windows are relative to seed time so the fixtures stay in the right state
+  // whenever dev mode is booted. One of each shape the UI has to handle: live,
+  // scheduled, ended, and a live campaign whose uplift pool is already spent
+  // (payouts under it silently fall back to the normal rate — the case that is
+  // hardest to notice and therefore most worth being able to see).
+  const liveCampaign = await prisma.payoutCampaign.create({
+    data: {
+      slug: "sprint-boost",
+      name: "Sprint Boost",
+      headline: "3x on every PPT task this sprint",
+      body: "Every PPT payout is tripled until the sprint closes. Nothing to opt into.",
+      accentColor: "violet",
+      multiplier: 3,
+      scopes: ["PPT", "BONUS"],
+      enabled: true,
+      startsAt: daysAgo(3),
+      endsAt: daysAgo(-4),
+      upliftPoolMyr: 2000,
+      perUserUpliftCapMyr: 400,
+      createdAt: daysAgo(5),
+    },
+  });
+
+  await prisma.payoutCampaign.create({
+    data: {
+      slug: "docs-week",
+      name: "Docs Week",
+      headline: "2x on documentation tasks",
+      accentColor: "teal",
+      multiplier: 2,
+      scopes: ["PPT"],
+      enabled: true,
+      startsAt: daysAgo(-7),
+      endsAt: daysAgo(-14),
+      includedLabels: ["Docs"],
+      createdAt: daysAgo(2),
+    },
+  });
+
+  await prisma.payoutCampaign.create({
+    data: {
+      slug: "launch-push",
+      name: "Launch Push",
+      headline: "2x incentive awards through launch week",
+      accentColor: "orange",
+      multiplier: 2,
+      scopes: ["INCENTIVE"],
+      enabled: true,
+      startsAt: daysAgo(21),
+      endsAt: daysAgo(4),
+      createdAt: daysAgo(25),
+    },
+  });
+
+  const exhaustedCampaign = await prisma.payoutCampaign.create({
+    data: {
+      slug: "robux-blitz",
+      name: "Robux Blitz",
+      headline: "2x Robux payouts",
+      accentColor: "grape",
+      multiplier: 2,
+      scopes: ["PPT"],
+      enabled: true,
+      startsAt: daysAgo(1),
+      endsAt: daysAgo(-6),
+      upliftPoolRobux: 1200,
+      createdAt: daysAgo(1),
+    },
+  });
+
+  // Ledger rows: one live campaign with spend to show in the admin ledger, and
+  // one whose pool is exactly consumed so the fallback-to-1x path is visible.
+  await prisma.payoutCampaignApplication.createMany({
+    data: [
+      {
+        campaignId: liveCampaign.id,
+        scope: "PPT",
+        entityId: "seed-ppt-uplift-1",
+        userId: devId,
+        currency: "MYR",
+        baseAmount: 40,
+        multiplier: 3,
+        upliftAmount: 80,
+        createdAt: daysAgo(2),
+      },
+      {
+        campaignId: liveCampaign.id,
+        scope: "BONUS",
+        entityId: "seed-bonus-uplift-1",
+        userId: devId,
+        currency: "MYR",
+        baseAmount: 60,
+        multiplier: 3,
+        upliftAmount: 120,
+        createdAt: daysAgo(1),
+      },
+      {
+        campaignId: exhaustedCampaign.id,
+        scope: "PPT",
+        entityId: "seed-robux-uplift-1",
+        userId: devId,
+        currency: "ROBUX",
+        baseAmount: 1200,
+        multiplier: 2,
+        upliftAmount: 1200,
+        createdAt: hoursAgo(6),
+      },
+    ],
+  });
+
   // ── Transactions & payouts ─────────────────────────────────────────────────
   const issue = getIssueByIdentifier;
 

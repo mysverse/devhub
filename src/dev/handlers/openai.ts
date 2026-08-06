@@ -14,6 +14,26 @@ type ResponsesRequest = {
   tools?: Array<{ name?: string }>;
 };
 
+const SDK_ONLY_INPUT_FIELDS = new Set(["parsed", "parsed_arguments"]);
+
+function sdkOnlyInputField(value: unknown, path = "input"): string | null {
+  if (Array.isArray(value)) {
+    for (const [index, item] of value.entries()) {
+      const found = sdkOnlyInputField(item, `${path}[${index}]`);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (!value || typeof value !== "object") return null;
+  for (const [key, item] of Object.entries(value)) {
+    const childPath = `${path}.${key}`;
+    if (SDK_ONLY_INPUT_FIELDS.has(key)) return childPath;
+    const found = sdkOnlyInputField(item, childPath);
+    if (found) return found;
+  }
+  return null;
+}
+
 function inputText(input: unknown): string {
   if (typeof input === "string") return input;
   if (!Array.isArray(input)) return "";
@@ -257,6 +277,20 @@ export const handleOpenAi: DevHandler = async (req, url) => {
     );
   }
   const body = (await req.json()) as ResponsesRequest;
+  const invalidField = sdkOnlyInputField(body.input);
+  if (invalidField) {
+    return Response.json(
+      {
+        error: {
+          message: `Unknown parameter: '${invalidField}'.`,
+          type: "invalid_request_error",
+          param: invalidField,
+          code: "unknown_parameter",
+        },
+      },
+      { status: 400 },
+    );
+  }
   const id = `resp_dev_${++getDevState().counters.llm}`;
   console.log(`[dev-mode] openai → canned Responses reply (${id})`);
   if (body.stream) return streamingResponse(id, body);

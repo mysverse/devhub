@@ -16,6 +16,7 @@ import {
   safetyIdentifier,
 } from "@/lib/llm";
 import { openAiAssistantTools } from "@/lib/openai-assistant-tools";
+import { openAiResponseOutputAsInput } from "@/lib/openai-response-replay";
 
 const MAX_TOOL_ROUNDS = 4;
 const MAX_OUTPUT_TOKENS = 2_500;
@@ -184,7 +185,7 @@ async function runOpenAi(
       });
       if (refused) return { kind: "stop", callId: lastCallId };
 
-      items.push(...(response.output as ResponseInputItem[]));
+      items.push(...openAiResponseOutputAsInput(response.output));
       const calls = response.output.filter(
         (item) => item.type === "function_call",
       );

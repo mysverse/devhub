@@ -19,6 +19,7 @@ import {
   recordTakeoverAway,
 } from "@/lib/ppt-assignment-watch";
 import prisma from "@/lib/prisma";
+import { resolveTaskSuggestions } from "@/lib/task-suggestion";
 import { getUserProfile } from "@/lib/user-profile";
 
 function revalidateBoards(viewerLinearId: string) {
@@ -79,6 +80,9 @@ export async function claimIssue(
         : null,
     });
     await awardAchievement(userId, "FIRST_CLAIM", { issueId: issue.id });
+    // Close out any suggestion for this task — the only signal DevHub has for
+    // whether pointing people at work actually gets it picked up.
+    await resolveTaskSuggestions(issue.id, userId);
     if (previousAssignee) {
       const takenByProfile = await getUserProfile(userId);
       await recordTakeoverAway({

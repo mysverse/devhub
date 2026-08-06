@@ -211,6 +211,17 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
   },
   {
     domain: "ppt_task",
+    type: "SUGGESTED_TO_YOU",
+    audience: "developer",
+    title: "A task picked out for you",
+    description:
+      "When an admin points you at a specific open task, with the reason it suits you.",
+    // The whole point is that it reaches a person directly.
+    defaults: { in_app: true, email: true, discord: true },
+    configurable: true,
+  },
+  {
+    domain: "ppt_task",
     type: "IDLE_NUDGE",
     audience: "developer",
     title: "Gentle activity nudge",

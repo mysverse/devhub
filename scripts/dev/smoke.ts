@@ -43,6 +43,7 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
     "/dashboard/admin/documents",
     "/dashboard/admin/welcome-pack",
     "/dashboard/admin/campaigns",
+    "/dashboard/admin/suggest",
     "/dashboard/notifications",
   ],
   fresh: ["/onboarding"],

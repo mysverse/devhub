@@ -207,6 +207,9 @@ export default function AdminPage() {
         subtitle="Review and manage developer payouts."
         action={
           <Group>
+            <LinkButton href="/dashboard/admin/suggest" variant="light">
+              Suggest a Task
+            </LinkButton>
             <LinkButton href="/dashboard/admin/users" variant="light">
               Team Members
             </LinkButton>

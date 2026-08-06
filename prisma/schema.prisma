@@ -133,6 +133,8 @@ model UserProfile {
   achievements            DeveloperAchievement[]      @relation("DeveloperAchievementUser")
   payoutCampaignsCreated  PayoutCampaign[]            @relation("PayoutCampaignCreator")
   campaignApplications    PayoutCampaignApplication[] @relation("PayoutCampaignApplicationUser")
+  taskSuggestions         TaskSuggestion[]            @relation("TaskSuggestionUser")
+  taskSuggestionsMade     TaskSuggestion[]            @relation("TaskSuggestionActor")
 }
 
 // Persisted, peer-visible recognition. Keys live in src/lib/achievements.ts
@@ -656,6 +658,43 @@ enum PptAssignmentWatchStatus {
   BLOCKED
   UNASSIGNED
   RESOLVED
+}
+
+/// An admin pointing one developer at one task, with the reason. DevHub was
+/// entirely pull-based: every earning path started with a developer going to
+/// a board and choosing, and nothing was ever addressed to a person. This is
+/// the push side, and the record of whether pushing worked.
+model TaskSuggestion {
+  id                    String                @id @default(cuid())
+  linearIssueId         String
+  linearIssueIdentifier String?
+  linearIssueTitle      String
+  userId                String
+  user                  UserProfile           @relation("TaskSuggestionUser", fields: [userId], references: [id], onDelete: Cascade)
+  suggestedById         String
+  suggestedBy           UserProfile           @relation("TaskSuggestionActor", fields: [suggestedById], references: [id], onDelete: Cascade)
+  /// The `because` line shown to the developer — from the ranker or an admin.
+  reason                String
+  note                  String?
+  outcome               TaskSuggestionOutcome @default(PENDING)
+  respondedAt           DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+
+  /// One suggestion per task per person: nudging twice is nagging.
+  @@unique([linearIssueId, userId])
+  @@index([userId, outcome])
+  @@index([outcome, createdAt])
+}
+
+enum TaskSuggestionOutcome {
+  PENDING
+  /// They claimed the task that was suggested to them.
+  CLAIMED
+  /// Someone else claimed it, so the suggestion is moot.
+  TAKEN
+  /// Still unclaimed well after the nudge.
+  EXPIRED
 }
 
 model PptAssignmentWatch {

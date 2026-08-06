@@ -5,12 +5,16 @@ import { useOptimistic, useTransition } from "react";
 import { toast } from "sonner";
 import FormSection from "@/components/FormSection";
 import {
+  channelsForEntry,
   NOTIFICATION_CATALOG,
   type NotificationCatalogEntry,
+  type NotificationChannelKey,
 } from "@/lib/notifications/catalog";
 import { updateNotificationPreference } from "./actions";
 
-type Channel = "in_app" | "email";
+// Mirrors the catalog rather than restating it, so a new channel can't be
+// added there and quietly missed here.
+type Channel = NotificationChannelKey;
 
 type Preference = {
   domain: string;
@@ -50,7 +54,7 @@ export default function NotificationPreferences({
 
   const initial = new Map<string, boolean>();
   for (const item of configurable) {
-    for (const channel of ["in_app", "email"] as const) {
+    for (const channel of channelsForEntry(item)) {
       const stored = preferences.find(
         (preference) =>
           preference.domain === item.domain &&
@@ -59,7 +63,7 @@ export default function NotificationPreferences({
       );
       initial.set(
         preferenceKey(item.domain, item.type, channel),
-        stored?.enabled ?? item.defaults[channel],
+        stored?.enabled ?? item.defaults[channel] ?? false,
       );
     }
   }
@@ -156,6 +160,18 @@ export default function NotificationPreferences({
                     update(item, "email", event.currentTarget.checked)
                   }
                 />
+                {/* Only rendered where the catalog says Discord can carry
+                    this notification, so no toggle is ever decorative. */}
+                {item.defaults.discord !== undefined && (
+                  <Switch
+                    label="Discord"
+                    checked={checked(item, "discord")}
+                    disabled={isPending}
+                    onChange={(event) =>
+                      update(item, "discord", event.currentTarget.checked)
+                    }
+                  />
+                )}
               </Group>
             </Group>
           ))}

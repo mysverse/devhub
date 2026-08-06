@@ -15,6 +15,7 @@ import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { findTodoWorkflowStateId } from "@/lib/linear-queries";
 import {
+  DISCORD_CHANNEL,
   EMAIL_CHANNEL,
   IN_APP_CHANNEL,
   notifyWithPreferences,
@@ -123,7 +124,8 @@ async function notifyOpenPptAvailable({
       entityId: issueIdentifier ?? issueTitle,
       payload: { issueIdentifier, issueTitle, issueUrl },
       dedupeKey: `ppt-task:unclaimed:${user.id}:${issueIdentifier ?? issueTitle}`,
-      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+      // Default-off in the catalog; listed here so opting in actually delivers.
+      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL, DISCORD_CHANNEL],
       email: user.user.email
         ? {
             to: user.user.email,
@@ -171,7 +173,7 @@ async function notifyAssignedPpt({
     entityId: issueIdentifier ?? issueTitle,
     payload: { issueIdentifier, issueTitle, issueUrl },
     dedupeKey: `ppt-task:assigned:${assignee.id}:${issueIdentifier ?? issueTitle}`,
-    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL, DISCORD_CHANNEL],
     email: assignee.user.email
       ? {
           to: assignee.user.email,

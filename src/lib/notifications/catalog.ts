@@ -7,7 +7,19 @@
 // plain notify() calls ignore preferences, so their entries must stay
 // `configurable: false` (listed to users as "always sent").
 
-export type NotificationChannelKey = "in_app" | "email";
+export type NotificationChannelKey = "in_app" | "email" | "discord";
+
+/**
+ * in_app and email are universal; discord is opt-in per entry. Only
+ * notifications that declare a discord default can be delivered — and
+ * therefore configured — over Discord, so the settings page never renders a
+ * toggle for a channel that will never carry that notification.
+ */
+export type NotificationChannelDefaultMap = {
+  in_app: boolean;
+  email: boolean;
+  discord?: boolean;
+};
 
 export type NotificationCatalogEntry = {
   domain: string;
@@ -15,7 +27,7 @@ export type NotificationCatalogEntry = {
   audience: "developer" | "admin";
   title: string;
   description: string;
-  defaults: Record<NotificationChannelKey, boolean>;
+  defaults: NotificationChannelDefaultMap;
   /** False = always sent (emitted without preference checks). */
   configurable: boolean;
 };
@@ -182,7 +194,8 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     audience: "developer",
     title: "PPT assigned to you",
     description: "When an approved PPT is assigned directly to you.",
-    defaults: { in_app: true, email: true },
+    // Addressed to one person and expects action — the case a DM is for.
+    defaults: { in_app: true, email: true, discord: true },
     configurable: true,
   },
   {
@@ -192,7 +205,8 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     title: "PPT open to claim",
     description:
       "When a PPT is approved as open, released, or returns to the board.",
-    defaults: { in_app: true, email: false },
+    // Broadcast, so a DM would be noise by default — but opt-in is available.
+    defaults: { in_app: true, email: false, discord: false },
     configurable: true,
   },
   {
@@ -373,11 +387,20 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
   },
 ];
 
-/** Every channel the catalog knows how to deliver on. */
+/** Channels every entry supports. Discord is declared per entry. */
 export const NOTIFICATION_CHANNEL_KEYS: NotificationChannelKey[] = [
   "in_app",
   "email",
 ];
+
+/** Channels this entry can actually be delivered on. */
+export function channelsForEntry(
+  entry: NotificationCatalogEntry,
+): NotificationChannelKey[] {
+  return entry.defaults.discord === undefined
+    ? NOTIFICATION_CHANNEL_KEYS
+    : [...NOTIFICATION_CHANNEL_KEYS, "discord"];
+}
 
 /**
  * Every "domain:type:channel" a developer is allowed to set a preference for,
@@ -393,7 +416,7 @@ export function configurablePreferenceKeys(): Set<string> {
   const keys = new Set<string>();
   for (const entry of NOTIFICATION_CATALOG) {
     if (!entry.configurable) continue;
-    for (const channel of NOTIFICATION_CHANNEL_KEYS) {
+    for (const channel of channelsForEntry(entry)) {
       keys.add(`${entry.domain}:${entry.type}:${channel}`);
     }
   }

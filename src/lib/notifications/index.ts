@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type React from "react";
 import { createElement } from "react";
 import NotificationEmail from "@/emails/NotificationEmail";
+import { sendDirectMessage } from "@/lib/discord";
 import { sendEmail } from "@/lib/email";
 import { catalogChannelDefaults } from "@/lib/notifications/catalog";
 import prisma from "@/lib/prisma";
@@ -9,8 +10,12 @@ import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
 export const IN_APP_CHANNEL = "in_app";
 export const EMAIL_CHANNEL = "email";
+export const DISCORD_CHANNEL = "discord";
 
-export type NotificationChannel = typeof IN_APP_CHANNEL | typeof EMAIL_CHANNEL;
+export type NotificationChannel =
+  | typeof IN_APP_CHANNEL
+  | typeof EMAIL_CHANNEL
+  | typeof DISCORD_CHANNEL;
 export type NotificationChannelDefaults = Partial<
   Record<NotificationChannel, boolean>
 >;
@@ -341,6 +346,53 @@ async function ensureEmailDelivery(
   }
 }
 
+/**
+ * Discord DM delivery. Records the same delivery row shape as email so a
+ * skipped send (no linked account, bot token unset, DMs closed) is visible in
+ * the notification's history rather than silently absent.
+ */
+async function ensureDiscordDelivery(record: NotificationRecord) {
+  const existing = deliveryFor(record, DISCORD_CHANNEL);
+  if (existing?.status === "SENT" || existing?.status === "PENDING") return;
+
+  const delivery = await prisma.notificationDelivery.upsert({
+    where: {
+      notificationId_channel: {
+        notificationId: record.id,
+        channel: DISCORD_CHANNEL,
+      },
+    },
+    update: { status: "PENDING", skippedReason: null, failedReason: null },
+    create: {
+      notificationId: record.id,
+      channel: DISCORD_CHANNEL,
+      status: "PENDING",
+    },
+  });
+
+  const discordId = record.user.discordId;
+  if (!discordId) {
+    await prisma.notificationDelivery.update({
+      where: { id: delivery.id },
+      data: { status: "SKIPPED", skippedReason: "no-discord-account-linked" },
+    });
+    return;
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+  const sent = await sendDirectMessage(discordId, {
+    content: `**${record.title}**\n${record.message}`,
+    url: record.href ? `${appUrl}${record.href}` : null,
+  });
+
+  await prisma.notificationDelivery.update({
+    where: { id: delivery.id },
+    data: sent
+      ? { status: "SENT", sentAt: new Date(), skippedReason: null }
+      : { status: "SKIPPED", skippedReason: "discord-delivery-unavailable" },
+  });
+}
+
 export async function notify(input: NotifyInput) {
   if (!input.userId) return null;
   const channels = uniqueChannels(input.channels);
@@ -353,6 +405,10 @@ export async function notify(input: NotifyInput) {
 
   if (channels.includes(EMAIL_CHANNEL)) {
     await ensureEmailDelivery(record, input.email);
+  }
+
+  if (channels.includes(DISCORD_CHANNEL)) {
+    await ensureDiscordDelivery(record);
   }
 
   return record;

@@ -3,6 +3,7 @@ import type { CampaignBannerData } from "@/components/CampaignBanner";
 import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
 import {
+  describeCampaignLabelScope,
   describeCampaignScopes,
   getCampaignWindowState,
   selectCampaign,
@@ -24,9 +25,12 @@ async function getDashboardAdminStatus() {
  * The campaign to announce dashboard-wide.
  *
  * Targeting is per developer (rank and participant list), so this is resolved
- * per request rather than cached globally. Label filters are skipped here on
- * purpose: the banner announces the campaign exists, while the badge on each
- * task card is what says whether that particular task qualifies.
+ * per request rather than cached globally. Label filters are skipped
+ * (`labelMatch: "ignore"`) because this is an announcement, not a price quote:
+ * a "2x on Docs" campaign would otherwise never announce itself to anyone,
+ * since the banner has no single issue to test. The badge on each task card is
+ * what says whether that particular task qualifies, and the banner names the
+ * label restriction so it cannot read as a blanket multiplier.
  *
  * The window is evaluated here, outside the cached row fetch — reading the
  * clock inside "use cache" would make a campaign go live late.
@@ -44,22 +48,15 @@ async function getDashboardCampaign(): Promise<CampaignBannerData | null> {
 
   // Announce the strongest campaign that touches any of this developer's
   // earning paths.
+  const announce = {
+    userId,
+    rank: userProfile.developerRank,
+    labelMatch: "ignore" as const,
+  };
   const selected =
-    selectCampaign(live, {
-      scope: "PPT",
-      userId,
-      rank: userProfile.developerRank,
-    }) ??
-    selectCampaign(live, {
-      scope: "BONUS",
-      userId,
-      rank: userProfile.developerRank,
-    }) ??
-    selectCampaign(live, {
-      scope: "INCENTIVE",
-      userId,
-      rank: userProfile.developerRank,
-    });
+    selectCampaign(live, { scope: "PPT", ...announce }) ??
+    selectCampaign(live, { scope: "BONUS", ...announce }) ??
+    selectCampaign(live, { scope: "INCENTIVE", ...announce });
   if (!selected) return null;
 
   const row = rows.find((candidate) => candidate.id === selected.id);
@@ -74,6 +71,7 @@ async function getDashboardCampaign(): Promise<CampaignBannerData | null> {
     accentColor: row.accentColor,
     endsAt: row.endsAt.toISOString(),
     scopeLabel: describeCampaignScopes(row.scopes),
+    labelScope: describeCampaignLabelScope(row),
   };
 }
 

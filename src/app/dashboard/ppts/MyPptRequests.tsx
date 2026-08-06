@@ -14,10 +14,13 @@ import {
   Title,
 } from "@mantine/core";
 import { FadeIn } from "@/components/animations";
+import CampaignBadge from "@/components/CampaignBadge";
 import LinkAnchor from "@/components/LinkAnchor";
 import StatusBadge from "@/components/StatusBadge";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
+import { applyMultiplier } from "@/lib/payout-campaign";
+import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 import { PPT_REQUEST_STATUS, statusCopy } from "@/lib/status-copy";
 
@@ -32,6 +35,18 @@ export default async function MyPptRequests({
   currency?: CurrencyCode;
   page?: number;
 }) {
+  // A request has no Linear issue yet, so labels are unknown and a
+  // label-restricted campaign is deliberately not quoted here.
+  const profile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { developerRank: true },
+  });
+  const campaign = await getCampaignBadgeFor({
+    scope: "PPT",
+    userId,
+    rank: profile?.developerRank ?? null,
+  });
+
   const [total, requests] = await Promise.all([
     prisma.pptRequest.count({ where: { requesterId: userId } }),
     prisma.pptRequest.findMany({
@@ -95,13 +110,20 @@ export default async function MyPptRequests({
                       </Group>
                     </TableTd>
                     <TableTd>
-                      <Text fz="sm">
-                        {req.requestedEstimate} &middot;{" "}
-                        {formatAmount(
-                          estimateToAmount(req.requestedEstimate, currency),
-                          currency,
-                        )}
-                      </Text>
+                      <Group gap={6} wrap="nowrap">
+                        <Text fz="sm">
+                          {req.requestedEstimate} &middot;{" "}
+                          {formatAmount(
+                            applyMultiplier(
+                              estimateToAmount(req.requestedEstimate, currency),
+                              campaign?.multiplier ?? 1,
+                              currency,
+                            ),
+                            currency,
+                          )}
+                        </Text>
+                        {campaign && <CampaignBadge campaign={campaign} />}
+                      </Group>
                     </TableTd>
                     <TableTd>
                       <Text fz="sm">

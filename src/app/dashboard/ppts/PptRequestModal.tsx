@@ -49,8 +49,14 @@ import {
   SPRING,
   StepTransition,
 } from "@/components/animations";
+import CampaignBadge from "@/components/CampaignBadge";
 import { signIn } from "@/lib/auth-client";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
+import {
+  applyMultiplier,
+  type CampaignBadgeInfo,
+  formatMultiplier,
+} from "@/lib/payout-campaign";
 import {
   getLinearProjects,
   getLinearTeams,
@@ -85,10 +91,24 @@ const MAX_FILES = 8;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_TOTAL_SIZE = 30 * 1024 * 1024;
 
-const ESTIMATE_OPTIONS = [1, 2, 3, 4, 5].map((n) => ({
-  value: String(n),
-  label: `${n} · ${formatAmount(estimateToAmount(n, "MYR"), "MYR")}`,
-}));
+/**
+ * Complexity options priced at what the task would pay today.
+ *
+ * A campaign is threaded in rather than resolved here so the arithmetic is the
+ * server's; the campaign only reaches this modal when it has no label filter,
+ * because a request has no Linear issue yet and therefore no labels to test —
+ * quoting a multiplier the eventual task might not qualify for would be a
+ * promise DevHub cannot keep.
+ */
+function estimateOptions(campaign: CampaignBadgeInfo | null) {
+  return [1, 2, 3, 4, 5].map((n) => {
+    const base = estimateToAmount(n, "MYR");
+    const amount = campaign
+      ? applyMultiplier(base, campaign.multiplier, "MYR")
+      : base;
+    return { value: String(n), label: `${n} · ${formatAmount(amount, "MYR")}` };
+  });
+}
 
 function fileSize(size: number) {
   if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
@@ -127,9 +147,12 @@ function FileList({ files }: { files: File[] }) {
 export default function PptRequestModal({
   opened,
   onClose,
+  campaign = null,
 }: {
   opened: boolean;
   onClose: () => void;
+  /** Live PPT campaign with no label restriction; null otherwise. */
+  campaign?: CampaignBadgeInfo | null;
 }) {
   const [mode, setMode] = useState<"new" | "existing">("existing");
   const [step, setStep] = useState(0);
@@ -831,15 +854,27 @@ export default function PptRequestModal({
               </Card>
 
               <Box>
-                <Text fz="sm" fw={500} mb={4}>
-                  Complexity
-                </Text>
+                <Group justify="space-between" mb={4}>
+                  <Text fz="sm" fw={500}>
+                    Complexity
+                  </Text>
+                  {campaign && <CampaignBadge campaign={campaign} />}
+                </Group>
                 <SegmentedControl
                   value={estimate}
                   onChange={setEstimate}
-                  data={ESTIMATE_OPTIONS}
+                  data={estimateOptions(campaign)}
                   fullWidth
                 />
+                {campaign && (
+                  <Text fz="xs" c={campaign.accentColor} mt={6}>
+                    {campaign.name} is paying{" "}
+                    {formatMultiplier(campaign.multiplier)} until{" "}
+                    {new Date(campaign.endsAt).toLocaleString()}. These amounts
+                    hold if the task is approved and becomes payable before
+                    then; after that it pays the normal rate.
+                  </Text>
+                )}
               </Box>
 
               <DateInput
@@ -857,12 +892,23 @@ export default function PptRequestModal({
                   {files.length} attachment{files.length === 1 ? "" : "s"} ·{" "}
                   {fileSize(totalFileSize)}
                 </Text>
-                <Text size="sm" fw={700} c="green">
-                  {formatAmount(
-                    estimateToAmount(Number(estimate), "MYR"),
-                    "MYR",
-                  )}
-                </Text>
+                <Group gap={6} wrap="nowrap">
+                  {campaign && <CampaignBadge campaign={campaign} />}
+                  <Text
+                    size="sm"
+                    fw={700}
+                    c={campaign ? campaign.accentColor : "green"}
+                  >
+                    {formatAmount(
+                      applyMultiplier(
+                        estimateToAmount(Number(estimate), "MYR"),
+                        campaign?.multiplier ?? 1,
+                        "MYR",
+                      ),
+                      "MYR",
+                    )}
+                  </Text>
+                </Group>
               </Group>
 
               <Group justify="space-between">

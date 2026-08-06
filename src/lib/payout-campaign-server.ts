@@ -10,6 +10,7 @@ import { TAGS } from "@/lib/cache-tags";
 import type { CurrencyCode } from "@/lib/currency";
 import {
   applyMultiplier,
+  type CampaignBadgeInfo,
   type CampaignScope,
   campaignScopeSupportsLabels,
   checkCampaignGuardrails,
@@ -17,6 +18,7 @@ import {
   getCampaignWindowState,
   type SelectableCampaign,
   selectCampaign,
+  selectCampaignBadge,
 } from "@/lib/payout-campaign";
 import prisma from "@/lib/prisma";
 
@@ -60,7 +62,10 @@ export async function listCampaigns(): Promise<PayoutCampaign[]> {
   return prisma.payoutCampaign.findMany({ orderBy: { startsAt: "desc" } });
 }
 
-function toSelectable(campaign: PayoutCampaign): SelectableCampaign {
+/** Row → the structural shape the pure selector works on. */
+export function toSelectableCampaign(
+  campaign: PayoutCampaign,
+): SelectableCampaign {
   return {
     id: campaign.id,
     slug: campaign.slug,
@@ -92,7 +97,7 @@ export async function getLiveCampaignFor(input: {
   now?: Date;
 }): Promise<PayoutCampaign | null> {
   const rows = await getCampaignRows();
-  const selected = selectCampaign(rows.map(toSelectable), {
+  const selected = selectCampaign(rows.map(toSelectableCampaign), {
     scope: input.scope,
     userId: input.userId,
     rank: (input.rank ?? null) as SelectableCampaign["ranks"][number] | null,
@@ -101,6 +106,45 @@ export async function getLiveCampaignFor(input: {
   });
   if (!selected) return null;
   return rows.find((row) => row.id === selected.id) ?? null;
+}
+
+/** Enabled campaigns whose window is open right now. */
+export async function getLiveCampaignRows(
+  now = new Date(),
+): Promise<PayoutCampaign[]> {
+  const rows = await getCampaignRows();
+  return rows.filter((row) => getCampaignWindowState(row, now).active);
+}
+
+/**
+ * The badge a display surface should render, or null for the normal rate.
+ *
+ * Collapses the "fetch rows, filter to live, select for this developer"
+ * boilerplate every earnings surface needs. Omitting `labels` is meaningful:
+ * strict matching then rejects label-restricted campaigns, which is exactly
+ * what a surface pricing an issue that does not exist yet (a PPT request)
+ * wants — it under-promises rather than quoting a multiplier the eventual
+ * task may not qualify for.
+ */
+export async function getCampaignBadgeFor(input: {
+  scope: CampaignScope;
+  userId: string;
+  rank?: DeveloperRank | null;
+  labels?: string[] | null;
+  labelMatch?: "strict" | "ignore";
+  now?: Date;
+}): Promise<CampaignBadgeInfo | null> {
+  const now = input.now ?? new Date();
+  const live = await getLiveCampaignRows(now);
+  if (live.length === 0) return null;
+  return selectCampaignBadge(live.map(toSelectableCampaign), {
+    scope: input.scope,
+    userId: input.userId,
+    rank: input.rank ?? null,
+    labels: input.labels,
+    labelMatch: input.labelMatch,
+    now,
+  });
 }
 
 /** Uplift already committed to a campaign in a currency, ignoring reversals. */

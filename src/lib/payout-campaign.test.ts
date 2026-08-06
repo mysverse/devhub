@@ -8,6 +8,7 @@ import {
   campaignScopeSupportsLabels,
   checkCampaignGuardrails,
   computeUplift,
+  describeCampaignLabelScope,
   describeCampaignRemaining,
   formatMultiplier,
   getCampaignWindowState,
@@ -119,6 +120,43 @@ test("an excluded label vetoes even an included one", () => {
   assert.equal(
     campaignMatches(c, context({ labels: ["Docs", "Redistributed"] })),
     false,
+  );
+});
+
+test("unknown labels never claim a label-restricted campaign", () => {
+  // A PPT request has no issue yet, so its labels are unknown. Strict matching
+  // must under-promise rather than promise a multiplier the task may not get.
+  const c = campaign({ includedLabels: ["Docs"] });
+  assert.equal(campaignMatches(c, context({ labels: null })), false);
+  assert.equal(campaignMatches(c, context()), false);
+});
+
+test("announcements ignore label filters so restricted campaigns still reach people", () => {
+  const c = campaign({ includedLabels: ["Docs"] });
+  assert.equal(
+    campaignMatches(c, context({ labels: null, labelMatch: "ignore" })),
+    true,
+  );
+  // Exclusions are skipped too — an announcement is not a price quote.
+  const excluded = campaign({ excludedLabels: ["Docs"] });
+  assert.equal(
+    campaignMatches(
+      excluded,
+      context({ labels: ["Docs"], labelMatch: "ignore" }),
+    ),
+    true,
+  );
+});
+
+test("a label-restricted campaign describes itself honestly", () => {
+  assert.equal(describeCampaignLabelScope({ includedLabels: [] }), null);
+  assert.equal(
+    describeCampaignLabelScope({ includedLabels: ["Docs"] }),
+    "tasks labelled Docs",
+  );
+  assert.equal(
+    describeCampaignLabelScope({ includedLabels: ["Docs", "Infra"] }),
+    "tasks labelled Docs or Infra",
   );
 });
 

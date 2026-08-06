@@ -23,9 +23,11 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import EmptyState from "@/components/EmptyState";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
+import { applyMultiplier } from "@/lib/payout-campaign";
 import type { PptRequestData } from "./PptRequestCard";
 import classes from "./PptRequestsTab.module.css";
 import { approvePptRequest, rejectPptRequest } from "./ppt-request-actions";
@@ -154,12 +156,21 @@ export default function PptRequestsTab({
 
   const assigneeChoice =
     assigneeChoices[selected.id] ?? defaultAssigneeChoice(selected);
+  const selectedMultiplier = selected.campaign?.multiplier ?? 1;
   const estimatedMYR = formatAmount(
-    estimateToAmount(selected.requestedEstimate, "MYR"),
+    applyMultiplier(
+      estimateToAmount(selected.requestedEstimate, "MYR"),
+      selectedMultiplier,
+      "MYR",
+    ),
     "MYR",
   );
   const estimatedRobux = formatAmount(
-    estimateToAmount(selected.requestedEstimate, "ROBUX"),
+    applyMultiplier(
+      estimateToAmount(selected.requestedEstimate, "ROBUX"),
+      selectedMultiplier,
+      "ROBUX",
+    ),
     "ROBUX",
   );
 
@@ -331,10 +342,22 @@ export default function PptRequestsTab({
 
                 <Group gap="xl">
                   <Box>
-                    <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
-                      Amount
-                    </Text>
-                    <Text fw={800} c="green">
+                    <Group gap={6} wrap="nowrap">
+                      <Text size="xs" tt="uppercase" c="dimmed" fw={700}>
+                        Amount
+                      </Text>
+                      {selected.campaign && (
+                        <CampaignBadge campaign={selected.campaign} />
+                      )}
+                    </Group>
+                    <Text
+                      fw={800}
+                      c={
+                        selected.campaign
+                          ? selected.campaign.accentColor
+                          : "green"
+                      }
+                    >
                       {estimatedMYR}
                     </Text>
                     <Text size="xs" c="dimmed">

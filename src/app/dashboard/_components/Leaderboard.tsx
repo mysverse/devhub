@@ -7,6 +7,11 @@ import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { getLeaderboardIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
+import { applyMultiplier, selectCampaignBadge } from "@/lib/payout-campaign";
+import {
+  getLiveCampaignRows,
+  toSelectableCampaign,
+} from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 import AnimatedProgressBar from "./AnimatedProgressBar";
 import DashboardSectionHeader from "./DashboardSectionHeader";
@@ -158,15 +163,52 @@ export default async function Leaderboard({
   try {
     const issues = await getLeaderboardIssuesForUser(userId);
 
+    // Campaigns are per developer, so the in-progress projection is resolved
+    // against each ASSIGNEE's own eligibility — applying the viewer's campaign
+    // to other people's tasks would be plainly wrong. Completed value is left
+    // at whatever it was worth: it is history, and it is what ranks people.
+    const assigneeLinearIds = [
+      ...new Set(
+        issues
+          .map((issue) => issue.assignee?.id)
+          .filter((id): id is string => Boolean(id)),
+      ),
+    ];
+    const [liveCampaigns, assigneeProfiles] = await Promise.all([
+      getLiveCampaignRows().then((rows) => rows.map(toSelectableCampaign)),
+      assigneeLinearIds.length > 0
+        ? prisma.userProfile.findMany({
+            where: { linearId: { in: assigneeLinearIds } },
+            select: { id: true, linearId: true, developerRank: true },
+          })
+        : Promise.resolve([]),
+    ]);
+    const profileByLinearId = new Map(
+      assigneeProfiles.map((profile) => [profile.linearId, profile]),
+    );
+
     const byAssignee = new Map<string, LeaderboardEntry>();
     for (const issue of issues) {
       const assignee = issue.assignee;
       if (!assignee) continue;
 
-      const amount = issue.estimate
+      const baseAmount = issue.estimate
         ? estimateToAmount(issue.estimate, currency)
         : 0;
       const isCompleted = issue.stateType === "completed";
+      const assigneeProfile = profileByLinearId.get(assignee.id);
+      const assigneeCampaign =
+        isCompleted || !assigneeProfile
+          ? null
+          : selectCampaignBadge(liveCampaigns, {
+              scope: "PPT",
+              userId: assigneeProfile.id,
+              rank: assigneeProfile.developerRank,
+              labels: issue.labelNames,
+            });
+      const amount = assigneeCampaign
+        ? applyMultiplier(baseAmount, assigneeCampaign.multiplier, currency)
+        : baseAmount;
       const isActive =
         issue.stateType === "started" || issue.stateType === "unstarted";
       const existing = byAssignee.get(assignee.id);

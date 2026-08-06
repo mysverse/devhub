@@ -8,6 +8,8 @@ import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
+import { applyMultiplier, selectCampaignBadge } from "@/lib/payout-campaign";
+import { getLiveCampaignRows } from "@/lib/payout-campaign-server";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
@@ -39,6 +41,15 @@ export default async function ActiveTasks({
 }: Props) {
   let assignedIssues: IssueDTO[] = [];
   let linearError: string | null = null;
+
+  const [liveCampaigns, activeTasksProfile] = await Promise.all([
+    getLiveCampaignRows(),
+    prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { developerRank: true },
+    }),
+  ]);
+  const developerRank = activeTasksProfile?.developerRank ?? null;
 
   try {
     assignedIssues = (
@@ -187,10 +198,22 @@ export default async function ActiveTasks({
               ? describePptNextStep(pptState.status, pptState.reason)
               : null;
             const bonusCurrency = bonus?.currency === "ROBUX" ? "ROBUX" : "MYR";
+            // The issue exists here, so its real labels decide whether a
+            // label-restricted campaign covers it.
+            const campaign = selectCampaignBadge(liveCampaigns, {
+              scope: "PPT",
+              userId,
+              rank: developerRank,
+              labels: issue.labelNames,
+            });
             const earningsText = hasPptLabel
               ? issue.estimate
                 ? `${formatAmount(
-                    estimateToAmount(issue.estimate, currency),
+                    applyMultiplier(
+                      estimateToAmount(issue.estimate, currency),
+                      campaign?.multiplier ?? 1,
+                      currency,
+                    ),
                     currency,
                   )} (Pending)`
                 : null
@@ -218,6 +241,7 @@ export default async function ActiveTasks({
                     proofNextStep={nextStep?.action ?? null}
                     proofOwner={nextStep?.owner ?? null}
                     assignmentWatch={assignmentWatch ?? null}
+                    campaign={hasPptLabel ? campaign : null}
                   />
                 </div>
               </StaggerItem>

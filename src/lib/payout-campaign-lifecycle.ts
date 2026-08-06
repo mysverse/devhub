@@ -76,6 +76,8 @@ async function audienceFor(campaign: PayoutCampaign) {
       scope: campaign.scopes[0],
       userId: profile.id,
       rank: profile.developerRank,
+      // An announcement, not a price quote — see the doc comment above.
+      labelMatch: "ignore",
       // Ignore the window here: "ended" announcements go out after it closes.
       now: campaign.startsAt,
     }),

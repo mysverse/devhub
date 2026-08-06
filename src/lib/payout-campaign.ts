@@ -134,6 +134,20 @@ export type CampaignSelectionContext = {
    * period rather than one issue — see campaignScopeSupportsLabels.
    */
   labels?: string[] | null;
+  /**
+   * How to treat the campaign's label filters.
+   *
+   * - `"strict"` (default) — `labels` must satisfy the filter. Surfaces that
+   *   know which issue they are pricing use this. It is also the right answer
+   *   when the labels are *unknown* (a PPT request whose issue does not exist
+   *   yet): a label-restricted campaign then fails to match, so the UI
+   *   under-promises rather than promising a multiplier the task may not get.
+   * - `"ignore"` — skip label filtering entirely. For announcements: the
+   *   banner and the campaign emails say the campaign exists; whether a given
+   *   task qualifies is the per-task badge's job. Without this a "2x on Docs"
+   *   campaign would never announce itself to anyone.
+   */
+  labelMatch?: "strict" | "ignore";
   now?: Date;
 };
 
@@ -175,7 +189,10 @@ export function campaignMatches(
     if (!campaign.ranks.includes(context.rank)) return false;
   }
 
-  if (campaignScopeSupportsLabels(context.scope)) {
+  if (
+    campaignScopeSupportsLabels(context.scope) &&
+    context.labelMatch !== "ignore"
+  ) {
     const labels = normalizeLabels(context.labels);
     const excluded = campaign.excludedLabels.map(normalizeLabel);
     if (excluded.some((label) => labels.has(label))) return false;
@@ -333,6 +350,20 @@ export const CAMPAIGN_SCOPE_LABELS: Record<CampaignScope, string> = {
   BONUS: "Bonus caps",
   INCENTIVE: "Incentive awards",
 };
+
+/**
+ * "tasks labelled Docs or Infra", or null when the campaign covers everything.
+ * Announcement surfaces must append this — otherwise a label-restricted
+ * campaign reads as a blanket multiplier.
+ */
+export function describeCampaignLabelScope(campaign: {
+  includedLabels: string[];
+}): string | null {
+  const labels = campaign.includedLabels.filter((label) => label.trim());
+  if (labels.length === 0) return null;
+  if (labels.length === 1) return `tasks labelled ${labels[0]}`;
+  return `tasks labelled ${labels.slice(0, -1).join(", ")} or ${labels.at(-1)}`;
+}
 
 export function describeCampaignScopes(scopes: CampaignScope[]): string {
   const labels = scopes.map((scope) => CAMPAIGN_SCOPE_LABELS[scope] ?? scope);

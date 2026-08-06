@@ -16,6 +16,8 @@ export type CampaignBannerData = {
   /** ISO strings — serialized across the RSC boundary. */
   endsAt: string;
   scopeLabel: string;
+  /** "tasks labelled Docs", or null when the campaign covers everything. */
+  labelScope: string | null;
 };
 
 const DISMISS_PREFIX = "devhub:campaign-dismissed:";
@@ -115,6 +117,7 @@ export default function CampaignBanner({
             <Text size="sm" c="dimmed">
               {campaign.body ??
                 `${campaign.scopeLabel} are multiplied while this campaign runs.`}
+              {campaign.labelScope ? ` Applies to ${campaign.labelScope}.` : ""}
             </Text>
             <Text size="xs" c={underDay ? "orange.5" : "dimmed"}>
               Ends {dayjs(endsAt).format("D MMM YYYY, HH:mm")} ·{" "}

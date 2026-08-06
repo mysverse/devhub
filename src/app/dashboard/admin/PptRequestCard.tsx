@@ -17,8 +17,10 @@ import { motion } from "motion/react";
 import { memo, useState } from "react";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
+import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
+import { applyMultiplier, type CampaignBadgeInfo } from "@/lib/payout-campaign";
 import { approvePptRequest, rejectPptRequest } from "./ppt-request-actions";
 
 export type PptRequestData = {
@@ -50,6 +52,13 @@ export type PptRequestData = {
     height: number | null;
   }[];
   createdAt: string;
+  /**
+   * Campaign the REQUESTER would be paid under, so an admin approving this
+   * sees the same number the developer was quoted. Null when none applies —
+   * including when a live campaign is label-restricted, since the issue does
+   * not exist yet and its labels are unknown.
+   */
+  campaign: CampaignBadgeInfo | null;
 };
 
 function timeAgo(dateStr: string): string {
@@ -72,12 +81,21 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
   const [rejectReason, setRejectReason] = useState("");
   const [assignRequester, setAssignRequester] = useState(true);
 
+  const multiplier = request.campaign?.multiplier ?? 1;
   const estimatedMYR = formatAmount(
-    estimateToAmount(request.requestedEstimate, "MYR"),
+    applyMultiplier(
+      estimateToAmount(request.requestedEstimate, "MYR"),
+      multiplier,
+      "MYR",
+    ),
     "MYR",
   );
   const estimatedRobux = formatAmount(
-    estimateToAmount(request.requestedEstimate, "ROBUX"),
+    applyMultiplier(
+      estimateToAmount(request.requestedEstimate, "ROBUX"),
+      multiplier,
+      "ROBUX",
+    ),
     "ROBUX",
   );
 
@@ -185,10 +203,21 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
                   </Group>
                 </Box>
                 <Box>
-                  <Text fz="xs" c="dimmed" tt="uppercase" fw={600}>
-                    Amount
-                  </Text>
-                  <Text fz="sm" fw={600} c="green">
+                  <Group gap={6} wrap="nowrap">
+                    <Text fz="xs" c="dimmed" tt="uppercase" fw={600}>
+                      Amount
+                    </Text>
+                    {request.campaign && (
+                      <CampaignBadge campaign={request.campaign} />
+                    )}
+                  </Group>
+                  <Text
+                    fz="sm"
+                    fw={600}
+                    c={
+                      request.campaign ? request.campaign.accentColor : "green"
+                    }
+                  >
                     {estimatedMYR}
                   </Text>
                   <Text fz="xs" c="dimmed">

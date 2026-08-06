@@ -13,6 +13,8 @@ import {
   IN_APP_CHANNEL,
   notifyWithPreferences,
 } from "@/lib/notifications";
+import { applyMultiplier } from "@/lib/payout-campaign";
+import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
 import {
   PPT_ATTACHMENT_MAX_FILES,
   PPT_ATTACHMENT_MAX_TOTAL_SIZE,
@@ -187,8 +189,18 @@ export async function POST(req: Request) {
         profile: requester,
         fallback: "A developer",
       });
+      // Admins see the amount the requester would be paid, campaign included.
+      const requestCampaign = await getCampaignBadgeFor({
+        scope: "PPT",
+        userId,
+        rank: requester?.developerRank ?? null,
+      });
       const estimatedAmount = formatAmount(
-        estimateToAmount(requestedEstimate, "MYR"),
+        applyMultiplier(
+          estimateToAmount(requestedEstimate, "MYR"),
+          requestCampaign?.multiplier ?? 1,
+          "MYR",
+        ),
         "MYR",
       );
 

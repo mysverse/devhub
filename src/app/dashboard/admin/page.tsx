@@ -23,6 +23,11 @@ import { getIncentiveConfig } from "@/lib/incentives";
 import { getLinearClient, getLinearServiceClient } from "@/lib/linear";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { selectCampaignBadge } from "@/lib/payout-campaign";
+import {
+  getLiveCampaignRows,
+  toSelectableCampaign,
+} from "@/lib/payout-campaign-server";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { logPiiAccess } from "@/lib/pii-audit";
 import { getUnassignHours, getWarningHours } from "@/lib/ppt-assignment-watch";
@@ -268,6 +273,11 @@ async function AdminPageContent() {
   });
   const recentWatchHistoryCutoff = new Date(
     Date.now() - 30 * 24 * 60 * 60 * 1000,
+  );
+  // Resolved per requester below: an admin approving a request should see the
+  // amount that developer was quoted, not the base rate.
+  const liveCampaignRows = (await getLiveCampaignRows()).map(
+    toSelectableCampaign,
   );
 
   const [
@@ -789,6 +799,11 @@ async function AdminPageContent() {
         pptEligibilityStates={pptEligibilityStates}
         pptRequests={pendingPptRequests.map(
           (req): PptRequestData => ({
+            campaign: selectCampaignBadge(liveCampaignRows, {
+              scope: "PPT",
+              userId: req.requester.id,
+              rank: req.requester.developerRank,
+            }),
             id: req.id,
             requesterName: resolveDisplayName({ profile: req.requester }),
             requesterEmail: req.requester.user.email,

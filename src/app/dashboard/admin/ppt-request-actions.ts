@@ -19,6 +19,8 @@ import {
   IN_APP_CHANNEL,
   notifyWithPreferences,
 } from "@/lib/notifications";
+import { applyMultiplier } from "@/lib/payout-campaign";
+import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
 import { DEVHUB_PPT_REQUEST_DESCRIPTION_MARKER } from "@/lib/ppt-request-marker";
 import prisma from "@/lib/prisma";
 import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
@@ -313,8 +315,20 @@ export async function approvePptRequest(
       try {
         const email = request.requester.user.email;
         const name = resolveDisplayName({ profile: request.requester });
+        // Quote what the requester would actually be paid. Labels are not
+        // passed, so a label-restricted campaign is left out rather than
+        // promising a rate the new issue may not qualify for.
+        const approvalCampaign = await getCampaignBadgeFor({
+          scope: "PPT",
+          userId: request.requesterId,
+          rank: request.requester.developerRank,
+        });
         const estimatedAmount = formatAmount(
-          estimateToAmount(request.requestedEstimate, "MYR"),
+          applyMultiplier(
+            estimateToAmount(request.requestedEstimate, "MYR"),
+            approvalCampaign?.multiplier ?? 1,
+            "MYR",
+          ),
           "MYR",
         );
 

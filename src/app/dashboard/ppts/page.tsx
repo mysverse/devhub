@@ -43,7 +43,10 @@ import {
   getCampaignWindowState,
   selectCampaignBadge,
 } from "@/lib/payout-campaign";
-import { getCampaignRows } from "@/lib/payout-campaign-server";
+import {
+  getCampaignBadgeFor,
+  getCampaignRows,
+} from "@/lib/payout-campaign-server";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
@@ -664,6 +667,29 @@ async function PPTList({
   );
 }
 
+/**
+ * Streams the campaign into the request button so the page shell stays static.
+ * Labels are deliberately not passed: a request has no Linear issue yet, so a
+ * label-restricted campaign must not be quoted in the modal.
+ */
+async function PptRequestButtonWithCampaign() {
+  const { userId } = await getSession();
+  if (!userId) return <PptRequestButton />;
+
+  const profile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { developerRank: true },
+  });
+
+  const campaign = await getCampaignBadgeFor({
+    scope: "PPT",
+    userId,
+    rank: profile?.developerRank ?? null,
+  });
+
+  return <PptRequestButton campaign={campaign} />;
+}
+
 export default function PPTsPage({
   searchParams,
 }: {
@@ -682,7 +708,11 @@ export default function PPTsPage({
             <PptBoardHelpDrawer policy={getResolvedPayoutPolicy()} />
           </Stack>
         }
-        action={<PptRequestButton />}
+        action={
+          <Suspense fallback={<PptRequestButton />}>
+            <PptRequestButtonWithCampaign />
+          </Suspense>
+        }
       />
       <Suspense fallback={<PPTSkeleton />}>
         <PPTsPageContent searchParams={searchParams} />

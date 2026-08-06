@@ -1,4 +1,4 @@
-import type { UserProfile } from "@prisma/client";
+import type { DeveloperRank, UserProfile } from "@prisma/client";
 import { getUserWeeklyUsage, getWeekBounds } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { estimateToAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
@@ -9,10 +9,14 @@ import {
   getPaymentMethodLabel,
 } from "@/lib/payment-validation";
 import {
-  getCampaignWindowState,
+  applyMultiplier,
+  type SelectableCampaign,
   selectCampaignBadge,
 } from "@/lib/payout-campaign";
-import { getCampaignRows } from "@/lib/payout-campaign-server";
+import {
+  getLiveCampaignRows,
+  toSelectableCampaign,
+} from "@/lib/payout-campaign-server";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import prisma from "@/lib/prisma";
 import HeroPrimary from "./HeroPrimary";
@@ -78,10 +82,14 @@ async function getActivePptPending({
   userId,
   linearId,
   currency,
+  liveCampaigns,
+  developerRank,
 }: {
   userId: string;
   linearId: string | null;
   currency: CurrencyCode;
+  liveCampaigns: SelectableCampaign[];
+  developerRank: DeveloperRank | null;
 }) {
   if (!linearId) return { amount: 0, count: 0 };
 
@@ -95,10 +103,22 @@ async function getActivePptPending({
     );
 
     return {
+      // Campaign-aware per issue, so the headline projection agrees with the
+      // amounts on the task cards it is summing.
       amount: activePptIssues.reduce((sum, issue) => {
+        if (!issue.estimate) return sum;
+        const base = estimateToAmount(issue.estimate, currency);
+        const campaign = selectCampaignBadge(liveCampaigns, {
+          scope: "PPT",
+          userId,
+          rank: developerRank,
+          labels: issue.labelNames,
+        });
         return (
           sum +
-          (issue.estimate ? estimateToAmount(issue.estimate, currency) : 0)
+          (campaign
+            ? applyMultiplier(base, campaign.multiplier, currency)
+            : base)
         );
       }, 0),
       count: activePptIssues.length,
@@ -115,6 +135,8 @@ export default async function Hero({
   currency,
   user,
 }: Props) {
+  const liveCampaigns = (await getLiveCampaignRows()).map(toSelectableCampaign);
+
   const [
     { amount: activePptPendingAmount, count },
     transactionTotals,
@@ -124,6 +146,8 @@ export default async function Hero({
       userId,
       linearId: userProfile.linearId,
       currency,
+      liveCampaigns,
+      developerRank: userProfile.developerRank,
     }),
     prisma.transaction.groupBy({
       by: ["status", "source"],
@@ -160,14 +184,15 @@ export default async function Hero({
     timeZone: "UTC",
   })} 23:59 UTC`;
 
-  // Board-wide PPT campaign for the rate table in the help drawer. Label
-  // filters are not applied here: this answers "what is the rate right now",
-  // while the per-task badge answers "does this task qualify".
-  const campaignRows = await getCampaignRows();
-  const campaign = selectCampaignBadge(
-    campaignRows.filter((row) => getCampaignWindowState(row).active),
-    { scope: "PPT", userId, rank: userProfile.developerRank },
-  );
+  // Board-wide PPT campaign for the rate table in the help drawer. Announcement
+  // semantics: the drawer answers "what is the promo right now", while the
+  // per-task badge answers "does this task qualify".
+  const campaign = selectCampaignBadge(liveCampaigns, {
+    scope: "PPT",
+    userId,
+    rank: userProfile.developerRank,
+    labelMatch: "ignore",
+  });
 
   return (
     <HeroPrimary

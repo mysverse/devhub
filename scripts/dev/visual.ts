@@ -44,6 +44,7 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
     "/dashboard",
     "/dashboard/ppts",
     "/dashboard/ppts/ideas",
+    "/dashboard/assistant",
     "/dashboard/transactions",
     "/dashboard/bonuses",
     "/dashboard/help",

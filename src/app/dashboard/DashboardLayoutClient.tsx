@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ActionIcon,
   AppShell,
   AppShellHeader,
   AppShellMain,
@@ -16,10 +17,11 @@ import {
   MenuTarget,
   Stack,
   Text,
+  Tooltip,
   UnstyledButton,
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
-import { FileText, LogOut, Package } from "lucide-react";
+import { Bot, FileText, LogOut, Package } from "lucide-react";
 import { motion } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -51,6 +53,7 @@ const PRIMARY_LINKS: NavLink[] = [
 // Lower-frequency destinations live in the avatar menu on desktop (and in the
 // full mobile navbar).
 const MENU_LINKS: NavLink[] = [
+  { href: "/dashboard/assistant", label: "Task Copilot" },
   { href: "/dashboard/documents", label: "Documents" },
   { href: "/dashboard/welcome-pack", label: "Welcome Pack" },
 ];
@@ -318,6 +321,17 @@ export default function DashboardLayoutClient({
               </Group>
 
               <Group gap="xs" wrap="nowrap">
+                <Tooltip label="Task Copilot">
+                  <ActionIcon
+                    component={Link}
+                    href="/dashboard/assistant"
+                    variant="subtle"
+                    color="gray"
+                    aria-label="Open Task Copilot"
+                  >
+                    <Bot size={18} />
+                  </ActionIcon>
+                </Tooltip>
                 <NotificationBell />
                 <Menu
                   shadow="md"
@@ -344,7 +358,9 @@ export default function DashboardLayoutClient({
                         component={Link}
                         href={link.href}
                         leftSection={
-                          link.href === "/dashboard/documents" ? (
+                          link.href === "/dashboard/assistant" ? (
+                            <Bot size={14} />
+                          ) : link.href === "/dashboard/documents" ? (
                             <FileText size={14} />
                           ) : (
                             <Package size={14} />

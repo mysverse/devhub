@@ -164,6 +164,30 @@ model Invite {
   createdAt DateTime    @default(now())
 }
 
+/// The activation funnel's missing moments — the ones that leave no other
+/// trace. Most of the funnel is already recorded (PptAssignmentWatch for
+/// claims, PptPayoutState.proofProvidedAt for proof, PptPayoutEvent for
+/// rejected proof, Transaction for payouts, TaskSuggestion.outcome for
+/// pushes), so this table deliberately does NOT duplicate them — it records
+/// first-time crossings so "how far did each person get" is one query.
+///
+/// userId is a plain column with no foreign key: deleting a user must not
+/// cascade away the record that they were here.
+model ActivationEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  entityId  String?
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  /// One row per crossing. Webhooks, crons and retries all re-fire the same
+  /// moment, so the writer swallows the duplicate rather than counting it.
+  @@unique([userId, kind, entityId])
+  @@index([userId, createdAt])
+  @@index([kind, createdAt])
+}
+
 /// Every model call DevHub makes, so spend is a number rather than a guess.
 /// Doubles as the rate-limit ledger — checkLlmRateLimits counts rows in a
 /// rolling window, the same shape EmailDelivery uses for email throttling.

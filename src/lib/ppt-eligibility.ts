@@ -4,6 +4,7 @@ import PptPayoutAdminAlert from "@/emails/PptPayoutAdminAlert";
 import PptPayoutBlocked from "@/emails/PptPayoutBlocked";
 import TransactionAwaitingReview from "@/emails/TransactionAwaitingReview";
 import { awardAchievement } from "@/lib/achievements";
+import { recordActivationEvent } from "@/lib/activation-events";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { isWithinCreditLimit, WEEKLY_CREDIT_LIMITS } from "@/lib/credit-limit";
 import {
@@ -2475,6 +2476,12 @@ async function evaluatePptSnapshot(
       "PROOF_MISSING",
     );
     if (attempt) {
+      await recordActivationEvent({
+        userId: linkedUser.id,
+        kind: "proof_rejected",
+        entityId: snapshot.id,
+        metadata: { rejection: attempt.rejection.reason },
+      });
       await appendEvent({
         stateId: base.id,
         linearIssueId: snapshot.id,
@@ -2500,6 +2507,11 @@ async function evaluatePptSnapshot(
       proofAuthorLinearId: proof.userId,
       proofProvidedAt: proof.editedAt ?? proof.createdAt,
     },
+  });
+  await recordActivationEvent({
+    userId: linkedUser.id,
+    kind: "proof_posted",
+    entityId: snapshot.id,
   });
   await appendEvent({
     stateId: base.id,

@@ -3,6 +3,7 @@
 import type { PptSelfBlockReason } from "@prisma/client";
 import { revalidatePath, updateTag } from "next/cache";
 import { awardAchievement, markAchievementsSeen } from "@/lib/achievements";
+import { recordActivationEvent } from "@/lib/activation-events";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
@@ -83,6 +84,12 @@ export async function claimIssue(
     // Close out any suggestion for this task — the only signal DevHub has for
     // whether pointing people at work actually gets it picked up.
     await resolveTaskSuggestions(issue.id, userId);
+    await recordActivationEvent({
+      userId,
+      kind: "task_claimed",
+      entityId: issue.id,
+      metadata: { identifier: issue.identifier },
+    });
     if (previousAssignee) {
       const takenByProfile = await getUserProfile(userId);
       await recordTakeoverAway({

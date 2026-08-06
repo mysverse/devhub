@@ -1,4 +1,5 @@
 import { awardAchievement } from "@/lib/achievements";
+import { recordActivationEvent } from "@/lib/activation-events";
 import { createPaymentOrder } from "@/lib/billplz";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
@@ -74,6 +75,14 @@ export async function handlePayoutCompletion(
   });
   if (paidTx?.source === "PPT") {
     await awardAchievement(paidTx.userId, "FIRST_PAYOUT", { transactionId });
+  }
+  if (paidTx?.userId) {
+    await recordActivationEvent({
+      userId: paidTx.userId,
+      kind: "payout_paid",
+      entityId: transactionId,
+      metadata: { source: paidTx.source },
+    });
   }
 
   try {

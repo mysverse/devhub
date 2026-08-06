@@ -3,6 +3,7 @@ import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import { createElement } from "react";
 import PptRequestSubmitted from "@/emails/PptRequestSubmitted";
+import { recordActivationEvent } from "@/lib/activation-events";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { estimateToAmount, formatAmount } from "@/lib/currency";
@@ -168,6 +169,13 @@ export async function POST(req: Request) {
           })),
         },
       },
+    });
+
+    await recordActivationEvent({
+      userId,
+      kind: "ppt_requested",
+      entityId: requestRecord.id,
+      metadata: { mode },
     });
 
     // Notify admins — best-effort. The request is already committed, so a

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import PaymentRejected from "@/emails/PaymentRejected";
 import { awardAchievement } from "@/lib/achievements";
+import { recordActivationEvent } from "@/lib/activation-events";
 import { requireAdmin } from "@/lib/authz";
 import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
@@ -101,6 +102,13 @@ export async function markTransactionAsPaid(transactionId: string) {
         console.error("Failed to award FIRST_PAYOUT achievement:", err);
       }
     }
+
+    await recordActivationEvent({
+      userId: transaction.userId,
+      kind: "payout_paid",
+      entityId: transactionId,
+      metadata: { source: transaction.source, manual: true },
+    });
 
     // Send payment confirmation email with PDF slip
     try {

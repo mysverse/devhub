@@ -10,7 +10,7 @@ import {
   Text,
 } from "@mantine/core";
 import type { Prisma, Transaction } from "@prisma/client";
-import { Download, Receipt } from "lucide-react";
+import { ArrowRight, Download, Receipt } from "lucide-react";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
@@ -18,6 +18,7 @@ import { StaggerContainer, StaggerItem } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import InfoTip from "@/components/InfoTip";
 import LinkAnchor from "@/components/LinkAnchor";
+import LinkButton from "@/components/LinkButton";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
@@ -224,6 +225,15 @@ async function TransactionsContent({
             color="gray"
             title="No transactions here yet"
             description="Complete a PPT and its payout will appear with a full explanation of each step."
+            action={
+              <LinkButton
+                href="/dashboard/ppts"
+                variant="light"
+                rightSection={<ArrowRight size={14} />}
+              >
+                Find a task
+              </LinkButton>
+            }
           />
         ) : (
           <Stack gap={0}>

@@ -187,15 +187,19 @@ export default function SettingsForm({
               clearErrors();
             }}
             data={[
-              { value: "PAYPAL", label: "PayPal" },
+              // PayPal has no auto-payout path in src/lib/payout.ts, and it is
+              // the schema default — so a developer who never opens this page
+              // is silently on the manual-release track. Say so at the point
+              // of choice rather than letting them discover it while waiting.
+              { value: "PAYPAL", label: "PayPal (released manually)" },
               {
                 value: "ROBUX",
                 label: robuxPayoutAvailability.configured
-                  ? "Robux"
+                  ? "Robux (paid automatically)"
                   : "Robux (unavailable)",
                 disabled: !robuxPayoutAvailability.configured,
               },
-              { value: "DUITNOW", label: "DuitNow" },
+              { value: "DUITNOW", label: "DuitNow (paid automatically)" },
               {
                 value: "BANK_TRANSFER",
                 label: "International Bank Transfer",
@@ -210,6 +214,14 @@ export default function SettingsForm({
               title={robuxPayoutAvailability.unavailableTitle}
             >
               {robuxPayoutAvailability.unavailableDescription}
+            </Alert>
+          )}
+
+          {paymentMethod === "PAYPAL" && (
+            <Alert color="gray" variant="light" title="Released by hand">
+              PayPal payouts wait for an admin to send them. DuitNow and Robux
+              can go out automatically once your weekly limit and verification
+              allow it — worth switching if you&rsquo;d rather not wait.
             </Alert>
           )}
 

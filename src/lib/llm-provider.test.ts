@@ -5,13 +5,20 @@ import { afterEach, before, describe, it } from "node:test";
 // not touch the database. Prisma only needs a valid URL for its lazy pool.
 let getLlmProviderOrder: typeof import("@/lib/llm")["getLlmProviderOrder"];
 let isAssistantConfigured: typeof import("@/lib/llm")["isAssistantConfigured"];
+let isFallbackEligible: typeof import("@/lib/llm")["isFallbackEligible"];
+let llmFailureKind: typeof import("@/lib/llm")["llmFailureKind"];
 let resetLlmClientForTests: typeof import("@/lib/llm")["resetLlmClientForTests"];
 
 before(async () => {
   process.env.DATABASE_URL ??=
     "postgresql://postgres:postgres@127.0.0.1:5432/devhub_test_not_connected";
-  ({ getLlmProviderOrder, isAssistantConfigured, resetLlmClientForTests } =
-    await import("@/lib/llm"));
+  ({
+    getLlmProviderOrder,
+    isAssistantConfigured,
+    isFallbackEligible,
+    llmFailureKind,
+    resetLlmClientForTests,
+  } = await import("@/lib/llm"));
 });
 
 const KEYS = [
@@ -59,5 +66,21 @@ describe("LLM provider selection", () => {
     process.env.OPENAI_API_KEY = "test-openai";
     process.env.LLM_ASSISTANT_ENABLED = "false";
     assert.equal(isAssistantConfigured(), false);
+  });
+
+  it("uses the configured backup after a provider contract failure", () => {
+    process.env.OPENAI_API_KEY = "test-openai";
+    process.env.ANTHROPIC_API_KEY = "test-anthropic";
+    process.env.LLM_PROVIDER = "openai";
+    process.env.LLM_FALLBACK_PROVIDER = "anthropic";
+
+    assert.deepEqual(getLlmProviderOrder(), ["openai", "anthropic"]);
+    assert.equal(llmFailureKind({ status: 400 }), "invalid_request");
+    assert.equal(isFallbackEligible("invalid_request"), true);
+  });
+
+  it("does not route aborts or refusals through another provider", () => {
+    assert.equal(isFallbackEligible("aborted"), false);
+    assert.equal(isFallbackEligible("refusal"), false);
   });
 });

@@ -142,8 +142,19 @@ function toolRequest(body: ResponsesRequest) {
 
 function chatText(body: ResponsesRequest) {
   const text = inputText(body.input);
-  if (text.includes("function_call_output")) {
+  const hasToolOutput =
+    Array.isArray(body.input) &&
+    body.input.some(
+      (item) =>
+        item &&
+        typeof item === "object" &&
+        (item as { type?: string }).type === "function_call_output",
+    );
+  if (hasToolOutput) {
     return "I checked the current DevHub data. The results above are the source of truth; tell me which item you want to develop or act on.";
+  }
+  if (/diagram|flow/i.test(text)) {
+    return "Here’s the short version.\n\n```mermaid\nflowchart LR\n  Idea --> Scope\n  Scope --> Review\n  Review --> Done\n```\n\nStart by naming the outcome you want.";
   }
   return "Let's shape that into a useful task. What outcome should be visible when it is done, and is there a due date or dependency I should account for? (Dev-mode canned reply.)";
 }
@@ -286,6 +297,19 @@ export const handleOpenAi: DevHandler = async (req, url) => {
           type: "invalid_request_error",
           param: invalidField,
           code: "unknown_parameter",
+        },
+      },
+      { status: 400 },
+    );
+  }
+  if (body.stream && /test fallback/i.test(inputText(body.input))) {
+    return Response.json(
+      {
+        error: {
+          message: "Dev-mode forced OpenAI contract failure.",
+          type: "invalid_request_error",
+          param: "input",
+          code: "invalid_request",
         },
       },
       { status: 400 },

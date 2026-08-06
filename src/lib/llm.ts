@@ -260,6 +260,7 @@ export function isFallbackEligible(kind: string) {
     "rate_limit",
     "provider_unavailable",
     "transport",
+    "invalid_request",
     "invalid_output",
   ].includes(kind);
 }

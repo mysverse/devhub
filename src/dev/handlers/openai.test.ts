@@ -63,4 +63,5 @@ test("OpenAI tool replay removes SDK-only parsed arguments", async () => {
     store: false,
   });
   assert.equal(second.status, "completed");
+  assert.match(second.output_text, /checked the current DevHub data/i);
 });

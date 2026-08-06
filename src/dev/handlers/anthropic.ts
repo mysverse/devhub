@@ -14,12 +14,87 @@ import { getDevState } from "@/dev/state";
 
 type MessageRequest = {
   system?: string;
-  messages?: { role: string; content: string }[];
+  messages?: { role: string; content: unknown }[];
   output_config?: { format?: { schema?: Record<string, unknown> } };
+  stream?: boolean;
 };
 
 function promptText(body: MessageRequest) {
-  return body.messages?.map((message) => message.content).join("\n") ?? "";
+  return (
+    body.messages
+      ?.map((message) =>
+        typeof message.content === "string"
+          ? message.content
+          : JSON.stringify(message.content),
+      )
+      .join("\n") ?? ""
+  );
+}
+
+function streamReply(id: string, text: string) {
+  const model = "claude-sonnet-5";
+  const events = [
+    {
+      type: "message_start",
+      message: {
+        id,
+        type: "message",
+        role: "assistant",
+        model,
+        content: [],
+        container: null,
+        stop_details: null,
+        stop_reason: null,
+        stop_sequence: null,
+        usage: {
+          cache_creation: null,
+          cache_creation_input_tokens: 0,
+          cache_read_input_tokens: 0,
+          inference_geo: null,
+          input_tokens: 12,
+          output_tokens: 0,
+          output_tokens_details: null,
+          server_tool_use: null,
+          service_tier: "standard",
+        },
+      },
+    },
+    {
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "", citations: null },
+    },
+    {
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text },
+    },
+    { type: "content_block_stop", index: 0 },
+    {
+      type: "message_delta",
+      delta: {
+        container: null,
+        stop_details: null,
+        stop_reason: "end_turn",
+        stop_sequence: null,
+      },
+      usage: {
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+        input_tokens: 12,
+        output_tokens: 18,
+        output_tokens_details: null,
+        server_tool_use: null,
+      },
+    },
+    { type: "message_stop" },
+  ];
+  const body = events
+    .map((event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`)
+    .join("");
+  return new Response(body, {
+    headers: { "Content-Type": "text/event-stream" },
+  });
 }
 
 function field(prompt: string, label: string) {
@@ -130,6 +205,14 @@ export const handleAnthropic: DevHandler = async (req, url) => {
   if (url.pathname === "/v1/messages" && req.method === "POST") {
     const body = (await req.json()) as MessageRequest;
     const id = `msg_dev_${++getDevState().counters.llm}`;
+    if (body.stream) {
+      console.log(`[dev-mode] anthropic → canned streamed reply (${id})`);
+      return streamReply(
+        id,
+        "OpenAI paused, so I switched to the backup. We can keep going.",
+      );
+    }
+
     console.log(`[dev-mode] anthropic → canned structured reply (${id})`);
 
     const reply = buildReply(body);

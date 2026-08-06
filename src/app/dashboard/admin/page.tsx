@@ -220,6 +220,9 @@ export default function AdminPage() {
             <LinkButton href="/dashboard/admin/welcome-pack" variant="light">
               Welcome Pack
             </LinkButton>
+            <LinkButton href="/dashboard/admin/campaigns" variant="light">
+              Campaigns
+            </LinkButton>
           </Group>
         }
       />

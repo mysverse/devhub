@@ -54,6 +54,53 @@ function buildReply(body: MessageRequest) {
     };
   }
 
+  if ("ideas" in properties) {
+    // Echo back real identifiers from the prompt as "existing", plus one
+    // "original", so BOTH branches of the ideas console are reachable — and so
+    // the server's re-anchoring (identifier must match what was sent) is
+    // actually exercised rather than trivially passing.
+    const identifiers = [...prompt.matchAll(/^identifier: (.+)$/gm)]
+      .map((match) => match[1].trim())
+      .slice(0, 2);
+    return {
+      ideas: [
+        ...identifiers.map((identifier, index) => ({
+          kind: "existing",
+          identifier,
+          title: `Pick up ${identifier} (dev-mode canned reply)`,
+          scope: "Dev-mode canned idea anchored to a real backlog issue.",
+          acceptanceCriteria: ["The change is visible in-game."],
+          estimate: index + 1,
+          specialty: "SCRIPTING",
+          because: "Lines up with what you have been working on.",
+        })),
+        {
+          kind: "original",
+          // Deliberately null: an original idea has no Linear issue.
+          identifier: null,
+          title: "Add a spawn-point audit tool (dev-mode canned reply)",
+          scope: "Dev-mode canned idea with no backlog issue behind it.",
+          acceptanceCriteria: ["Tool lists every spawn point in the place."],
+          estimate: 3,
+          specialty: "SCRIPTING",
+          because: "Nothing on the board covers this yet.",
+        },
+        {
+          kind: "existing",
+          // Not in the backlog we sent — the server must demote this to
+          // "original" rather than trust it.
+          identifier: "MYS-DOES-NOT-EXIST",
+          title: "Hallucinated anchor (dev-mode canned reply)",
+          scope: "Exercises the re-anchoring guard.",
+          acceptanceCriteria: ["Should arrive as an original idea."],
+          estimate: 2,
+          specialty: null,
+          because: "Should not be linked to any issue.",
+        },
+      ],
+    };
+  }
+
   if ("reason" in properties) {
     return {
       reason:

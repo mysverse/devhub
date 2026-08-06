@@ -103,7 +103,8 @@ function buildLinearIssues(): Map<string, MockLinearIssue> {
       stateId: LINEAR_STATES[fixture.stateType].id,
       assigneeId: fixture.assigneeId,
       labelNames: [...fixture.labelNames],
-      teamId: LINEAR_TEAM.id,
+      // Was hardcoded, so every scoped query looked like one team.
+      teamId: fixture.teamId ?? LINEAR_TEAM.id,
       projectId: fixture.projectId,
       url: issueUrl(fixture),
       createdAt: daysAgo(fixture.createdDaysAgo),

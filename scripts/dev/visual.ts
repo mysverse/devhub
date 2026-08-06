@@ -43,6 +43,7 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
   developer: [
     "/dashboard",
     "/dashboard/ppts",
+    "/dashboard/ppts/ideas",
     "/dashboard/transactions",
     "/dashboard/bonuses",
     "/dashboard/help",

@@ -22,6 +22,21 @@ export const LINEAR_TEAM = {
   name: "MYSverse",
 };
 
+export const LINEAR_TEAM_SECONDARY = {
+  id: "team-ops",
+  key: "OPS",
+  name: "MYSverse Ops",
+};
+
+export const LINEAR_PROJECT_SECONDARY = {
+  id: "project-harbour",
+  name: "Project Harbour",
+  startDaysAgo: 40,
+  targetDaysAhead: 90,
+  progress: 0.2,
+  health: "onTrack",
+};
+
 export const LINEAR_PROJECT = {
   id: "project-sentinel",
   name: "Project Sentinel",
@@ -133,6 +148,8 @@ export type DevLinearIssue = {
   assigneeId: string | null;
   labelNames: string[];
   projectId: string | null;
+  /** Defaults to the primary team. Set to exercise team-scoped filtering. */
+  teamId?: string;
   createdDaysAgo: number;
   /** Set when stateType is "completed". */
   completedDaysAgo?: number;
@@ -240,6 +257,46 @@ export const LINEAR_ISSUES: DevLinearIssue[] = [
     labelNames: ["PPT"],
     projectId: LINEAR_PROJECT.id,
     createdDaysAgo: 10,
+  },
+  {
+    id: "issue-mys-240",
+    identifier: "MYS-240",
+    title: "Ferry terminal queue barriers keep clipping through riders",
+    description:
+      "Backlog fixture for task ideas: unassigned, no PPT label, so it is a candidate the ideas surface can pull out of the backlog.",
+    estimate: 2,
+    stateType: "backlog",
+    assigneeId: null,
+    labelNames: ["Bug"],
+    projectId: LINEAR_PROJECT.id,
+    createdDaysAgo: 14,
+  },
+  {
+    id: "issue-mys-241",
+    identifier: "MYS-241",
+    title: "Night lighting pass for the eastern district",
+    description:
+      "Backlog fixture for task ideas: building work, unassigned and unlabelled.",
+    estimate: 3,
+    stateType: "unstarted",
+    assigneeId: null,
+    labelNames: [],
+    projectId: LINEAR_PROJECT.id,
+    createdDaysAgo: 11,
+  },
+  {
+    id: "issue-mys-242",
+    identifier: "MYS-242",
+    title: "Rework tram carriage collision meshes",
+    description:
+      "Backlog fixture on the SECOND team and project — if scoping is broken, this shows up where it shouldn't.",
+    estimate: 4,
+    stateType: "backlog",
+    assigneeId: null,
+    labelNames: ["Enhancement"],
+    teamId: LINEAR_TEAM_SECONDARY.id,
+    projectId: LINEAR_PROJECT_SECONDARY.id,
+    createdDaysAgo: 6,
   },
   {
     id: "issue-mys-212",

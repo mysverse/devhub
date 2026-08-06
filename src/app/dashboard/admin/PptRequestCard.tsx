@@ -112,6 +112,9 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
       toast.error(result.error);
     } else {
       toast.success("PPT request approved");
+      if ("warning" in result && result.warning) {
+        toast.warning(result.warning, { duration: 10_000 });
+      }
     }
   }
 

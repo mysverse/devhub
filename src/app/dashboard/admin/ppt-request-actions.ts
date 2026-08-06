@@ -233,6 +233,7 @@ export async function approvePptRequest(
       let issueIdentifier = request.linearIssueIdentifier;
       let issueUrl = request.linearIssueUrl;
       const assigneeTarget = options.assigneeTarget ?? { type: "requester" };
+      let bonusWarning: string | null = null;
       const selectedAssigneeId =
         assigneeTarget.type === "requester"
           ? request.requester.linearId
@@ -241,6 +242,40 @@ export async function approvePptRequest(
             : null;
 
       if (issueId) {
+        // Adding the PPT label fires a Linear webhook that re-syncs the bonus
+        // candidate for this issue, and PPT is a hardcoded bonus exclusion —
+        // so approval silently destroys any live candidate. Check BEFORE
+        // client.updateIssue below: after that call the webhook is already in
+        // flight and nothing here can undo it.
+        const bonusClash = await prisma.bonusCandidate.findUnique({
+          where: { linearIssueId: issueId },
+          select: {
+            status: true,
+            maxAmount: true,
+            currency: true,
+            linearIssueIdentifier: true,
+          },
+        });
+        if (bonusClash?.status === "APPROVED") {
+          return {
+            error:
+              "This issue has an approved bonus. Making it a PPT would block its payout permanently — pay the bonus, or reject it first.",
+          };
+        }
+        if (bonusClash?.status === "READY_FOR_REVIEW") {
+          return {
+            error:
+              "This issue is completed and waiting in the monthly bonus review. Approving it as a PPT would remove it from that queue — decide the bonus first.",
+          };
+        }
+        // ELIGIBLE is the common case and usually the better deal for the
+        // developer (a PPT is guaranteed at the same per-point rate, where a
+        // bonus is a discretionary cap). Allow it, but say what happened —
+        // the developer's "Up to RM X" is about to disappear.
+        if (bonusClash?.status === "ELIGIBLE") {
+          bonusWarning = `${bonusClash.linearIssueIdentifier ?? "This issue"} had a potential bonus of up to ${formatAmount(bonusClash.maxAmount, bonusClash.currency === "ROBUX" ? "ROBUX" : "MYR")}. Making it a PPT replaces that.`;
+        }
+
         // Existing issue — update it
         const issue = await client.issue(issueId);
         const existingLabels = await issue.labels();
@@ -406,7 +441,7 @@ export async function approvePptRequest(
         );
       }
 
-      return { success: true };
+      return { success: true, warning: bonusWarning };
     });
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {

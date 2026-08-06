@@ -157,6 +157,32 @@ export async function approveMonthlyBonus(data: {
         throw new Error("One or more bonus items are no longer reviewable");
       }
 
+      // PPT and bonus are mutually exclusive, but the only thing enforcing
+      // that on the bonus side is the Linear webhook re-sync — which flips a
+      // candidate to INELIGIBLE once the PPT label lands. A webhook that was
+      // dropped, retried past its window, or threw before reaching the bonus
+      // sync leaves the candidate READY_FOR_REVIEW with a PPT already paid
+      // for the same issue. This is the last point where that is catchable,
+      // and paying both is not recoverable.
+      const pptPaid = await tx.transaction.findFirst({
+        where: {
+          linearIssueId: {
+            in: candidates.map((candidate) => candidate.linearIssueId),
+          },
+          source: "PPT",
+          status: { not: "REJECTED" },
+        },
+        select: { linearIssueId: true },
+      });
+      if (pptPaid) {
+        const clash = candidates.find(
+          (candidate) => candidate.linearIssueId === pptPaid.linearIssueId,
+        );
+        throw new Error(
+          `${clash?.linearIssueIdentifier || clash?.linearIssueTitle || "A selected item"} already has a PPT payout — it cannot also be paid as a bonus.`,
+        );
+      }
+
       const amountByCandidate = new Map(
         uniqueItems.map((item) => [
           item.candidateId,

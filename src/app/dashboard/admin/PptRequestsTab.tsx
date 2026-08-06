@@ -198,6 +198,9 @@ export default function PptRequestsTab({
       return;
     }
     toast.success("PPT request approved");
+    if ("warning" in result && result.warning) {
+      toast.warning(result.warning, { duration: 10_000 });
+    }
   }
 
   async function handleReject() {

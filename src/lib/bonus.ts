@@ -250,12 +250,22 @@ export async function syncBonusCandidateFromLinearIssue(
     }
   }
 
+  // userId is only resolved inside the fully-eligible branch, so every
+  // ineligible path used to write null over it. The bonuses page queries
+  // `where: { userId, status: "INELIGIBLE" }`, so a candidate that became
+  // ineligible didn't just lose its amount — it disappeared from the page
+  // entirely, including the "not eligible" list that exists to explain
+  // exactly this. Keep whoever the row already belonged to. Deliberately not
+  // resolving the assignee up front: that would add a query to every
+  // ineligible sync, including the admin's ~200-issue refresh loop.
+  const ownerId = userId ?? existing?.userId ?? null;
+
   const candidate = existing
     ? await prisma.bonusCandidate.update({
         where: { id: existing.id },
         data: {
           ...baseData,
-          userId,
+          userId: ownerId,
           currency,
           maxAmount,
           baseMaxAmount,

@@ -17,12 +17,15 @@ import { isDevMode } from "@/lib/dev-mode";
 export async function POST(req: Request) {
   if (!isDevMode()) return new Response("Not found", { status: 404 });
 
-  const { identifier, action, assignee, body } = (await req.json()) as {
-    identifier: string;
-    action: string;
-    assignee?: string | null;
-    body?: string;
-  };
+  const { identifier, action, assignee, body, label, remove } =
+    (await req.json()) as {
+      identifier: string;
+      action: string;
+      assignee?: string | null;
+      body?: string;
+      label?: string;
+      remove?: boolean;
+    };
 
   const { linear } = getDevState();
   const issue = [...linear.issues.values()].find(
@@ -56,6 +59,25 @@ export async function POST(req: Request) {
       issue.canceledAt = now;
       issue.completedAt = null;
       break;
+    case "label": {
+      // Adding or removing a label is how the PPT/bonus collision actually
+      // happens in production (approval stamps the PPT label, the webhook
+      // re-syncs the bonus candidate). Without this, that path could not be
+      // exercised in dev mode at all.
+      const name = (label ?? "PPT").trim();
+      if (remove) {
+        issue.labelNames = issue.labelNames.filter(
+          (existing) => existing.toUpperCase() !== name.toUpperCase(),
+        );
+      } else if (
+        !issue.labelNames.some(
+          (existing) => existing.toUpperCase() === name.toUpperCase(),
+        )
+      ) {
+        issue.labelNames.push(name);
+      }
+      break;
+    }
     case "assign": {
       const persona = assignee
         ? PERSONAS[assignee as keyof typeof PERSONAS]

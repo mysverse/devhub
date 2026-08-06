@@ -3,7 +3,7 @@
  * from .env.mock, so the REAL webhook verification and cron auth code paths
  * run unchanged against `pnpm dev:mock`.
  *
- *   pnpm simulate linear --issue MYS-201 --action complete|reopen|cancel|comment
+ *   pnpm simulate linear --issue MYS-201 --action complete|reopen|cancel|comment|label
  *   pnpm simulate billplz [--id <providerPayoutId>|--latest] [--status completed|failed]
  *   pnpm simulate xendit  [--id <disbursementId>|--latest] [--status COMPLETED|FAILED]
  *   pnpm simulate cron <billplz-poll|xendit-poll|kyc-cleanup|incentives-weekly|
@@ -51,6 +51,8 @@ async function simulateLinear() {
       identifier,
       action,
       body: arg("body") ?? undefined,
+      label: arg("label") ?? undefined,
+      remove: process.argv.includes("--remove") || undefined,
     }),
   });
   if (!mutate.ok) {
@@ -197,7 +199,7 @@ async function main() {
     default:
       console.error(
         "Usage: pnpm simulate <linear|billplz|xendit|cron> [options]\n" +
-          "  linear  --issue MYS-201 --action complete|reopen|cancel|comment [--body ...]\n" +
+          "  linear  --issue MYS-201 --action complete|reopen|cancel|comment|label [--body ...] [--label PPT] [--remove]\n" +
           "  billplz [--id <providerPayoutId>] [--status completed|failed]\n" +
           "  xendit  [--id <disbursementId>] [--status COMPLETED|FAILED]\n" +
           `  cron    <${CRON_ROUTES.join("|")}>`,

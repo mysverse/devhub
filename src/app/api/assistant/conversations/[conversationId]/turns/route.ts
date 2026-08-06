@@ -88,6 +88,10 @@ export async function POST(request: Request, { params }: { params: Params }) {
               send(event);
               return;
             }
+            if (event.type === "tool") {
+              send(event);
+              return;
+            }
             const action = await getAssistantActionDto(userId, event.actionId);
             if (action) send({ type: "action", action });
           },

@@ -238,6 +238,12 @@ async function executeReadTool(
       },
     });
   }
+  if (name === "get_task") {
+    return withLinearFallback(context.userId, async (client) => {
+      const [issue] = await fetchIssuesByIds(client, [String(payload.issueId)]);
+      return issue ? safeIssue(issue) : { error: "Task not found." };
+    });
+  }
   if (name === "list_open_ppts") {
     const issues = await getSuggestedPptsForUser(context.userId);
     return issues

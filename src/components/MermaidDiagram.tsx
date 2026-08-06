@@ -10,11 +10,13 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    setRendered(false);
 
     async function render() {
       const mermaid = (await import("mermaid")).default;
       mermaid.initialize({
         startOnLoad: false,
+        securityLevel: "strict",
         theme: "dark",
         themeVariables: {
           darkMode: true,
@@ -34,6 +36,11 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
         const { svg } = await mermaid.render(mermaidId, chart);
         if (!cancelled && ref.current) {
           ref.current.innerHTML = svg;
+          const renderedSvg = ref.current.querySelector("svg");
+          renderedSvg?.setAttribute("role", "img");
+          renderedSvg?.setAttribute("aria-label", "Assistant diagram");
+          renderedSvg?.setAttribute("width", "100%");
+          renderedSvg?.setAttribute("style", "max-width: 100%; height: auto;");
           setRendered(true);
         }
       } catch (err) {
@@ -56,6 +63,8 @@ export default function MermaidDiagram({ chart }: { chart: string }) {
       {!rendered && <Skeleton height={200} radius="md" />}
       <div
         ref={ref}
+        role="img"
+        aria-label="Diagram"
         style={{
           display: rendered ? "block" : "none",
           overflow: "auto",

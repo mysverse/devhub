@@ -10,6 +10,11 @@ describe("assistant tool policy", () => {
     assert.ok(mutations.every((tool) => tool.name.startsWith("propose_")));
     const names = ASSISTANT_TOOLS.map((tool) => tool.name).join(" ");
     assert.doesNotMatch(names, /payout|payment|kyc|bank|access|delete|bulk/);
+    assert.ok(
+      ASSISTANT_TOOLS.every(
+        (tool) => tool.activity.running && tool.activity.complete,
+      ),
+    );
   });
 
   it("strips labels and estimates from ordinary issue proposals", () => {

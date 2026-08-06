@@ -54,5 +54,13 @@ export type AssistantStreamEvent =
   | { type: "delta"; delta: string }
   | { type: "action"; action: AssistantActionDto }
   | { type: "provider"; provider: string; model: string }
+  | {
+      type: "tool";
+      toolCallId: string;
+      name: string;
+      phase: "running" | "complete" | "error";
+      label: string;
+      detail?: string;
+    }
   | { type: "done"; message: AssistantMessageDto }
   | { type: "error"; error: string; message?: AssistantMessageDto };

@@ -1,7 +1,11 @@
 import type Anthropic from "@anthropic-ai/sdk";
 import type { ResponseInputItem } from "openai/resources/responses/responses";
 import * as z from "zod/v4";
-import { ASSISTANT_TOOLS, executeAssistantTool } from "@/lib/assistant-tools";
+import {
+  ASSISTANT_TOOLS,
+  assistantToolByName,
+  executeAssistantTool,
+} from "@/lib/assistant-tools";
 import {
   checkLlmRateLimits,
   getAnthropicClient,
@@ -29,7 +33,15 @@ export type AssistantHistoryMessage = {
 export type AssistantAgentEvent =
   | { type: "delta"; delta: string }
   | { type: "action"; actionId: string }
-  | { type: "provider"; provider: LlmProvider; model: string };
+  | { type: "provider"; provider: LlmProvider; model: string }
+  | {
+      type: "tool";
+      toolCallId: string;
+      name: string;
+      phase: "running" | "complete" | "error";
+      label: string;
+      detail?: string;
+    };
 
 export type RunAssistantTurnInput = {
   userId: string;
@@ -53,7 +65,14 @@ export type AssistantAgentResult = {
 function systemPrompt(isAdmin: boolean) {
   return `You are the private DevHub task copilot for MYSverse developers.
 
-Help the user turn vague ideas into clear, scoped tasks; find and understand their work; prepare ordinary Linear issues; prepare reviewed PPT requests; and guide DevHub workflows. Be concise, warm, concrete, and honest about uncertainty.
+Help the user turn vague ideas into clear, scoped tasks; find and understand their work; prepare ordinary Linear issues; prepare reviewed PPT requests; and guide DevHub workflows. Be warm, concrete, and honest about uncertainty.
+
+Writing style:
+- Write for a busy reader with a short attention span. Lead with the answer, keep paragraphs to 1-2 sentences, and prefer short bullets when there are several points.
+- Give one clear next step. Ask one focused question at a time unless a compact checklist is genuinely faster.
+- Keep routine replies under 120 words. Expand only when the user asks or the task needs important detail.
+- Use descriptive headings only when they make a longer answer easier to scan. Avoid filler, repeated caveats, and walls of text.
+- When a process has at least three meaningful steps or branches, you may include one small Mermaid diagram in a fenced \`\`\`mermaid block. Keep node labels short, explain the takeaway in one sentence, and never use a diagram when bullets are clearer.
 
 Rules:
 - Read current DevHub or Linear state with tools instead of guessing. Never invent issue IDs, team IDs, project IDs, statuses, payment eligibility, or links.
@@ -82,6 +101,69 @@ function json(value: unknown) {
   return JSON.stringify(value, (_key, item) =>
     item instanceof Date ? item.toISOString() : item,
   );
+}
+
+function toolResultDetail(result: unknown) {
+  if (Array.isArray(result)) {
+    return `${result.length} ${result.length === 1 ? "result" : "results"}`;
+  }
+  if (!result || typeof result !== "object") return undefined;
+  const row = result as Record<string, unknown>;
+  if (typeof row.error === "string") return "Couldn’t finish this check";
+  if (row.confirmationRequired === true) return "Waiting for your confirmation";
+  if (row.success === true) return "Done";
+  return undefined;
+}
+
+async function executeAgentTool(
+  name: string,
+  toolInput: unknown,
+  toolCallId: string,
+  input: RunAssistantTurnInput,
+) {
+  const copy = assistantToolByName(name)?.activity ?? {
+    running: "Checking DevHub",
+    complete: "Check complete",
+  };
+  await input.onEvent({
+    type: "tool",
+    toolCallId,
+    name,
+    phase: "running",
+    label: copy.running,
+  });
+  try {
+    const result = await executeAssistantTool(name, toolInput, {
+      userId: input.userId,
+      conversationId: input.conversationId,
+      messageId: input.messageId,
+      toolCallId,
+    });
+    const failed =
+      result !== null &&
+      typeof result === "object" &&
+      "error" in result &&
+      typeof result.error === "string";
+    await input.onEvent({
+      type: "tool",
+      toolCallId,
+      name,
+      phase: failed ? "error" : "complete",
+      label: failed ? "That check didn’t work" : copy.complete,
+      detail: toolResultDetail(result),
+    });
+    return result;
+  } catch (error) {
+    await input.onEvent({
+      type: "tool",
+      toolCallId,
+      name,
+      phase: "error",
+      label: "That check didn’t work",
+      detail: "Trying another route",
+    });
+    throw error;
+  }
 }
 
 function anthropicTools(): Anthropic.Messages.Tool[] {
@@ -203,12 +285,12 @@ async function runOpenAi(
         } catch {
           toolInput = {};
         }
-        const result = await executeAssistantTool(call.name, toolInput, {
-          userId: input.userId,
-          conversationId: input.conversationId,
-          messageId: input.messageId,
-          toolCallId: call.call_id,
-        });
+        const result = await executeAgentTool(
+          call.name,
+          toolInput,
+          call.call_id,
+          input,
+        );
         const actionId = actionIdFrom(result);
         if (actionId && !actionIds.includes(actionId)) {
           actionIds.push(actionId);
@@ -337,12 +419,12 @@ async function runAnthropic(
       }
       const results: Anthropic.Messages.ToolResultBlockParam[] = [];
       for (const call of calls) {
-        const result = await executeAssistantTool(call.name, call.input, {
-          userId: input.userId,
-          conversationId: input.conversationId,
-          messageId: input.messageId,
-          toolCallId: call.id,
-        });
+        const result = await executeAgentTool(
+          call.name,
+          call.input,
+          call.id,
+          input,
+        );
         const actionId = actionIdFrom(result);
         if (actionId && !actionIds.includes(actionId)) {
           actionIds.push(actionId);

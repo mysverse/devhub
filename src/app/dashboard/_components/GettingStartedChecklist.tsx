@@ -10,7 +10,7 @@ import {
   ThemeIcon,
 } from "@mantine/core";
 import { Check, Circle, X } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { dismissGettingStarted } from "@/app/dashboard/actions";
 import { FadeIn } from "@/components/animations";
 import LinkButton from "@/components/LinkButton";
@@ -38,6 +38,18 @@ export default function GettingStartedChecklist({
   const [, startTransition] = useTransition();
   const doneCount = steps.filter((step) => step.done).length;
   const nextStep = steps.find((step) => !step.done);
+  const allDone = doneCount === steps.length;
+
+  // A finished checklist retires itself: the card is shown once so the last
+  // step visibly checks off, and the dismissal is persisted so it never comes
+  // back. Previously the whole card just disappeared the moment the first
+  // payout landed, so the finish line was never actually rendered.
+  useEffect(() => {
+    if (!allDone || dismissed) return;
+    startTransition(async () => {
+      await dismissGettingStarted();
+    });
+  }, [allDone, dismissed]);
 
   if (dismissed) return null;
 
@@ -46,6 +58,32 @@ export default function GettingStartedChecklist({
     startTransition(async () => {
       await dismissGettingStarted();
     });
+  }
+
+  if (allDone) {
+    return (
+      <FadeIn>
+        <Card withBorder radius="lg" padding="lg">
+          <Group gap="sm" wrap="nowrap" align="flex-start">
+            <ThemeIcon variant="light" color="green" size={28} radius="xl">
+              <Check size={16} />
+            </ThemeIcon>
+            <Stack gap={2} style={{ flex: 1, minWidth: 0 }}>
+              <Text fw={700} fz="lg">
+                You&rsquo;re all set up
+              </Text>
+              <Text fz="sm" c="dimmed">
+                Claimed, proven, and paid — that&rsquo;s the whole loop. Every
+                task from here works the same way.
+              </Text>
+            </Stack>
+            <LinkButton href="/dashboard/ppts" size="xs" variant="light">
+              Find your next task
+            </LinkButton>
+          </Group>
+        </Card>
+      </FadeIn>
+    );
   }
 
   return (

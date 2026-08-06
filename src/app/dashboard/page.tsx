@@ -65,6 +65,13 @@ async function HeroSection() {
   );
 }
 
+/**
+ * How long after the first PPT payout the getting-started card sticks around
+ * to show itself finished. Long enough that a developer who was away when the
+ * payout landed still sees it; short enough that it never reads as clutter.
+ */
+const FIRST_PAYOUT_CELEBRATION_MS = 14 * 24 * 60 * 60 * 1000;
+
 async function GettingStartedSection() {
   const { userId, userProfile } = await getDashboardContext();
 
@@ -89,7 +96,8 @@ async function GettingStartedSection() {
     }),
     prisma.transaction.findFirst({
       where: { userId, source: "PPT", status: "PAID" },
-      select: { id: true },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, createdAt: true },
     }),
     prisma.notificationPreference.findFirst({
       where: { userId },
@@ -97,8 +105,16 @@ async function GettingStartedSection() {
     }),
   ]);
 
-  // Veterans don't need the tour: any paid PPT hides it for good.
-  if (paidPpt) return null;
+  // Veterans don't need the tour. But hiding it the instant the first payout
+  // lands also threw away the only completion moment the funnel has — the
+  // checklist used to vanish mid-progress rather than ever showing itself
+  // finished. Keep it around briefly so the last step visibly checks off,
+  // then it's gone for good (the completed card dismisses itself).
+  const firstPayoutAt = paidPpt?.createdAt ?? null;
+  const payoutIsRecent =
+    firstPayoutAt !== null &&
+    Date.now() - firstPayoutAt.getTime() < FIRST_PAYOUT_CELEBRATION_MS;
+  if (paidPpt && !payoutIsRecent) return null;
 
   const steps: GettingStartedStep[] = [
     {
@@ -133,7 +149,7 @@ async function GettingStartedSection() {
       title: "Get your first payout",
       description:
         "After a short stability window your payment is created automatically.",
-      done: false,
+      done: Boolean(paidPpt),
       href: "/dashboard/transactions",
       cta: "View transactions",
     },
@@ -147,8 +163,6 @@ async function GettingStartedSection() {
       cta: "Set preferences",
     },
   ];
-
-  if (steps.every((step) => step.done)) return null;
 
   return <GettingStartedChecklist steps={steps} />;
 }

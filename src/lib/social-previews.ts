@@ -80,6 +80,13 @@ export const socialPreviews: readonly SocialPreview[] = [
     matchSubpaths: true,
   },
   {
+    path: "/dashboard/ppts/ideas",
+    title: "Task Ideas",
+    description:
+      "Work worth doing, picked out from the board, the backlog, and what you tend to build.",
+    label: "Ideas",
+  },
+  {
     path: "/dashboard/bonuses",
     title: "Bonuses",
     description: "Track eligible bonus work and monthly bonus review status.",

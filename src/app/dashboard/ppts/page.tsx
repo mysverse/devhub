@@ -19,6 +19,7 @@ import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import type { ClaimButtonContext } from "@/components/ClaimButton";
 import EmptyState from "@/components/EmptyState";
 import InfoTip from "@/components/InfoTip";
+import LinkButton from "@/components/LinkButton";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import StatCard from "@/components/StatCard";
@@ -709,9 +710,14 @@ export default function PPTsPage({
           </Stack>
         }
         action={
-          <Suspense fallback={<PptRequestButton />}>
-            <PptRequestButtonWithCampaign />
-          </Suspense>
+          <Group gap="xs" wrap="nowrap">
+            <LinkButton href="/dashboard/ppts/ideas" variant="subtle">
+              Get ideas
+            </LinkButton>
+            <Suspense fallback={<PptRequestButton />}>
+              <PptRequestButtonWithCampaign />
+            </Suspense>
+          </Group>
         }
       />
       <Suspense fallback={<PPTSkeleton />}>

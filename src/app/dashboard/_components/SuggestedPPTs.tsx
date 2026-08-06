@@ -1,6 +1,9 @@
-import { Sparkles } from "lucide-react";
+import { Group } from "@mantine/core";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { Carousel } from "motion-plus/react";
+import EmptyState from "@/components/EmptyState";
 import LinkAnchor from "@/components/LinkAnchor";
+import LinkButton from "@/components/LinkButton";
 import TaskCard from "@/components/TaskCard";
 import { getClaimContext } from "@/lib/claim-context";
 import type { CurrencyCode } from "@/lib/currency";
@@ -25,7 +28,32 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
     return null;
   }
 
-  if (issues.length === 0) return null;
+  // An empty board used to render nothing at all — the exact moment a
+  // developer most needs somewhere to go.
+  if (issues.length === 0) {
+    return (
+      <>
+        <DashboardSectionHeader
+          title="Suggested for You"
+          subtitle="Nothing unclaimed on the board right now"
+          icon={<Sparkles size={16} />}
+        />
+        <EmptyState
+          title="The board is clear"
+          description="Nothing is waiting to be claimed. Ideas can pull work out of the backlog, or suggest something that should exist."
+          action={
+            <LinkButton
+              href="/dashboard/ppts/ideas"
+              variant="light"
+              rightSection={<ArrowRight size={14} />}
+            >
+              Get ideas
+            </LinkButton>
+          }
+        />
+      </>
+    );
+  }
 
   // Previously this was the whole board sorted by payout — the same list for
   // everyone, labelled "Suggested for You". Rank it against what this
@@ -42,9 +70,14 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
         subtitle="Open tasks matched to your specialties and the size of work you take on"
         icon={<Sparkles size={16} />}
         action={
-          <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
-            View all PPTs &rarr;
-          </LinkAnchor>
+          <Group gap="md">
+            <LinkAnchor href="/dashboard/ppts/ideas" fz="sm" fw={500}>
+              Get ideas
+            </LinkAnchor>
+            <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
+              View all PPTs &rarr;
+            </LinkAnchor>
+          </Group>
         }
       />
       <Carousel

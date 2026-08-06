@@ -58,6 +58,7 @@ import {
   type CampaignBadgeInfo,
   formatMultiplier,
 } from "@/lib/payout-campaign";
+import type { PptRequestPrefill } from "@/lib/task-idea";
 import {
   draftPptFromLinearIssue,
   getLinearProjects,
@@ -146,17 +147,43 @@ function FileList({ files }: { files: File[] }) {
   );
 }
 
+/**
+ * The form's starting values, with an optional idea folded in. Used by BOTH
+ * the useState initializers and resetForm(), which is the only way those two
+ * can be guaranteed to agree.
+ */
+function initialState(prefill?: PptRequestPrefill | null) {
+  return {
+    mode: prefill?.mode ?? ("existing" as "new" | "existing"),
+    newTitle: prefill?.mode === "new" ? prefill.newTitle : "",
+    description: prefill?.description ?? "",
+    estimate: prefill?.estimate ?? "1",
+  };
+}
+
 export default function PptRequestModal({
   opened,
   onClose,
   campaign = null,
+  prefill = null,
 }: {
   opened: boolean;
   onClose: () => void;
   /** Live PPT campaign with no label restriction; null otherwise. */
   campaign?: CampaignBadgeInfo | null;
+  /**
+   * A generated idea to start from. Fills the description, title and estimate;
+   * the developer edits and submits as normal. Never the due date.
+   */
+  prefill?: PptRequestPrefill | null;
 }) {
-  const [mode, setMode] = useState<"new" | "existing">("existing");
+  // resetForm() and the useState initializers MUST agree. They used to be two
+  // copies of the same literals, which was survivable while the form always
+  // started empty — but with a prefill, drifting apart means closing the modal
+  // silently discards the idea the developer chose.
+  const initial = initialState(prefill);
+
+  const [mode, setMode] = useState<"new" | "existing">(initial.mode);
   const [step, setStep] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
 
@@ -169,14 +196,14 @@ export default function PptRequestModal({
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(
     null,
   );
-  const [newTitle, setNewTitle] = useState("");
+  const [newTitle, setNewTitle] = useState(initial.newTitle);
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<LinearIssue[]>([]);
   const [searchLoading, setSearchLoading] = useState(false);
   const [selectedIssue, setSelectedIssue] = useState<LinearIssue | null>(null);
 
-  const [description, setDescription] = useState("");
+  const [description, setDescription] = useState(initial.description);
   const [drafting, setDrafting] = useState(false);
   const [note, setNote] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -221,7 +248,7 @@ export default function PptRequestModal({
   const [usersLoading, setUsersLoading] = useState(false);
   const [selectedUser, setSelectedUser] = useState<LinearUser | null>(null);
 
-  const [estimate, setEstimate] = useState("1");
+  const [estimate, setEstimate] = useState(initial.estimate);
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -326,23 +353,27 @@ export default function PptRequestModal({
   }
 
   function resetForm() {
+    const next = initialState(prefill);
     setStep(0);
     setDirection(1);
-    setMode("existing");
+    setMode(next.mode);
     setSelectedTeamId(null);
     setSelectedProjectId(null);
-    setNewTitle("");
+    setNewTitle(next.newTitle);
     setSearchQuery("");
     setSearchResults([]);
     setSelectedIssue(null);
-    setDescription("");
+    setDescription(next.description);
     setNote("");
     setFiles([]);
     setAssigneeIntent("SELF");
     setUserQuery("");
     setUserResults([]);
     setSelectedUser(null);
-    setEstimate("1");
+    setEstimate(next.estimate);
+    // Never prefilled: the server checks only that a due date parses, not that
+    // it is in the future, so a human picking it is the last guard against a
+    // past-dated request.
     setDueDate(null);
   }
 

@@ -1,34 +1,16 @@
+import { createHash, createHmac } from "node:crypto";
 import Anthropic from "@anthropic-ai/sdk";
 import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
+import OpenAI from "openai";
+import { zodTextFormat } from "openai/helpers/zod";
 import type * as z from "zod/v4";
 import prisma from "@/lib/prisma";
 
-// DevHub's only LLM surface. Everything that reaches Claude goes through here
-// so there is exactly one place that knows the model, the request shape, and
-// the rules.
-//
-// Two invariants, both load-bearing:
-//
-//  1. The adapter is ALWAYS optional. getLlmClient() returns null when no API
-//     key is configured — mirroring getLinearServiceClient() — and every
-//     caller must have a working manual path for that case. Nothing in the
-//     payout chain, and nothing a developer needs to get paid, may depend on
-//     a model being reachable.
-//
-//  2. No PII leaves this process. Prompts are built from Linear issue text
-//     and specialty enums only: never legalName, email, address, bank
-//     details, or KYC data. Prompt builders take explicitly narrowed inputs
-//     (see llm-prompts.ts) so this is enforced by shape, not by care.
+// Every external model call crosses this boundary. Providers may differ in
+// request shape, but callers retain one optional contract: a typed answer or
+// null, with usage recorded for every billed attempt.
 
-/**
- * Models DevHub is allowed to call, and how each one must be asked.
- *
- * The request shape is NOT uniform across tiers, so this can't just be a
- * string. Sonnet 5 takes adaptive thinking and an effort level; Haiku 4.5
- * predates both and takes a fixed thinking budget instead, rejecting `effort`
- * outright. Getting this wrong is a 400, not a degraded answer.
- */
-const MODELS = {
+const ANTHROPIC_MODELS = {
   "claude-sonnet-5": { thinking: "adaptive", effort: true },
   "claude-haiku-4-5": { thinking: "budget", effort: false },
   "claude-opus-5": { thinking: "adaptive", effort: true },
@@ -37,47 +19,102 @@ const MODELS = {
   { thinking: "adaptive" | "budget"; effort: boolean }
 >;
 
-export type LlmModel = keyof typeof MODELS;
+export type LlmProvider = "openai" | "anthropic";
+export type LlmModel = keyof typeof ANTHROPIC_MODELS;
 
-/**
- * Sonnet by default: near-Opus quality on this kind of scoping work at a
- * fraction of the cost, and everything here is advisory anyway. Override with
- * ANTHROPIC_MODEL — `claude-haiku-4-5` is cheaper again if drafts are good
- * enough at that tier.
- */
-const DEFAULT_MODEL: LlmModel = "claude-sonnet-5";
+type ProviderResult<Value> =
+  | { kind: "success"; value: Value }
+  | { kind: "stop" }
+  | { kind: "retry"; callId: string | null };
+
+const DEFAULT_ANTHROPIC_MODEL: LlmModel = "claude-sonnet-5";
+const DEFAULT_OPENAI_MODEL = "gpt-5.6-luna";
+const DEFAULT_MAX_TOKENS = 2_000;
+const MAX_TOKENS_CEILING = 16_000;
+const THINKING_BUDGET_TOKENS = 1_024;
+const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
+const DEFAULT_MAX_CALLS_PER_HOUR = 200;
+const DEFAULT_MAX_CALLS_PER_USER_PER_HOUR = 12;
 
 export function resolveLlmModel(): LlmModel {
   const configured = process.env.ANTHROPIC_MODEL;
-  if (!configured) return DEFAULT_MODEL;
-  if (configured in MODELS) return configured as LlmModel;
+  if (!configured) return DEFAULT_ANTHROPIC_MODEL;
+  if (configured in ANTHROPIC_MODELS) return configured as LlmModel;
   console.warn(
-    `[llm] ANTHROPIC_MODEL="${configured}" is not one of ${Object.keys(MODELS).join(", ")} — using ${DEFAULT_MODEL}.`,
+    `[llm] ANTHROPIC_MODEL="${configured}" is not one of ${Object.keys(ANTHROPIC_MODELS).join(", ")} — using ${DEFAULT_ANTHROPIC_MODEL}.`,
   );
-  return DEFAULT_MODEL;
+  return DEFAULT_ANTHROPIC_MODEL;
 }
 
-/**
- * Non-streaming ceiling, and the value every caller is charged up to when a
- * response is truncated. Callers pass what they actually need — a one-sentence
- * reason has no business reserving a draft's worth of output.
- */
-const DEFAULT_MAX_TOKENS = 2_000;
+export function resolveOpenAiModel() {
+  return process.env.OPENAI_MODEL?.trim() || DEFAULT_OPENAI_MODEL;
+}
 
-/**
- * Hard cap. Above roughly this, non-streaming requests risk SDK HTTP timeouts
- * and should stream instead.
- */
-const MAX_TOKENS_CEILING = 16_000;
+function configuredProvider(value: string | undefined): LlmProvider | null {
+  return value === "openai" || value === "anthropic" ? value : null;
+}
 
-/** Thinking budget for models without adaptive thinking. Must be < max_tokens. */
-const THINKING_BUDGET_TOKENS = 1_024;
+function hasProviderKey(provider: LlmProvider) {
+  return provider === "openai"
+    ? Boolean(process.env.OPENAI_API_KEY)
+    : Boolean(process.env.ANTHROPIC_API_KEY);
+}
 
-const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const DEFAULT_MAX_CALLS_PER_HOUR = 60;
-const DEFAULT_MAX_CALLS_PER_USER_PER_HOUR = 12;
+/** Primary first, followed by at most one explicitly or automatically chosen fallback. */
+export function getLlmProviderOrder(): LlmProvider[] {
+  const requested = configuredProvider(process.env.LLM_PROVIDER);
+  const primary =
+    requested ?? (process.env.OPENAI_API_KEY ? "openai" : "anthropic");
+  const providers: LlmProvider[] = [];
+  if (hasProviderKey(primary)) providers.push(primary);
 
-/** Mirrors getHourlyLimit in email.ts: 0 or invalid disables that scope. */
+  const fallbackSetting = process.env.LLM_FALLBACK_PROVIDER?.trim();
+  if (fallbackSetting !== "none") {
+    const fallback =
+      configuredProvider(fallbackSetting) ??
+      (primary === "openai" ? "anthropic" : "openai");
+    if (fallback !== primary && hasProviderKey(fallback)) {
+      providers.push(fallback);
+    }
+  }
+  return providers.slice(0, 2);
+}
+
+export function isLlmConfigured() {
+  return getLlmProviderOrder().length > 0;
+}
+
+export function isAssistantConfigured() {
+  const enabled = process.env.LLM_ASSISTANT_ENABLED;
+  return enabled !== "false" && isLlmConfigured();
+}
+
+let cachedAnthropicClient: Anthropic | null | undefined;
+let cachedOpenAiClient: OpenAI | null | undefined;
+
+export function getAnthropicClient(): Anthropic | null {
+  if (cachedAnthropicClient !== undefined) return cachedAnthropicClient;
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  cachedAnthropicClient = apiKey
+    ? new Anthropic({ apiKey, maxRetries: 0, timeout: 60_000 })
+    : null;
+  return cachedAnthropicClient;
+}
+
+export function getOpenAiClient(): OpenAI | null {
+  if (cachedOpenAiClient !== undefined) return cachedOpenAiClient;
+  const apiKey = process.env.OPENAI_API_KEY;
+  cachedOpenAiClient = apiKey
+    ? new OpenAI({ apiKey, maxRetries: 0, timeout: 60_000 })
+    : null;
+  return cachedOpenAiClient;
+}
+
+/** Backward-compatible name used by older tests and call sites. */
+export function getLlmClient(): Anthropic | null {
+  return getAnthropicClient();
+}
+
 function getHourlyLimit(name: string, fallback: number) {
   const configured = Number(process.env[name] ?? String(fallback));
   if (!Number.isFinite(configured) || configured <= 0) return 0;
@@ -86,23 +123,24 @@ function getHourlyLimit(name: string, fallback: number) {
 
 export type LlmRateLimitScope = "global" | "user";
 
-/**
- * Rolling-window cap over the LlmCall ledger — the same shape email throttling
- * already uses (`checkEmailRateLimits`), so there is no new infrastructure and
- * no dependency on a KV store the repo doesn't have.
- */
-async function checkLlmRateLimits(
+export async function checkLlmRateLimits(
   userId: string | null,
+  options: { chat?: boolean } = {},
 ): Promise<{ limited: false } | { limited: true; scope: LlmRateLimitScope }> {
   const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
   const globalLimit = getHourlyLimit(
     "LLM_MAX_CALLS_PER_HOUR",
     DEFAULT_MAX_CALLS_PER_HOUR,
   );
-  const userLimit = getHourlyLimit(
-    "LLM_MAX_CALLS_PER_USER_PER_HOUR",
-    DEFAULT_MAX_CALLS_PER_USER_PER_HOUR,
-  );
+  // Chat has its own user-turn gate. The legacy per-user provider-call cap is
+  // retained for one-shot drafting surfaces so their established spend shape
+  // does not change when agent turns need multiple tool rounds.
+  const userLimit = options.chat
+    ? 0
+    : getHourlyLimit(
+        "LLM_MAX_CALLS_PER_USER_PER_HOUR",
+        DEFAULT_MAX_CALLS_PER_USER_PER_HOUR,
+      );
 
   const [globalCount, userCount] = await Promise.all([
     globalLimit > 0
@@ -122,134 +160,214 @@ async function checkLlmRateLimits(
   return { limited: false };
 }
 
-/** Never throws: metering must not be able to fail the thing it measures. */
-async function recordLlmCall(row: {
+export type LlmCallRecord = {
   surface: string;
   userId: string | null;
+  provider: LlmProvider;
   model: string;
   inputTokens?: number;
   outputTokens?: number;
+  cachedInputTokens?: number;
+  reasoningTokens?: number;
+  latencyMs?: number;
+  failureKind?: string | null;
+  conversationId?: string | null;
+  runId?: string | null;
+  fallbackFromId?: string | null;
   ok: boolean;
-}) {
+};
+
+/** Never throws: metering must not be able to fail the thing it measures. */
+export async function recordLlmCall(
+  row: LlmCallRecord,
+): Promise<string | null> {
   try {
-    await prisma.llmCall.create({
+    const call = await prisma.llmCall.create({
       data: {
         surface: row.surface,
         userId: row.userId,
+        provider: row.provider,
         model: row.model,
         inputTokens: row.inputTokens ?? 0,
         outputTokens: row.outputTokens ?? 0,
+        cachedInputTokens: row.cachedInputTokens ?? 0,
+        reasoningTokens: row.reasoningTokens ?? 0,
+        latencyMs: row.latencyMs,
+        failureKind: row.failureKind ?? null,
+        conversationId: row.conversationId ?? null,
+        runId: row.runId ?? null,
+        fallbackFromId: row.fallbackFromId ?? null,
         ok: row.ok,
       },
+      select: { id: true },
     });
+    return call.id;
   } catch (error) {
     console.warn(
       "[llm] could not record usage:",
       error instanceof Error ? error.message : error,
     );
+    return null;
   }
 }
 
-let cachedClient: Anthropic | null | undefined;
-
-/**
- * Returns null when ANTHROPIC_API_KEY is unset. Callers branch on null and
- * fall back to the manual path — the feature degrades, it never errors.
- */
-export function getLlmClient(): Anthropic | null {
-  if (cachedClient !== undefined) return cachedClient;
-
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  cachedClient = apiKey
-    ? new Anthropic({
-        apiKey,
-        // The SDK retries twice by default, so one failed call could be billed
-        // three times. Every surface here already has a working manual
-        // fallback, so a retry buys far less than it costs. The timeout keeps
-        // a wedged call from holding a server action open past any function
-        // limit — the SDK's default is minutes.
-        maxRetries: 1,
-        timeout: 60_000,
-      })
-    : null;
-  return cachedClient;
-}
-
-export function isLlmConfigured() {
-  return getLlmClient() !== null;
+export function safetyIdentifier(userId: string | null) {
+  if (!userId) return undefined;
+  const secret = process.env.BETTER_AUTH_SECRET;
+  return secret
+    ? createHmac("sha256", secret).update(`llm:${userId}`).digest("hex")
+    : createHash("sha256").update(`llm:${userId}`).digest("hex");
 }
 
 export type LlmRequest<Schema extends z.ZodType> = {
-  /**
-   * Which feature is asking. Recorded on every call and used to scope spend
-   * when reading the ledger back.
-   */
   surface: string;
-  /** Whose action triggered this, for the per-user cap. Null for admin-wide work. */
   userId?: string | null;
-  /** Operator instructions. Never contains user or issue content. */
   system: string;
-  /** The data being reasoned about, already narrowed and PII-free. */
   prompt: string;
-  /** Shape the reply must take. Validated before it reaches a caller. */
   schema: Schema;
-  /**
-   * How hard to think, on models that support it. Everything here is
-   * advisory output a human reviews, so the default is deliberately cheap —
-   * raise it per call for work where a bad draft wastes someone's time.
-   */
   effort?: "low" | "medium" | "high";
-  /**
-   * Output budget. Pass what the shape actually needs — this is what a
-   * truncated response bills up to, so a one-sentence reply asking for 16k is
-   * a real cost, not just wasted headroom.
-   */
   maxTokens?: number;
+  conversationId?: string | null;
+  runId?: string | null;
 };
 
-/**
- * Ask for one structured answer, or null.
- *
- * Null covers every failure — no key, rate limit, refusal, malformed output,
- * network. Callers can't tell them apart on purpose: there is one fallback
- * path (do it manually) and no partial-success state to reason about.
- */
-export async function generateStructured<Schema extends z.ZodType>(
-  request: LlmRequest<Schema>,
-): Promise<z.infer<Schema> | null> {
-  const client = getLlmClient();
-  if (!client) return null;
-
-  const userId = request.userId ?? null;
-  const limit = await checkLlmRateLimits(userId);
-  if (limit.limited) {
-    // Same contract as every other failure: null, and the caller's manual
-    // path takes over. A cap must never surface as a broken feature.
-    console.warn(
-      `[llm] ${request.surface} skipped — hourly ${limit.scope} cap reached`,
-    );
-    return null;
+export function llmFailureKind(error: unknown) {
+  const status =
+    error && typeof error === "object" && "status" in error
+      ? Number((error as { status?: unknown }).status)
+      : 0;
+  if (status === 429) return "rate_limit";
+  if (status >= 500) return "provider_unavailable";
+  if (status >= 400) return "invalid_request";
+  const code =
+    error && typeof error === "object" && "code" in error
+      ? String((error as { code?: unknown }).code)
+      : "";
+  if (
+    /abort/i.test(code) ||
+    (error instanceof Error && error.name === "AbortError")
+  ) {
+    return "aborted";
   }
+  if (/timeout|timedout|connection|network|econn/i.test(code)) {
+    return "transport";
+  }
+  return "transport";
+}
 
+export function isFallbackEligible(kind: string) {
+  return [
+    "rate_limit",
+    "provider_unavailable",
+    "transport",
+    "invalid_output",
+  ].includes(kind);
+}
+
+function schemaName(surface: string) {
+  const safe = surface.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 48);
+  return safe || "devhub_result";
+}
+
+async function generateWithOpenAi<Schema extends z.ZodType>(
+  request: LlmRequest<Schema>,
+  maxTokens: number,
+  fallbackFromId: string | null,
+): Promise<ProviderResult<z.infer<Schema>>> {
+  const client = getOpenAiClient();
+  if (!client) return { kind: "retry", callId: fallbackFromId };
+  const model = resolveOpenAiModel();
+  const startedAt = Date.now();
+  try {
+    const response = await client.responses.parse({
+      model,
+      instructions: request.system,
+      input: request.prompt,
+      max_output_tokens: maxTokens,
+      reasoning: {
+        effort: request.effort ?? "low",
+        context: "current_turn",
+      },
+      text: {
+        format: zodTextFormat(request.schema, schemaName(request.surface)),
+        verbosity: "medium",
+      },
+      safety_identifier: safetyIdentifier(request.userId ?? null),
+      store: false,
+    });
+    const refused = response.output.some(
+      (item) =>
+        item.type === "message" &&
+        item.content.some((content) => content.type === "refusal"),
+    );
+    const parsed = response.output_parsed;
+    const kind = refused
+      ? "refusal"
+      : parsed === null
+        ? "invalid_output"
+        : null;
+    const callId = await recordLlmCall({
+      surface: request.surface,
+      userId: request.userId ?? null,
+      provider: "openai",
+      model,
+      inputTokens: response.usage?.input_tokens,
+      outputTokens: response.usage?.output_tokens,
+      cachedInputTokens: response.usage?.input_tokens_details.cached_tokens,
+      reasoningTokens: response.usage?.output_tokens_details.reasoning_tokens,
+      latencyMs: Date.now() - startedAt,
+      failureKind: kind,
+      conversationId: request.conversationId,
+      runId: request.runId,
+      fallbackFromId,
+      ok: parsed !== null && !refused,
+    });
+    if (refused) return { kind: "stop" };
+    if (parsed === null) return { kind: "retry", callId };
+    return { kind: "success", value: parsed as z.infer<Schema> };
+  } catch (error) {
+    const kind = llmFailureKind(error);
+    const callId = await recordLlmCall({
+      surface: request.surface,
+      userId: request.userId ?? null,
+      provider: "openai",
+      model,
+      latencyMs: Date.now() - startedAt,
+      failureKind: kind,
+      conversationId: request.conversationId,
+      runId: request.runId,
+      fallbackFromId,
+      ok: false,
+    });
+    console.warn(
+      `[llm] OpenAI ${request.surface} failed:`,
+      error instanceof Error ? error.message : error,
+    );
+    return isFallbackEligible(kind)
+      ? { kind: "retry", callId }
+      : { kind: "stop" };
+  }
+}
+
+async function generateWithAnthropic<Schema extends z.ZodType>(
+  request: LlmRequest<Schema>,
+  maxTokens: number,
+  fallbackFromId: string | null,
+): Promise<ProviderResult<z.infer<Schema>>> {
+  const client = getAnthropicClient();
+  if (!client) return { kind: "retry", callId: fallbackFromId };
   const model = resolveLlmModel();
-  const capabilities = MODELS[model];
-  const maxTokens = Math.min(
-    request.maxTokens ?? DEFAULT_MAX_TOKENS,
-    MAX_TOKENS_CEILING,
-  );
-
+  const capabilities = ANTHROPIC_MODELS[model];
+  const startedAt = Date.now();
   try {
     const message = await client.messages.parse({
       model,
       max_tokens: maxTokens,
-      // Drafting a well-scoped task is a judgement call, not an extraction —
-      // so thinking stays on, but shaped to what the chosen model accepts.
       thinking:
         capabilities.thinking === "adaptive"
           ? { type: "adaptive" }
           : {
               type: "enabled",
-              // Must stay under max_tokens, which is now per-surface.
               budget_tokens: Math.min(
                 THINKING_BUDGET_TOKENS,
                 Math.floor(maxTokens / 2),
@@ -257,45 +375,93 @@ export async function generateStructured<Schema extends z.ZodType>(
             },
       system: request.system,
       messages: [{ role: "user", content: request.prompt }],
-      // effort and format share one object — keep them together, or the
-      // second output_config silently drops the first.
       output_config: {
         format: zodOutputFormat(request.schema),
         ...(capabilities.effort ? { effort: request.effort ?? "low" } : {}),
       },
     });
-
     const parsed = message.parsed_output ?? null;
-    await recordLlmCall({
+    const refused = message.stop_reason === "refusal";
+    const kind = refused
+      ? "refusal"
+      : parsed === null
+        ? "invalid_output"
+        : null;
+    const callId = await recordLlmCall({
       surface: request.surface,
-      userId,
+      userId: request.userId ?? null,
+      provider: "anthropic",
       model,
       inputTokens: message.usage?.input_tokens,
       outputTokens: message.usage?.output_tokens,
-      ok: parsed !== null,
+      latencyMs: Date.now() - startedAt,
+      failureKind: kind,
+      conversationId: request.conversationId,
+      runId: request.runId,
+      fallbackFromId,
+      ok: parsed !== null && !refused,
     });
-
-    // A refusal returns a normal 200 with no parsed output; treat it as
-    // "no suggestion available" like any other miss.
-    return parsed;
+    if (refused) return { kind: "stop" };
+    if (parsed === null) return { kind: "retry", callId };
+    return { kind: "success", value: parsed };
   } catch (error) {
-    // Failed calls are still billed, so they still belong in the ledger —
-    // otherwise the cap can be walked straight past by whatever is failing.
-    await recordLlmCall({
+    const kind = llmFailureKind(error);
+    const callId = await recordLlmCall({
       surface: request.surface,
-      userId,
+      userId: request.userId ?? null,
+      provider: "anthropic",
       model,
+      latencyMs: Date.now() - startedAt,
+      failureKind: kind,
+      conversationId: request.conversationId,
+      runId: request.runId,
+      fallbackFromId,
       ok: false,
     });
     console.warn(
-      "[llm] structured generation failed, falling back to manual path:",
+      `[llm] Anthropic ${request.surface} failed:`,
       error instanceof Error ? error.message : error,
     );
-    return null;
+    return isFallbackEligible(kind)
+      ? { kind: "retry", callId }
+      : { kind: "stop" };
   }
 }
 
-/** Test seam: forget the memoised client so env changes take effect. */
+export async function generateStructured<Schema extends z.ZodType>(
+  request: LlmRequest<Schema>,
+): Promise<z.infer<Schema> | null> {
+  const providers = getLlmProviderOrder();
+  if (providers.length === 0) return null;
+
+  const maxTokens = Math.min(
+    request.maxTokens ?? DEFAULT_MAX_TOKENS,
+    MAX_TOKENS_CEILING,
+  );
+  let fallbackFromId: string | null = null;
+
+  for (const provider of providers) {
+    const limit = await checkLlmRateLimits(request.userId ?? null);
+    if (limit.limited) {
+      console.warn(
+        `[llm] ${request.surface} skipped — hourly ${limit.scope} cap reached`,
+      );
+      return null;
+    }
+
+    const result: ProviderResult<z.infer<Schema>> =
+      provider === "openai"
+        ? await generateWithOpenAi(request, maxTokens, fallbackFromId)
+        : await generateWithAnthropic(request, maxTokens, fallbackFromId);
+    if (result.kind === "success") return result.value;
+    if (result.kind === "stop") return null;
+    fallbackFromId = result.callId;
+  }
+  return null;
+}
+
+/** Test seam: forget memoised clients so environment changes take effect. */
 export function resetLlmClientForTests() {
-  cachedClient = undefined;
+  cachedAnthropicClient = undefined;
+  cachedOpenAiClient = undefined;
 }

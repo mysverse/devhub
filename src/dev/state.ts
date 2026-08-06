@@ -74,6 +74,7 @@ export type DevState = {
     billplz: number;
     xendit: number;
     discordMessage: number;
+    llm: number;
   };
 };
 
@@ -143,7 +144,14 @@ function createDevState(): DevState {
     xendit: new Map(),
     discordRoles: new Map(),
     blobs: new Map(),
-    counters: { email: 0, finsys: 0, billplz: 0, xendit: 0, discordMessage: 0 },
+    counters: {
+      email: 0,
+      finsys: 0,
+      billplz: 0,
+      xendit: 0,
+      discordMessage: 0,
+      llm: 0,
+    },
   };
 }
 

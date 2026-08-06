@@ -27,6 +27,7 @@
     "scrub:legal-names": "tsx scripts/dev/scrub-legal-name-leaks.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@heroicons/react": "^2.2.0",
     "@linear/sdk": "^88.0.0",
     "@mantine/core": "^9.5.0",

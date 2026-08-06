@@ -58,6 +58,12 @@ const ROUTES: DevRoute[] = [
     load: () => import("@/dev/handlers/resend").then((m) => m.handleResend),
   },
   {
+    name: "anthropic",
+    match: (u) => u.hostname === "api.anthropic.com",
+    load: () =>
+      import("@/dev/handlers/anthropic").then((m) => m.handleAnthropic),
+  },
+  {
     name: "discord",
     match: (u) => u.hostname === "discord.com",
     load: () => import("@/dev/handlers/discord").then((m) => m.handleDiscord),

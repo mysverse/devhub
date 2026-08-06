@@ -119,6 +119,8 @@ runbook: `.claude/skills/dev-mode/SKILL.md`.
 | New raw Linear GraphQL query/mutation | `src/lib/linear-documents.ts`, `LINEAR_GRAPHQL_DOCUMENTS`, and `src/dev/handlers/linear.ts` if mock data changes; run `pnpm linear:validate`. Refresh `scripts/linear/linear.schema.graphql` with `pnpm linear:schema:update` when bumping Linear/API behavior. |
 | New environment variable | a fake value in `.env.mock` — it must enumerate every var so real values never leak into mock runs |
 | New DB rows derived from Linear issues | use ids from `src/dev/fixtures/linear.ts`, the single source of truth shared by the seed, the Linear mock, and the simulators |
+| New cron route | `vercel.json` crons array **and** `CRON_ROUTES` in `scripts/dev/simulate.ts` |
+| New notification type | an entry in `src/lib/notifications/catalog.ts` — `catalog.test.ts` fails without one |
 
 `DEV_MODE`/`NEXT_PUBLIC_DEV_MODE` live exclusively in `.env.mock` — never put
 them in `.env` or `.env.local`. Dev mode refuses to start against a non-local
@@ -163,6 +165,47 @@ DevHub is a developer payment and operations dashboard for MYSverse. It handles:
 - Admins review monthly bonus candidates in the Admin Bonuses tab, enter final per-task amounts up to each cap, and approve one grouped `BONUS` transaction per developer/month/currency.
 - Dashboard bonus notifications use `/api/bonuses/notifications` plus `src/components/BonusNotificationPoller.tsx`.
 
+## Payout Campaigns
+
+Limited-time multipliers ("3x PPT this sprint") spanning all three earning
+paths. Pure logic in `src/lib/payout-campaign.ts` (client-safe, unit-tested),
+IO in `payout-campaign-server.ts`, admin console at
+`/dashboard/admin/campaigns`. These invariants are load-bearing — breaking one
+misprices real payouts:
+
+- **Campaigns never stack.** `selectCampaign()` takes the highest multiplier,
+  ties broken by most recently created. Never sum or compose multipliers.
+- **The campaign is locked in at first payout eligibility**, onto
+  `PptPayoutState.campaignId`/`campaignMultiplier`. PPT amounts are rewritten
+  after creation (estimate change, ON_HOLD release, any later webhook);
+  those paths must call `applyLockedCampaign()` and never re-resolve against
+  the clock, or an expiring campaign silently reprices a live payout to 1x.
+- **The weekly credit limit is measured in base amounts.**
+  `isWithinCreditLimit()` takes the pre-multiplier amount and
+  `getUserWeeklyUsage()` aggregates `Transaction.baseAmount`. The limits are
+  one level-5 task per week, so counting multiplied amounts would drop every
+  promo payout out of auto-approval. The campaign uplift pool is what caps
+  promo spend.
+- **Every multiplied amount goes through `roundAmount()`**; a 1.5x campaign
+  would otherwise send fractional Robux to FinSys and sub-cent MYR to Billplz.
+- **`PayoutCampaignApplication` is both the uplift ledger and the idempotency
+  key** — unique on `(campaignId, scope, entityId)`. Rejections and
+  cancellations set `reverted`, they never delete.
+- **Guardrails fall back to 1x, they never block a payout.** An exhausted pool
+  or per-user cap logs and pays the normal rate.
+- **Cache only the campaign rows, never the resolved window.** `getCampaignRows`
+  is `"use cache"`; `getCampaignWindowState()` is evaluated by the caller
+  against live server time, or a campaign starts and ends late.
+- **Incentive awards resolve the campaign at the END of the award period**
+  (clamped to now), so an award belongs to its week rather than to whenever the
+  cron ran. Align incentive campaign windows to Monday 00:00 UTC; the admin
+  form warns when they are not.
+- `scripts/dev/repair-ppt-payouts.ts` is campaign-aware — comparing against the
+  bare 1x rate would flag every promo payout as wrong and, with `--apply`, claw
+  back the uplift.
+- The promo banner renders inside `AppShellMain`, never the header: `pnpm
+  visual` fails when anything wraps out of the fixed 60px bar.
+
 ## Route Structure
 
 ```text
@@ -175,7 +218,7 @@ src/app/
 ├── api/
 │   ├── auth/[...all]/route.ts       # better-auth Next handler
 │   ├── bonuses/notifications/       # bonus notification polling/read API
-│   ├── cron/                        # Billplz/Xendit/KYC cron endpoints
+│   ├── cron/                        # Billplz/Xendit/KYC/incentive/campaign crons
 │   ├── webhooks/                    # Linear, Billplz, Xendit webhooks
 │   ├── transactions/[id]/pdf/       # payment slip PDF
 │   └── kyc/, documents/, welcome-pack/
@@ -188,7 +231,7 @@ src/app/
     ├── settings/                    # profile, linked accounts, payment/KYC settings
     ├── documents/                   # document signing and COI entries
     ├── welcome-pack/                # developer welcome pack flow
-    └── admin/                       # payouts, bonuses, access, users, KYC, docs, welcome pack
+    └── admin/                       # payouts, bonuses, campaigns, access, users, KYC, docs, welcome pack
 ```
 
 ## Database Models

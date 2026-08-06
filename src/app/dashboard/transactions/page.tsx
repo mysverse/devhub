@@ -150,6 +150,11 @@ async function TransactionsContent({
             },
           },
         },
+        // Names the campaign in the "RM20 x 3x (Raya Sprint)" breakdown.
+        campaignApplications: {
+          select: { campaign: { select: { name: true } } },
+          take: 1,
+        },
       },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * PAGE_SIZE,
@@ -225,7 +230,11 @@ async function TransactionsContent({
             <StaggerContainer staggerChildren={0.03} delayChildren={0}>
               {rows.map((tx, i) => {
                 const copy = statusCopy(TRANSACTION_STATUS, tx.status);
-                const explanation = explainTransaction(tx);
+                const explanation = explainTransaction({
+                  ...tx,
+                  campaignName:
+                    tx.campaignApplications[0]?.campaign.name ?? null,
+                });
                 const ownerCopy = explanation.owner
                   ? PPT_OWNER_COPY[explanation.owner]
                   : null;
@@ -307,6 +316,11 @@ async function TransactionsContent({
                             {tx.status === "PAID" ? "+" : ""}
                             {formatAmount(tx.amount, rowCurrency)}
                           </Text>
+                          {explanation.campaignBreakdown && (
+                            <Text fz="xs" c="violet" ta="right">
+                              {explanation.campaignBreakdown}
+                            </Text>
+                          )}
                           <Anchor
                             href={`/api/transactions/${tx.id}/pdf`}
                             fz="xs"

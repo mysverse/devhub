@@ -4,6 +4,7 @@ import { formatBonusPeriod } from "@/lib/bonus";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import { formatAwardType } from "@/lib/incentives";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import { campaignAmountBreakdown } from "@/lib/payout-campaign";
 import prisma from "@/lib/prisma";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getUserEmailAndName } from "@/lib/user-contact";
@@ -47,7 +48,27 @@ export async function sendPaymentConfirmation(
         : transaction.linearIssueTitle ||
           transaction.linearIssueIdentifier ||
           "Manual Payout";
-  const lineItems =
+  // The confirmation email lands before anyone opens the slip, so the
+  // campaign arithmetic goes here too rather than only in the PDF.
+  const campaignLine =
+    transaction.campaignMultiplier && transaction.campaignMultiplier > 1
+      ? [
+          {
+            label: `${transaction.campaignApplications[0]?.campaign.name ?? "Campaign"} multiplier`,
+            amount: campaignAmountBreakdown({
+              baseAmount: transaction.baseAmount ?? transaction.amount,
+              multiplier: transaction.campaignMultiplier,
+              finalAmount: transaction.amount,
+              currency: transaction.currency as CurrencyCode,
+              campaignName:
+                transaction.campaignApplications[0]?.campaign.name ??
+                "Campaign",
+            }),
+          },
+        ]
+      : [];
+
+  const sourceLineItems =
     transaction.source === "INCENTIVE"
       ? transaction.incentiveAwards.map((award) => ({
           label: `${formatAwardType(award.type)} - ${award.period}`,
@@ -65,6 +86,11 @@ export async function sendPaymentConfirmation(
             ),
           }))
         : undefined;
+
+  const lineItems =
+    campaignLine.length > 0
+      ? [...(sourceLineItems ?? []), ...campaignLine]
+      : sourceLineItems;
 
   const amount = formatAmount(
     transaction.amount,

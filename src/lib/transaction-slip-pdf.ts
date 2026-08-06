@@ -16,6 +16,7 @@ import {
   getBankDisplayName,
   getPaymentMethodLabel,
 } from "@/lib/payment-validation";
+import { formatMultiplier } from "@/lib/payout-campaign";
 import prisma from "@/lib/prisma";
 
 const LOGO_PATHS = [
@@ -190,6 +191,12 @@ export type TransactionSlipData = {
     amount: number;
     netAmount: number | null;
   }[];
+  /** Present when a payout campaign multiplied this amount. */
+  campaign?: {
+    name: string;
+    multiplier: number;
+    baseAmount: number;
+  } | null;
 };
 
 function formatDate(date: Date): string {
@@ -294,6 +301,36 @@ export function createTransactionSlipPdf(data: TransactionSlipData) {
         { key: "paid", style: styles.row },
         createElement(Text, { style: styles.label }, "Paid"),
         createElement(Text, { style: styles.value }, formatDate(data.paidAt)),
+      ),
+    );
+  }
+
+  // The slip is the record a developer keeps. If a campaign inflated this
+  // payout, the slip has to show the arithmetic, or the amount looks
+  // unexplainable next to the documented per-point rate.
+  if (data.campaign && data.campaign.multiplier > 1) {
+    detailRows.push(
+      createElement(
+        View,
+        { key: "campaign", style: styles.row },
+        createElement(Text, { style: styles.label }, "Campaign"),
+        createElement(
+          Text,
+          { style: styles.value },
+          `${data.campaign.name} (${formatMultiplier(data.campaign.multiplier)})`,
+        ),
+      ),
+      createElement(
+        View,
+        { key: "campaign-base", style: styles.row },
+        createElement(Text, { style: styles.label }, "Breakdown"),
+        createElement(
+          Text,
+          { style: styles.value },
+          `${formatSlipAmount(data.campaign.baseAmount, data.currency)} x ${formatMultiplier(
+            data.campaign.multiplier,
+          )} = ${amountStr}`,
+        ),
       ),
     );
   }
@@ -490,6 +527,10 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
         },
         orderBy: { createdAt: "asc" },
       },
+      campaignApplications: {
+        select: { campaign: { select: { name: true } } },
+        take: 1,
+      },
     },
   });
 
@@ -527,6 +568,15 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
       amount: award.amount,
       netAmount: award.netAmount,
     })),
+    campaign:
+      transaction.campaignMultiplier && transaction.campaignMultiplier > 1
+        ? {
+            name:
+              transaction.campaignApplications[0]?.campaign.name ?? "Campaign",
+            multiplier: transaction.campaignMultiplier,
+            baseAmount: transaction.baseAmount ?? transaction.amount,
+          }
+        : null,
   };
 
   const pdfDoc = createTransactionSlipPdf(slipData);

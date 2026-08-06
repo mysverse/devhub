@@ -1,5 +1,6 @@
 import type { Payout, PptPayoutState, Transaction } from "@prisma/client";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
+import { campaignAmountBreakdown } from "@/lib/payout-campaign";
 import { WEEKLY_CREDIT_LIMITS } from "@/lib/payout-policy";
 import {
   describePptNextStep,
@@ -16,6 +17,8 @@ import {
 export type TransactionExplainInput = Transaction & {
   payout?: Payout | null;
   pptPayoutState?: Pick<PptPayoutState, "status" | "reason"> | null;
+  /** Joined in by callers that want the campaign named in the breakdown. */
+  campaignName?: string | null;
 };
 
 export type TransactionExplanation = {
@@ -26,7 +29,33 @@ export type TransactionExplanation = {
   tone: "positive" | "info" | "warning" | "critical";
   /** Who the current state is waiting on, when meaningful. */
   owner: PptNextStepOwner | null;
+  /**
+   * "RM20.00 x 3x (Raya Sprint) = RM60.00" when a campaign inflated this
+   * payout. Without it the amount is unexplainable next to the documented
+   * per-point rate, which is exactly the kind of gap that turns into a
+   * support message.
+   */
+  campaignBreakdown: string | null;
 };
+
+/**
+ * The campaign arithmetic for a transaction, or null when it paid the normal
+ * rate. Kept separate from the status explanation because the two answer
+ * different questions and every branch below would otherwise repeat it.
+ */
+export function explainTransactionCampaign(
+  tx: TransactionExplainInput,
+): string | null {
+  if (!tx.campaignMultiplier || tx.campaignMultiplier <= 1) return null;
+  const baseAmount = tx.baseAmount ?? tx.amount / tx.campaignMultiplier;
+  return campaignAmountBreakdown({
+    baseAmount,
+    multiplier: tx.campaignMultiplier,
+    finalAmount: tx.amount,
+    currency: toCurrencyCode(tx.currency),
+    campaignName: tx.campaignName ?? "Campaign",
+  });
+}
 
 const PROVIDER_LABELS: Record<string, string> = {
   BILLPLZ: "Billplz",
@@ -41,6 +70,15 @@ function toCurrencyCode(currency: string): CurrencyCode {
 export function explainTransaction(
   tx: TransactionExplainInput,
 ): TransactionExplanation {
+  return {
+    ...explainTransactionStatus(tx),
+    campaignBreakdown: explainTransactionCampaign(tx),
+  };
+}
+
+function explainTransactionStatus(
+  tx: TransactionExplainInput,
+): Omit<TransactionExplanation, "campaignBreakdown"> {
   const payout = tx.payout ?? null;
   const pptState = tx.pptPayoutState ?? null;
 

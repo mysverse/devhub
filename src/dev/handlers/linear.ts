@@ -9,8 +9,10 @@ import {
   getLinearUser,
   LINEAR_ORG_URL,
   LINEAR_PROJECT,
+  LINEAR_PROJECT_SECONDARY,
   LINEAR_STATES,
   LINEAR_TEAM,
+  LINEAR_TEAM_SECONDARY,
   LINEAR_USERS,
 } from "@/dev/fixtures/linear";
 import { PERSONAS } from "@/dev/fixtures/personas";
@@ -267,12 +269,22 @@ function workflowStateNode(stateId: string): Json {
   };
 }
 
-function teamNode(): Json {
+const ALL_TEAMS = [LINEAR_TEAM, LINEAR_TEAM_SECONDARY];
+const ALL_PROJECTS = [LINEAR_PROJECT, LINEAR_PROJECT_SECONDARY];
+
+/**
+ * Resolve by id. This used to ignore its argument and always return the
+ * primary team, which made every issue look like it belonged to one team —
+ * so any team-scoped filter silently matched nothing.
+ */
+function teamNode(id?: string): Json {
+  const team =
+    ALL_TEAMS.find((candidate) => candidate.id === id) ?? LINEAR_TEAM;
   return {
     __typename: "Team",
-    id: LINEAR_TEAM.id,
-    key: LINEAR_TEAM.key,
-    name: LINEAR_TEAM.name,
+    id: team.id,
+    key: team.key,
+    name: team.name,
     description: "Mock workspace team",
     private: false,
     color: "#5e6ad2",
@@ -290,11 +302,13 @@ function teamNode(): Json {
   };
 }
 
-function projectNode(): Json {
+function projectNode(id?: string): Json {
+  const project =
+    ALL_PROJECTS.find((candidate) => candidate.id === id) ?? LINEAR_PROJECT;
   return {
     __typename: "Project",
-    id: LINEAR_PROJECT.id,
-    name: LINEAR_PROJECT.name,
+    id: project.id,
+    name: project.name,
     slugId: "project-sentinel",
     description: "Mock project",
     content: null,
@@ -646,13 +660,19 @@ function executeOperation(
         },
       };
     case "teams":
-      return { teams: connection([teamNode()]) };
+      return { teams: connection(ALL_TEAMS.map((team) => teamNode(team.id))) };
     case "team":
-      return { team: teamNode() };
-    case "team_projects":
-      return { team: { projects: connection([projectNode()]) } };
+      return { team: teamNode(variables.id as string | undefined) };
+    case "team_projects": {
+      const teamId = variables.id as string | undefined;
+      const projects =
+        teamId === LINEAR_TEAM_SECONDARY.id
+          ? [projectNode(LINEAR_PROJECT_SECONDARY.id)]
+          : [projectNode(LINEAR_PROJECT.id)];
+      return { team: { projects: connection(projects) } };
+    }
     case "project":
-      return { project: projectNode() };
+      return { project: projectNode(variables.id as string | undefined) };
     case "project_members":
       return {
         project: {

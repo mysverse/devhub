@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants";
 
 const nextConfig: NextConfig = {
+  // `next build` and `next dev` share a build directory by default, so running
+  // a verification build while `pnpm dev:mock` is up overwrites the dev
+  // server's route manifest — routes that compile fine start returning 404
+  // until it is restarted. Local verification builds set NEXT_DIST_DIR to work
+  // somewhere else; production is unset and keeps .next.
+  distDir: process.env.NEXT_DIST_DIR ?? ".next",
   cacheComponents: true,
   // The EasyParcel export route reads the committed .xlsx template from disk at
   // runtime; trace it into that route's bundle so it survives deployment.

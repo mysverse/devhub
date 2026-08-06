@@ -9,7 +9,7 @@
     "dev:mock:seed": "tsx scripts/dev/dev-mock.ts --seed-only",
     "dev:mock:stop": "tsx scripts/dev/dev-mock.ts --stop",
     "build": "prisma generate && next build && pnpm check-traces",
-    "build:mock": "dotenv -e .env.mock -- pnpm build",
+    "build:mock": "NEXT_DIST_DIR=.next-verify dotenv -e .env.mock -- pnpm build",
     "start": "next start",
     "lint": "biome lint --write",
     "check": "biome check --write && tsx scripts/dev/check-migrations.ts && tsx scripts/dev/check-pii.ts",

@@ -21,7 +21,8 @@ import path from "node:path";
  */
 
 const ROOT = process.cwd();
-const SERVER_DIR = path.join(ROOT, ".next", "server");
+const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next";
+const SERVER_DIR = path.join(ROOT, DIST_DIR, "server");
 
 // `@img/sharp-linux-x64/lib/sharp-linux-x64-0.35.3.node` and friends — the
 // binding itself, never the libvips package that sits next to it.

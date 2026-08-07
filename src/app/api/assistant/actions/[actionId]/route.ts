@@ -3,6 +3,7 @@ import { getAssistantActionDto } from "@/lib/assistant";
 import {
   cancelAssistantAction,
   confirmAssistantAction,
+  updateAssistantAction,
 } from "@/lib/assistant-actions";
 import { getSession } from "@/lib/auth-utils";
 
@@ -34,4 +35,26 @@ export async function POST(request: Request, { params }: { params: Params }) {
     { ...result, action },
     { status: "error" in result && result.error ? 400 : 200 },
   );
+}
+
+export async function PATCH(request: Request, { params }: { params: Params }) {
+  const { userId } = await getSession();
+  if (!userId)
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+  let patchPayload: Record<string, unknown>;
+  try {
+    patchPayload = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON." }, { status: 400 });
+  }
+
+  const { actionId } = await params;
+  const result = await updateAssistantAction(actionId, userId, patchPayload);
+
+  if ("error" in result && result.error) {
+    return NextResponse.json({ error: result.error }, { status: 400 });
+  }
+
+  return NextResponse.json(result, { status: 200 });
 }

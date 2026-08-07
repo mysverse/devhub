@@ -49,13 +49,12 @@ describe("assistant Linear references", () => {
         endsAt: "2026-08-11T00:00:00.000Z",
       },
     };
-    assert.deepEqual(
-      assistantReferencesFromToolResult("list_open_ppts", {
-        ...issue,
-        payout,
-      })[0]?.payout,
+    const ref = assistantReferencesFromToolResult("list_open_ppts", {
+      ...issue,
       payout,
-    );
+    })[0];
+    assert.equal(ref?.kind, "linear_issue");
+    assert.deepEqual(ref?.kind === "linear_issue" ? ref.payout : null, payout);
   });
 
   it("ignores non-issue tools and untrusted image hosts", () => {
@@ -63,11 +62,12 @@ describe("assistant Linear references", () => {
       assistantReferencesFromToolResult("list_teams", issue),
       [],
     );
+    const ref2 = assistantReferencesFromToolResult("search_tasks", {
+      ...issue,
+      description: "![Nope](https://example.com/private.png)",
+    })[0];
     assert.equal(
-      assistantReferencesFromToolResult("search_tasks", {
-        ...issue,
-        description: "![Nope](https://example.com/private.png)",
-      })[0]?.imageUrl,
+      ref2?.kind === "linear_issue" ? ref2.imageUrl : undefined,
       null,
     );
   });

@@ -177,7 +177,7 @@ const HELP: Record<HelpTopic, unknown> = {
   },
 };
 
-function actionPreview(
+export function actionPreview(
   name: string,
   payload: Record<string, unknown>,
   payout?: AssistantPptPayoutPreview,
@@ -231,6 +231,13 @@ function actionPreview(
       title: `Change assignment for ${title}`,
       description:
         "Admins only: changes the assignee after current state is rechecked.",
+    },
+    propose_create_bonus_task: {
+      title: `Create bonus-path task: ${title}`,
+      description:
+        "Creates an unlabelled, candidate-ready issue assigned to you. Eligible for discretionary monthly bonus review.",
+      warning:
+        "Eventual monthly bonus payouts are discretionary and subject to admin review.",
     },
     propose_task_suggestion: {
       title: `Send task suggestion for ${title}`,
@@ -322,6 +329,9 @@ async function executeReadTool(
   payload: Record<string, unknown>,
   context: AssistantToolContext,
 ) {
+  if (name === "task_draft") {
+    return { draft: payload };
+  }
   if (name === "get_devhub_help") {
     return HELP[payload.topic as HelpTopic];
   }

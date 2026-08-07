@@ -20,6 +20,7 @@ type Issue {
   url: String!
   description: String
   estimate: Float
+  dueDate: String
   createdAt: DateTime
   updatedAt: DateTime
   state: WorkflowState

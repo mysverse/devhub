@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   const { userId } = await getSession();
   if (!userId)
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -28,6 +28,13 @@ export async function POST() {
       { status: 503 },
     );
   }
-  const conversation = await createAssistantConversation(userId);
+  let entryPoint: string | null = null;
+  try {
+    const body = (await request.json()) as { entryPoint?: string };
+    if (typeof body?.entryPoint === "string") entryPoint = body.entryPoint;
+  } catch {
+    // Empty POST body is allowed
+  }
+  const conversation = await createAssistantConversation(userId, entryPoint);
   return NextResponse.json({ conversation }, { status: 201 });
 }

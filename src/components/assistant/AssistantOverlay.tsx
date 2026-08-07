@@ -34,7 +34,13 @@ export default function AssistantOverlay({
   const [opened, setOpened] = useState(false);
   const [showNudge, setShowNudge] = useState(false);
   const [hydrated, setHydrated] = useState(false);
+  const [targetConversationId, setTargetConversationId] = useState<
+    string | null
+  >(null);
+  const [initialPrompt, setInitialPrompt] = useState<string | null>(null);
+
   const onAssistantPage = pathname.startsWith("/dashboard/assistant");
+  const isMainDashboard = pathname === "/dashboard";
 
   useEffect(() => setHydrated(true), []);
 
@@ -43,7 +49,7 @@ export default function AssistantOverlay({
     try {
       window.localStorage.setItem(NUDGE_KEY, "true");
     } catch {
-      // Private browsing can deny storage. The nudge still closes for the session.
+      // Private browsing can deny storage.
     }
   }, []);
 
@@ -54,7 +60,17 @@ export default function AssistantOverlay({
 
   useEffect(() => {
     if (!available || onAssistantPage) return;
-    function open() {
+    function open(event: Event) {
+      const customEvent = event as CustomEvent<{
+        conversationId?: string;
+        initialPrompt?: string;
+      }>;
+      if (customEvent.detail?.conversationId) {
+        setTargetConversationId(customEvent.detail.conversationId);
+      }
+      if (customEvent.detail?.initialPrompt) {
+        setInitialPrompt(customEvent.detail.initialPrompt);
+      }
       openAssistant();
     }
     function keyboardShortcut(event: KeyboardEvent) {
@@ -73,7 +89,8 @@ export default function AssistantOverlay({
   }, [available, onAssistantPage, openAssistant]);
 
   useEffect(() => {
-    if (!available || onAssistantPage || opened) return;
+    // Suppress timed nudge on main dashboard page to avoid duplicate prompts with the Command Bar
+    if (!available || onAssistantPage || opened || isMainDashboard) return;
     let seen = false;
     try {
       seen = window.localStorage.getItem(NUDGE_KEY) === "true";
@@ -83,7 +100,7 @@ export default function AssistantOverlay({
     if (seen) return;
     const timer = window.setTimeout(() => setShowNudge(true), 2_500);
     return () => window.clearTimeout(timer);
-  }, [available, onAssistantPage, opened]);
+  }, [available, onAssistantPage, opened, isMainDashboard]);
 
   if (!available || onAssistantPage) return null;
 
@@ -116,6 +133,8 @@ export default function AssistantOverlay({
           onClose={() => setOpened(false)}
           displayName={hydrated ? session?.user?.name : null}
           quickPrompts={assistantPromptsForPath(pathname)}
+          targetConversationId={targetConversationId}
+          initialPrompt={initialPrompt}
         />
       </motion.div>
 

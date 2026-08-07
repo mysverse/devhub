@@ -68,6 +68,8 @@ type AssistantExperienceProps = {
   onClose?: () => void;
   displayName?: string | null;
   quickPrompts?: string[];
+  targetConversationId?: string | null;
+  initialPrompt?: string | null;
 };
 
 async function responseJson<T>(response: Response): Promise<T> {
@@ -136,6 +138,8 @@ export default function AssistantExperience({
   onClose,
   displayName,
   quickPrompts = [],
+  targetConversationId = null,
+  initialPrompt = null,
 }: AssistantExperienceProps) {
   const [conversations, setConversations] = useState(initialConversations);
   const [active, setActive] = useState(initialConversation);
@@ -229,6 +233,37 @@ export default function AssistantExperience({
       )
       .finally(() => setLoading(false));
   }, [available, enabled, openConversation, refreshList]);
+
+  const lastTargetIdRef = useRef<string | null>(null);
+  const pendingPromptRef = useRef<string | null>(initialPrompt ?? null);
+
+  useEffect(() => {
+    if (initialPrompt) pendingPromptRef.current = initialPrompt;
+  }, [initialPrompt]);
+
+  const sendMessageRef = useRef<(value?: string) => Promise<void>>(
+    async () => {},
+  );
+  useEffect(() => {
+    sendMessageRef.current = sendMessage;
+  });
+
+  useEffect(() => {
+    if (
+      !targetConversationId ||
+      targetConversationId === lastTargetIdRef.current
+    )
+      return;
+    lastTargetIdRef.current = targetConversationId;
+    (async () => {
+      await openConversation(targetConversationId);
+      if (pendingPromptRef.current) {
+        const promptToSubmit = pendingPromptRef.current;
+        pendingPromptRef.current = null;
+        await sendMessageRef.current(promptToSubmit);
+      }
+    })();
+  }, [targetConversationId, openConversation]);
 
   async function createConversation() {
     const requestId = ++conversationRequestRef.current;

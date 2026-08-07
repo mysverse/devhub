@@ -8,6 +8,17 @@ export type AssistantToolDefinition = {
   activity: { running: string; complete: string };
 };
 
+import { TASK_DRAFT_SCHEMA } from "@/lib/assistant-draft";
+
+const CreateBonusTaskSchema = z.object({
+  title: z.string().trim().min(3).max(120),
+  description: z.string().trim().max(8_000).nullable(),
+  teamId: z.string().min(1),
+  projectId: z.string().min(1).nullable(),
+  dueDate: z.string().nullable(),
+  estimate: z.number().int().min(1).max(5),
+});
+
 const SearchTasksSchema = z.object({
   query: z.string().trim().min(1).max(160),
 });
@@ -281,6 +292,28 @@ export const ASSISTANT_TOOLS: AssistantToolDefinition[] = [
     activity: {
       running: "Preparing the task suggestion",
       complete: "Suggestion ready to review",
+    },
+  },
+  {
+    name: "propose_create_bonus_task",
+    description:
+      "Propose creating an unlabelled, candidate-ready bonus-path task assigned to the signed-in developer. Work is eligible for discretionary monthly bonus review.",
+    schema: CreateBonusTaskSchema,
+    mutation: true,
+    activity: {
+      running: "Preparing bonus-path task",
+      complete: "Bonus task ready to review",
+    },
+  },
+  {
+    name: "task_draft",
+    description:
+      "Present a validated structured task draft artifact to the user when the task route (PPT, Task, Bonus) is not explicitly requested.",
+    schema: TASK_DRAFT_SCHEMA,
+    mutation: false,
+    activity: {
+      running: "Preparing structured draft",
+      complete: "Structured draft ready",
     },
   },
 ];

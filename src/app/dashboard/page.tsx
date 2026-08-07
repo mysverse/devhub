@@ -4,11 +4,13 @@ import { redirect } from "next/navigation";
 import { cache, Suspense } from "react";
 import { getSession } from "@/lib/auth-utils";
 import { getCurrencyForPaymentMethod } from "@/lib/currency";
+import { isAssistantConfigured } from "@/lib/llm";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { ensureUserProfile } from "@/lib/user-profile";
 import AchievementsCard from "./_components/AchievementsCard";
 import ActiveTasks from "./_components/ActiveTasks";
+import AssistantCommandBar from "./_components/AssistantCommandBar";
 import GettingStartedChecklist, {
   type GettingStartedStep,
 } from "./_components/GettingStartedChecklist";
@@ -48,6 +50,7 @@ async function HeroSection() {
 
   return (
     <Stack gap="lg">
+      <AssistantCommandBar available={isAssistantConfigured()} />
       {!userProfile.linearId && (
         <Alert color="yellow" title="Linear Account Not Linked">
           We couldn&apos;t automatically link your Linear account. Please ensure

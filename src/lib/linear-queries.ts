@@ -23,6 +23,7 @@ export type IssueDTO = {
   url: string;
   description: string | null;
   estimate: number | null;
+  dueDate: string | null;
   stateType: string;
   stateName: string;
   assignee: LinearAssigneeDTO | null;
@@ -68,6 +69,7 @@ type RawIssueNode = {
   url: string;
   description?: string | null;
   estimate?: number | null;
+  dueDate?: string | null;
   state?: { type?: string | null; name?: string | null } | null;
   assignee?: {
     id: string;
@@ -130,6 +132,7 @@ function issueDto(issue: RawIssueNode): IssueDTO {
     url: issue.url,
     description: issue.description ?? null,
     estimate: linearEstimateToComplexityLevel(issue.estimate),
+    dueDate: issue.dueDate ?? null,
     stateType: issue.state?.type ?? "unknown",
     stateName: issue.state?.name ?? "Unknown",
     assignee: assignee(issue),

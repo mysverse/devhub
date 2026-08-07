@@ -1,0 +1,57 @@
+.commandBarPaper {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(116, 143, 252, 0.32);
+  background: linear-gradient(
+    145deg,
+    rgba(34, 139, 230, 0.12),
+    rgba(26, 27, 30, 0.95) 50%
+  );
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.22);
+}
+
+.gradientBg {
+  position: absolute;
+  top: -40%;
+  right: -10%;
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle,
+    rgba(132, 94, 247, 0.22) 0%,
+    rgba(34, 139, 230, 0.08) 50%,
+    transparent 80%
+  );
+  filter: blur(40px);
+  pointer-events: none;
+}
+
+.orbIcon {
+  background: linear-gradient(
+    135deg,
+    var(--mantine-color-blue-6),
+    var(--mantine-color-grape-6)
+  );
+  box-shadow: 0 0 16px rgba(76, 110, 245, 0.35);
+}
+
+.commandInput input {
+  border-color: rgba(116, 143, 252, 0.3);
+  background: rgba(20, 21, 23, 0.7);
+  backdrop-filter: blur(12px);
+  transition:
+    border-color var(--duration-fast) var(--ease-out),
+    box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.commandInput input:focus {
+  border-color: var(--mantine-color-blue-5);
+  box-shadow: 0 0 0 3px rgba(34, 139, 230, 0.15);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gradientBg {
+    filter: none;
+  }
+}

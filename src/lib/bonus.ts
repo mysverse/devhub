@@ -373,3 +373,16 @@ export async function syncBonusCandidateFromLinearSdkIssue(issue: Issue) {
     labels: labels.nodes.map((label) => ({ name: label.name })),
   });
 }
+
+export async function syncBonusCandidatesForUser(userId: string) {
+  const profile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { linearId: true },
+  });
+  if (!profile?.linearId) return [];
+
+  const candidates = await prisma.bonusCandidate.findMany({
+    where: { userId },
+  });
+  return candidates;
+}

@@ -10,8 +10,11 @@ import {
   Group,
   Image,
   Loader,
+  NumberInput,
   Stack,
   Text,
+  Textarea,
+  TextInput,
   ThemeIcon,
   Tooltip,
 } from "@mantine/core";
@@ -46,6 +49,7 @@ import type {
   AssistantActionDto,
   AssistantLinearIssueReference,
   AssistantMessageDto,
+  AssistantReferenceDto,
 } from "@/lib/assistant-types";
 import classes from "./AssistantExperience.module.css";
 import { assistantReplySuggestions } from "./assistant-suggestions";
@@ -144,6 +148,162 @@ function payloadFields(kind: string, payload: unknown) {
   return entries.slice(0, 6);
 }
 
+function actionCtaLabel(kind: string): string {
+  if (kind === "ppt_request") return "Submit PPT request";
+  if (kind === "create_bonus_task") return "Create bonus-path task";
+  if (kind === "create_task") return "Create Linear task";
+  return "Confirm";
+}
+
+function TaskDraftCard({
+  draft,
+  conversationId,
+  onActionCreated,
+}: {
+  draft: Extract<AssistantReferenceDto, { kind: "task_draft" }>;
+  conversationId: string;
+  onActionCreated: (action: AssistantActionDto) => void;
+}) {
+  const [busyRoute, setBusyRoute] = useState<string | null>(null);
+
+  async function convertRoute(route: "PPT" | "TASK" | "BONUS") {
+    setBusyRoute(route);
+    try {
+      const response = await fetch("/api/assistant/drafts/convert", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ conversationId, route, draft }),
+      });
+      const data = (await response.json()) as {
+        action?: AssistantActionDto;
+        error?: string;
+      };
+      if (!response.ok || !data.action || data.error) {
+        throw new Error(data.error ?? "Conversion failed.");
+      }
+      onActionCreated(data.action);
+      toast.success(
+        route === "PPT"
+          ? "Prepared PPT request card."
+          : route === "BONUS"
+            ? "Prepared bonus-path task card."
+            : "Prepared Linear task card.",
+      );
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Draft conversion failed.",
+      );
+    } finally {
+      setBusyRoute(null);
+    }
+  }
+
+  return (
+    <motion.div layout transition={SPRING.soft} className={classes.draftCard}>
+      <div className={classes.draftAccent} />
+      <Stack gap="xs" p="md">
+        <Group justify="space-between" align="center">
+          <Group gap="xs">
+            <Sparkles size={16} color="var(--mantine-color-grape-4)" />
+            <Text fw={750} size="sm">
+              Structured Task Draft
+            </Text>
+          </Group>
+          <Badge color="grape" variant="light" size="xs">
+            Draft
+          </Badge>
+        </Group>
+
+        <Text size="md" fw={700} c="white">
+          {draft.title}
+        </Text>
+
+        <Text size="sm" c="gray.3" lh={1.5}>
+          {draft.scope}
+        </Text>
+
+        {draft.acceptanceCriteria.length > 0 && (
+          <Stack gap={3}>
+            <Text size="xs" fw={700} c="dimmed" tt="uppercase">
+              Acceptance Criteria
+            </Text>
+            {draft.acceptanceCriteria.map((criterion) => (
+              <Group key={criterion} gap={6} align="flex-start" wrap="nowrap">
+                <Check
+                  size={13}
+                  color="var(--mantine-color-green-4)"
+                  style={{ marginTop: 3, flexShrink: 0 }}
+                />
+                <Text size="xs" c="gray.2">
+                  {criterion}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
+        )}
+
+        <Group gap="xs" mt={4} wrap="wrap">
+          <Badge size="xs" variant="outline" color="blue">
+            Level {draft.complexity}
+          </Badge>
+          <Badge size="xs" variant="outline" color="gray">
+            Target: {draft.targetDate}
+          </Badge>
+          {draft.provenance?.complexity === "INFERRED" && (
+            <Badge
+              size="xs"
+              variant="dot"
+              color="yellow"
+              className={classes.provenanceBadge}
+            >
+              Suggested Complexity
+            </Badge>
+          )}
+          {draft.provenance?.targetDate === "INFERRED" && (
+            <Badge
+              size="xs"
+              variant="dot"
+              color="yellow"
+              className={classes.provenanceBadge}
+            >
+              Suggested Date
+            </Badge>
+          )}
+        </Group>
+
+        <Group gap="xs" mt="sm">
+          <Button
+            size="xs"
+            color="blue"
+            loading={busyRoute === "PPT"}
+            onClick={() => convertRoute("PPT")}
+          >
+            Request PPT
+          </Button>
+          <Button
+            size="xs"
+            color="indigo"
+            variant="light"
+            loading={busyRoute === "TASK"}
+            onClick={() => convertRoute("TASK")}
+          >
+            Create Task
+          </Button>
+          <Button
+            size="xs"
+            color="grape"
+            variant="light"
+            loading={busyRoute === "BONUS"}
+            onClick={() => convertRoute("BONUS")}
+          >
+            Make Bonus-Eligible
+          </Button>
+        </Group>
+      </Stack>
+    </motion.div>
+  );
+}
+
 function ActionCard({
   action,
   onChange,
@@ -152,9 +312,54 @@ function ActionCard({
   onChange: (action: AssistantActionDto) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const pending = action.status === "PENDING";
+  const succeeded = action.status === "SUCCEEDED";
   const status = STATUS_COPY[action.status];
   const fields = payloadFields(action.kind, action.payload);
+
+  const payloadObj = (action.payload ?? {}) as Record<string, unknown>;
+  const [editTitle, setEditTitle] = useState(String(payloadObj.title ?? ""));
+  const [editDueDate, setEditDueDate] = useState(
+    String(payloadObj.dueDate ?? ""),
+  );
+  const [editEstimate, setEditEstimate] = useState<number>(
+    Number(payloadObj.estimate ?? 3),
+  );
+  const [editDescription, setEditDescription] = useState(
+    String(payloadObj.description ?? ""),
+  );
+
+  async function saveInlineEdit() {
+    setSavingEdit(true);
+    try {
+      const response = await fetch(`/api/assistant/actions/${action.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editTitle,
+          dueDate: editDueDate || null,
+          estimate: editEstimate,
+          description: editDescription || null,
+        }),
+      });
+      const data = (await response.json()) as {
+        action?: AssistantActionDto;
+        error?: string;
+      };
+      if (!response.ok || data.error || !data.action) {
+        throw new Error(data.error ?? "Could not save edits.");
+      }
+      onChange(data.action);
+      setEditing(false);
+      toast.success("Card updated.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function decide(decision: "confirm" | "cancel") {
     setBusy(true);
@@ -180,6 +385,11 @@ function ActionCard({
     }
   }
 
+  const resultObj = (action.result ?? {}) as Record<string, unknown>;
+  const createdIssue = resultObj.issue as
+    | { url?: string; identifier?: string }
+    | undefined;
+
   return (
     <motion.div layout transition={SPRING.soft} className={classes.actionCard}>
       <div className={classes.actionAccent} />
@@ -198,14 +408,22 @@ function ActionCard({
               </Text>
             </Stack>
           </Group>
-          <Badge
-            color={status.color}
-            variant="light"
-            radius="sm"
-            style={{ flexShrink: 0 }}
-          >
-            {status.label}
-          </Badge>
+          <Group gap={6} style={{ flexShrink: 0 }}>
+            {pending && !editing && (
+              <ActionIcon
+                size="sm"
+                variant="subtle"
+                color="blue"
+                aria-label="Edit card"
+                onClick={() => setEditing(true)}
+              >
+                <FilePenLine size={14} />
+              </ActionIcon>
+            )}
+            <Badge color={status.color} variant="light" radius="sm">
+              {status.label}
+            </Badge>
+          </Group>
         </Group>
 
         {action.kind === "ppt_request" && action.preview.payout && (
@@ -241,24 +459,83 @@ function ActionCard({
           </div>
         )}
 
-        {fields.length > 0 && (
-          <div className={classes.payloadGrid}>
-            {fields.map(([key, value]) => {
-              const wide = key === "description" || key === "body";
-              const fieldClass = [classes.payloadField];
-              if (wide) fieldClass.push(classes.payloadFieldWide);
-              return (
-                <div key={key} className={fieldClass.join(" ")}>
-                  <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
-                    {FIELD_LABELS[key] ?? key.replace(/([A-Z])/g, " $1")}
-                  </Text>
-                  <Text size="sm" mt={2} lineClamp={wide ? 4 : 2}>
-                    {displayValue(key, value)}
-                  </Text>
-                </div>
-              );
-            })}
+        {editing ? (
+          <div className={classes.inlineEditor}>
+            <Stack gap="xs">
+              <Text size="xs" fw={750} c="blue.3">
+                Edit Card Values
+              </Text>
+              <TextInput
+                size="xs"
+                label="Title"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.currentTarget.value)}
+              />
+              <Group grow gap="xs">
+                <TextInput
+                  size="xs"
+                  label="Due Date (YYYY-MM-DD)"
+                  value={editDueDate}
+                  onChange={(e) => setEditDueDate(e.currentTarget.value)}
+                />
+                <NumberInput
+                  size="xs"
+                  label="Complexity (1-5)"
+                  min={1}
+                  max={5}
+                  value={editEstimate}
+                  onChange={(val) => setEditEstimate(Number(val ?? 3))}
+                />
+              </Group>
+              <Textarea
+                size="xs"
+                label="Scope / Description"
+                rows={3}
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.currentTarget.value)}
+              />
+              <Group justify="flex-end" gap="xs" mt={4}>
+                <Button
+                  size="xs"
+                  variant="subtle"
+                  color="gray"
+                  onClick={() => setEditing(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="xs"
+                  color="blue"
+                  loading={savingEdit}
+                  onClick={saveInlineEdit}
+                >
+                  Save Changes
+                </Button>
+              </Group>
+            </Stack>
           </div>
+        ) : (
+          fields.length > 0 && (
+            <div className={classes.payloadGrid}>
+              {fields.map(([key, value]) => {
+                const wide = key === "description" || key === "body";
+                const fieldClass = [classes.payloadField];
+                if (wide) fieldClass.push(classes.payloadFieldWide);
+                return (
+                  <div key={key} className={fieldClass.join(" ")}>
+                    <Group justify="space-between" align="center">
+                      <Text size="xs" c="dimmed" tt="uppercase" fw={700}>
+                        {FIELD_LABELS[key] ?? key.replace(/([A-Z])/g, " $1")}
+                      </Text>
+                    </Group>
+                    <Text size="sm" mt={2} lineClamp={wide ? 4 : 2}>
+                      {displayValue(key, value)}
+                    </Text>
+                  </div>
+                );
+              })}
+            </div>
+          )
         )}
 
         {action.preview.warning && (
@@ -285,7 +562,7 @@ function ActionCard({
           </Code>
         </details>
 
-        {pending && (
+        {pending && !editing && (
           <Group justify="space-between" align="center" gap="xs">
             <Group gap="xs">
               <Button
@@ -294,7 +571,7 @@ function ActionCard({
                 loading={busy}
                 onClick={() => decide("confirm")}
               >
-                Confirm
+                {actionCtaLabel(action.kind)}
               </Button>
               <Button
                 size="xs"
@@ -314,6 +591,33 @@ function ActionCard({
                 minute: "2-digit",
               })}
             </Text>
+          </Group>
+        )}
+
+        {succeeded && (
+          <Group gap="xs" mt="xs">
+            {createdIssue?.url && (
+              <Anchor
+                href={createdIssue.url}
+                target="_blank"
+                rel="noreferrer"
+                size="xs"
+                fw={700}
+                c="blue"
+              >
+                Open in Linear ({createdIssue.identifier})
+              </Anchor>
+            )}
+            {action.kind === "ppt_request" && (
+              <Anchor href="/dashboard/ppts" size="xs" fw={700} c="blue">
+                View PPT requests
+              </Anchor>
+            )}
+            {action.kind === "create_bonus_task" && (
+              <Anchor href="/dashboard/bonuses" size="xs" fw={700} c="grape">
+                View bonuses
+              </Anchor>
+            )}
           </Group>
         )}
       </Stack>
@@ -481,26 +785,48 @@ function LinearIssueCard({
 
 function MessageReferences({
   references,
+  conversationId,
+  onActionChange,
 }: {
-  references: AssistantLinearIssueReference[];
+  references: AssistantReferenceDto[];
+  conversationId: string;
+  onActionChange: (action: AssistantActionDto) => void;
 }) {
-  if (references.length === 0) return null;
-  const visible = references.slice(0, 3);
-  const rest = references.slice(3);
+  if (!references || references.length === 0) return null;
+  const visible = references.slice(0, 4);
+  const rest = references.slice(4);
   return (
     <Stack gap={8} mt="sm">
-      {visible.map((reference) => (
-        <LinearIssueCard key={reference.id} reference={reference} />
-      ))}
+      {visible.map((reference) =>
+        reference.kind === "task_draft" ? (
+          <TaskDraftCard
+            key={reference.id}
+            draft={reference}
+            conversationId={conversationId}
+            onActionCreated={onActionChange}
+          />
+        ) : (
+          <LinearIssueCard key={reference.id} reference={reference} />
+        ),
+      )}
       {rest.length > 0 && (
         <details className={classes.moreReferences}>
           <summary>
-            Show {rest.length} more {rest.length === 1 ? "task" : "tasks"}
+            Show {rest.length} more {rest.length === 1 ? "item" : "items"}
           </summary>
           <Stack gap={8} mt={8}>
-            {rest.map((reference) => (
-              <LinearIssueCard key={reference.id} reference={reference} />
-            ))}
+            {rest.map((reference) =>
+              reference.kind === "task_draft" ? (
+                <TaskDraftCard
+                  key={reference.id}
+                  draft={reference}
+                  conversationId={conversationId}
+                  onActionCreated={onActionChange}
+                />
+              ) : (
+                <LinearIssueCard key={reference.id} reference={reference} />
+              ),
+            )}
           </Stack>
         </details>
       )}
@@ -637,7 +963,11 @@ export function AssistantMessage({
             </Group>
           ) : null}
 
-          <MessageReferences references={message.references} />
+          <MessageReferences
+            references={message.references}
+            conversationId={message.conversationId}
+            onActionChange={onActionChange}
+          />
 
           <AnimatePresence initial={false}>
             {(activities.length > 0 || providerTrail.length > 1) && (

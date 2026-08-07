@@ -6,6 +6,7 @@ const DEVHUB_ISSUE_FIELDS = `
     url
     description
     estimate
+    dueDate
     state { type name }
     assignee { id name displayName avatarUrl }
     labels(first: 50) { nodes { name } }

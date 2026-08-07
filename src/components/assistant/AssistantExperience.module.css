@@ -589,3 +589,41 @@
     opacity: 1;
   }
 }
+
+.draftCard {
+  position: relative;
+  margin-top: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(132, 94, 247, 0.32);
+  border-radius: var(--mantine-radius-lg);
+  background: linear-gradient(
+    145deg,
+    rgba(132, 94, 247, 0.12),
+    rgba(37, 38, 43, 0.94) 44%
+  );
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14);
+}
+
+.draftAccent {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(
+    var(--mantine-color-grape-5),
+    var(--mantine-color-blue-5)
+  );
+}
+
+.provenanceBadge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 700;
+}
+
+.inlineEditor {
+  padding: 10px 12px;
+  border: 1px dashed rgba(116, 143, 252, 0.35);
+  border-radius: var(--mantine-radius-md);
+  background: rgba(20, 21, 23, 0.6);
+}

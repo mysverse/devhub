@@ -153,6 +153,7 @@ function rawIssueNode(issue: MockLinearIssue, board = false): Json {
     url: issue.url,
     description: issue.description,
     estimate: issue.estimate,
+    dueDate: issue.dueDate ?? null,
     state: { type: state.type, name: state.name },
     assignee: assignee
       ? {

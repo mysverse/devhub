@@ -1,3 +1,4 @@
+import type { AssistantTaskDraftDto } from "@/lib/assistant-draft";
 import type { CurrencyCode } from "@/lib/currency";
 import type { CampaignBadgeInfo } from "@/lib/payout-campaign";
 
@@ -34,6 +35,7 @@ export type AssistantActionDto = {
   executedAt: string | null;
   result: unknown;
   error: string | null;
+  errorCode?: string | null;
 };
 
 export type AssistantLinearIssueReference = {
@@ -50,10 +52,13 @@ export type AssistantLinearIssueReference = {
   payout: AssistantPptPayoutPreview | null;
 };
 
-export type AssistantReferenceDto = AssistantLinearIssueReference;
+export type AssistantReferenceDto =
+  | AssistantLinearIssueReference
+  | AssistantTaskDraftDto;
 
 export type AssistantMessageDto = {
   id: string;
+  conversationId: string;
   role: "user" | "assistant";
   content: string;
   status: "PENDING" | "COMPLETE" | "INTERRUPTED" | "FAILED";

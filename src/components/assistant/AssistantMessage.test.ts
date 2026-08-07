@@ -6,6 +6,7 @@ import { assistantReplySuggestions } from "./assistant-suggestions";
 function message(content: string): AssistantMessageDto {
   return {
     id: "message-1",
+    conversationId: "conv-1",
     role: "assistant",
     content,
     status: "COMPLETE",

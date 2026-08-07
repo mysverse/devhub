@@ -42,6 +42,7 @@ export type MockLinearIssue = {
   canceledAt: Date | null;
   archivedAt: Date | null;
   trashed: boolean;
+  dueDate?: string | null;
   comments: MockLinearComment[];
 };
 

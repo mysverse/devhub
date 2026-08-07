@@ -44,9 +44,70 @@ function messageReferences(
   value: Prisma.JsonValue | null,
 ): AssistantReferenceDto[] {
   if (!Array.isArray(value)) return [];
-  return value.flatMap((item) => {
+  return value.flatMap((item): AssistantReferenceDto[] => {
     if (!item || typeof item !== "object" || Array.isArray(item)) return [];
     const row = item as Record<string, Prisma.JsonValue>;
+    if (row.kind === "task_draft") {
+      if (typeof row.title !== "string" || typeof row.scope !== "string") {
+        return [];
+      }
+      return [
+        {
+          kind: "task_draft" as const,
+          id: typeof row.id === "string" ? row.id : `draft-${Date.now()}`,
+          title: row.title,
+          scope: row.scope,
+          acceptanceCriteria: Array.isArray(row.acceptanceCriteria)
+            ? row.acceptanceCriteria.filter(
+                (c): c is string => typeof c === "string",
+              )
+            : [],
+          exclusions: Array.isArray(row.exclusions)
+            ? row.exclusions.filter((e): e is string => typeof e === "string")
+            : [],
+          destination:
+            (row.destination as unknown as AssistantReferenceDto extends {
+              kind: "task_draft";
+            }
+              ? AssistantReferenceDto["destination"]
+              : never) ?? {
+              teamId: null,
+              teamKey: null,
+              teamName: null,
+              projectId: null,
+              projectName: null,
+            },
+          owner: (row.owner as unknown as AssistantReferenceDto extends {
+            kind: "task_draft";
+          }
+            ? AssistantReferenceDto["owner"]
+            : never) ?? {
+            userId: null,
+            linearId: null,
+            name: null,
+            isSelf: true,
+          },
+          complexity: typeof row.complexity === "number" ? row.complexity : 3,
+          targetDate:
+            typeof row.targetDate === "string"
+              ? row.targetDate
+              : new Date().toISOString().slice(0, 10),
+          assumptions: Array.isArray(row.assumptions)
+            ? row.assumptions.filter((a): a is string => typeof a === "string")
+            : [],
+          provenance: (row.provenance as any) ?? {
+            title: "INFERRED",
+            scope: "INFERRED",
+            complexity: "INFERRED",
+            targetDate: "INFERRED",
+            destination: "INFERRED",
+          },
+          routeOptions: Array.isArray(row.routeOptions)
+            ? (row.routeOptions as ("PPT" | "TASK" | "BONUS")[])
+            : ["PPT", "TASK", "BONUS"],
+        },
+      ];
+    }
     if (
       row.kind !== "linear_issue" ||
       typeof row.id !== "string" ||
@@ -81,7 +142,7 @@ function messageReferences(
 }
 
 export function serializeAssistantAction(
-  action: MessageWithActions["actions"][number],
+  action: MessageWithActions["actions"][number] & { errorCode?: string | null },
 ): AssistantActionDto {
   return {
     id: action.id,
@@ -93,6 +154,7 @@ export function serializeAssistantAction(
     executedAt: action.executedAt?.toISOString() ?? null,
     result: action.result,
     error: action.error,
+    errorCode: action.errorCode ?? null,
   };
 }
 
@@ -101,6 +163,7 @@ export function serializeAssistantMessage(
 ): AssistantMessageDto {
   return {
     id: message.id,
+    conversationId: message.conversationId,
     role: message.role === "USER" ? "user" : "assistant",
     content: message.content,
     status: message.status,
@@ -156,9 +219,12 @@ export async function listAssistantConversations(
   return conversations.map(serializeConversation);
 }
 
-export async function createAssistantConversation(userId: string) {
+export async function createAssistantConversation(
+  userId: string,
+  entryPoint?: string | null,
+) {
   const conversation = await prisma.assistantConversation.create({
-    data: { userId, title: "New conversation" },
+    data: { userId, title: "New conversation", entryPoint: entryPoint ?? null },
   });
   return serializeConversation(conversation);
 }

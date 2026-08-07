@@ -11,27 +11,94 @@ import {
   submitPptProgress,
   submitPptProof,
 } from "@/app/dashboard/ppts/actions";
-import { assistantToolByName } from "@/lib/assistant-tools";
+import { buildAssistantPptPayoutPreview } from "@/lib/assistant-payout-preview";
+import { actionPreview, assistantToolByName } from "@/lib/assistant-tools";
+import type {
+  AssistantPptPayoutPreview,
+  AssistantPreview,
+} from "@/lib/assistant-types";
 import { hasAdminAccess } from "@/lib/authz";
+import { syncBonusCandidatesForUser } from "@/lib/bonus";
 import { TAGS } from "@/lib/cache-tags";
+import {
+  complexityLevelToLinearEstimate,
+  getCurrencyForPaymentMethod,
+} from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
 import {
   fetchIssuesByIds,
   findTodoWorkflowStateId,
 } from "@/lib/linear-queries";
+import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 
 type JsonRecord = Record<string, unknown>;
 
-function publicError(error: unknown) {
+export type AssistantErrorCode =
+  | "ISSUE_NOT_FOUND"
+  | "TEAM_NOT_FOUND"
+  | "PROJECT_NOT_FOUND"
+  | "PERMISSION_DENIED"
+  | "REAUTH_REQUIRED"
+  | "VALIDATION_FAILED"
+  | "TRANSIENT_ERROR";
+
+export function classifyActionError(error: unknown): {
+  code: AssistantErrorCode;
+  message: string;
+  isCorrectable: boolean;
+} {
   const message = error instanceof Error ? error.message : String(error);
-  if (/permission|forbidden|unauthorized/i.test(message)) {
-    return "You no longer have permission for this action.";
+  const lower = message.toLowerCase();
+
+  if (/reauth|authentication|token/i.test(lower)) {
+    return {
+      code: "REAUTH_REQUIRED",
+      message: "Your Linear authentication expired. Please re-authenticate.",
+      isCorrectable: true,
+    };
   }
-  if (/not found|does not exist/i.test(message)) {
-    return "The task no longer exists.";
+  if (/permission|forbidden|unauthorized/i.test(lower)) {
+    return {
+      code: "PERMISSION_DENIED",
+      message: "You do not have permission for this action.",
+      isCorrectable: false,
+    };
   }
-  return message || "The action could not be completed.";
+  if (/project not found|selected project/i.test(lower)) {
+    return {
+      code: "PROJECT_NOT_FOUND",
+      message: "The selected project was not found in Linear.",
+      isCorrectable: true,
+    };
+  }
+  if (/team not found|selected team/i.test(lower)) {
+    return {
+      code: "TEAM_NOT_FOUND",
+      message: "The selected team was not found in Linear.",
+      isCorrectable: true,
+    };
+  }
+  if (/issue not found|task not found/i.test(lower)) {
+    return {
+      code: "ISSUE_NOT_FOUND",
+      message: "The Linear task was not found.",
+      isCorrectable: false,
+    };
+  }
+  if (/invalid|choose a due date|required/i.test(lower)) {
+    return {
+      code: "VALIDATION_FAILED",
+      message: message || "Validation failed.",
+      isCorrectable: true,
+    };
+  }
+
+  return {
+    code: "TRANSIENT_ERROR",
+    message: message || "The action could not be completed.",
+    isCorrectable: true,
+  };
 }
 
 function futureDate(value: unknown, required = false) {
@@ -57,10 +124,65 @@ async function accessProfile(userId: string) {
   return { ...profile, admin: hasAdminAccess(profile) };
 }
 
+async function reanchorDestination(
+  client: Parameters<Parameters<typeof withLinearFallback>[1]>[0],
+  payload: JsonRecord,
+): Promise<{
+  teamId: string;
+  projectId: string | null;
+  projectName: string | null;
+}> {
+  let teamId = payload.teamId ? String(payload.teamId) : null;
+  const teamKey = payload.teamKey ? String(payload.teamKey) : null;
+  const teamName = payload.teamName ? String(payload.teamName) : null;
+
+  let projectId = payload.projectId ? String(payload.projectId) : null;
+  const projectName = payload.projectName ? String(payload.projectName) : null;
+
+  const teams = (await client.teams()).nodes;
+  let team = teams.find((t) => t.id === teamId);
+
+  if (!team && (teamKey || teamName)) {
+    team = teams.find(
+      (t) =>
+        (teamKey && t.key.toLowerCase() === teamKey.toLowerCase()) ||
+        (teamName && t.name.toLowerCase() === teamName.toLowerCase()),
+    );
+  }
+
+  if (!team) {
+    if (teams.length > 0) {
+      team = teams[0];
+    } else {
+      throw new Error("The selected team was not found in Linear.");
+    }
+  }
+
+  teamId = team.id;
+  let resolvedProjectName: string | null = projectName;
+
+  if (projectId || projectName) {
+    const projects = (await team.projects()).nodes;
+    let proj = projects.find((p) => p.id === projectId);
+    if (!proj && projectName) {
+      const matches = projects.filter(
+        (p) => p.name.toLowerCase() === projectName.toLowerCase(),
+      );
+      if (matches.length === 1) {
+        proj = matches[0];
+      }
+    }
+    projectId = proj?.id ?? null;
+    resolvedProjectName = proj?.name ?? projectName;
+  }
+
+  return { teamId, projectId, projectName: resolvedProjectName };
+}
+
 async function executeCreateTask(userId: string, payload: JsonRecord) {
   const dueDate = futureDate(payload.dueDate);
   return withLinearFallback(userId, async (client) => {
-    const teamId = String(payload.teamId);
+    const { teamId, projectId } = await reanchorDestination(client, payload);
     const stateId = await findTodoWorkflowStateId(client, teamId);
     const created = await client.createIssue({
       teamId,
@@ -68,10 +190,9 @@ async function executeCreateTask(userId: string, payload: JsonRecord) {
       ...(payload.description
         ? { description: String(payload.description) }
         : {}),
-      ...(payload.projectId ? { projectId: String(payload.projectId) } : {}),
+      ...(projectId ? { projectId } : {}),
       ...(dueDate ? { dueDate } : {}),
       ...(stateId ? { stateId } : {}),
-      // Ordinary issue only. Labels and estimates are deliberately absent.
     });
     const issue = await created.issue;
     if (!issue) throw new Error("Linear did not return the created issue.");
@@ -86,6 +207,60 @@ async function executeCreateTask(userId: string, payload: JsonRecord) {
       message: "Ordinary Linear issue created. It is not a PPT.",
     };
   });
+}
+
+async function executeCreateBonusTask(userId: string, payload: JsonRecord) {
+  const profile = await accessProfile(userId);
+  if (!profile.linearId) {
+    throw new Error("Your Linear account is not linked to DevHub.");
+  }
+  const dueDate = futureDate(payload.dueDate);
+  const estimate = complexityLevelToLinearEstimate(
+    Number(payload.estimate ?? 3),
+  );
+
+  const result = await withLinearFallback(userId, async (client) => {
+    const { teamId, projectId } = await reanchorDestination(client, payload);
+    const stateId = await findTodoWorkflowStateId(client, teamId);
+
+    const created = await client.createIssue({
+      teamId,
+      title: String(payload.title),
+      ...(payload.description
+        ? { description: String(payload.description) }
+        : {}),
+      ...(projectId ? { projectId } : {}),
+      ...(dueDate ? { dueDate } : {}),
+      ...(stateId ? { stateId } : {}),
+      ...(estimate !== null ? { estimate } : {}),
+      assigneeId: profile.linearId,
+    });
+    const issue = await created.issue;
+    if (!issue) throw new Error("Linear did not return the created issue.");
+    return {
+      id: issue.id,
+      identifier: issue.identifier,
+      title: issue.title,
+      url: issue.url,
+    };
+  });
+
+  let syncNote = "Bonus-path task created and assigned to you.";
+  try {
+    await syncBonusCandidatesForUser(userId);
+  } catch (syncError) {
+    console.warn(
+      `[assistant] bonus sync after issue creation failed for user ${userId}:`,
+      syncError instanceof Error ? syncError.message : syncError,
+    );
+    syncNote = "Bonus-path task created; bonus tracking will sync shortly.";
+  }
+
+  return {
+    success: true,
+    issue: result,
+    message: syncNote,
+  };
 }
 
 async function withGuardedIssue<Result>(
@@ -182,11 +357,13 @@ async function executePptRequest(userId: string, payload: JsonRecord) {
     payload.description ? String(payload.description) : "",
   );
   form.set("note", payload.note ? String(payload.note) : "");
-  form.set("assigneeIntent", String(payload.assigneeIntent));
+  form.set("assigneeIntent", String(payload.assigneeIntent ?? "SELF"));
 
   if (payload.mode === "existing") {
     const anchored = await withLinearFallback(userId, async (client) => {
       const issueId = String(payload.linearIssueId ?? "");
+      const [issueNode] = await fetchIssuesByIds(client, [issueId]);
+      if (!issueNode) throw new Error("Task not found.");
       const issue = await client.issue(issueId);
       const team = await issue.team;
       const project = await issue.project;
@@ -210,26 +387,23 @@ async function executePptRequest(userId: string, payload: JsonRecord) {
     if (anchored.projectName)
       form.set("linearProjectName", anchored.projectName);
   } else {
+    // New mode PPT request MUST NEVER perform an issue lookup.
     const anchored = await withLinearFallback(userId, async (client) => {
-      const team = await client.team(String(payload.teamId));
-      const projectId = payload.projectId ? String(payload.projectId) : null;
-      if (!projectId) return { teamId: team.id, project: null };
-      const projects = await team.projects();
-      const project = projects.nodes.find((item) => item.id === projectId);
-      if (!project) {
-        throw new Error("The selected project does not belong to that team.");
-      }
+      const { teamId, projectId, projectName } = await reanchorDestination(
+        client,
+        payload,
+      );
       return {
-        teamId: team.id,
-        project: { id: project.id, name: project.name },
+        teamId,
+        projectId,
+        projectName,
       };
     });
     form.set("linearIssueTitle", String(payload.title));
     form.set("linearTeamId", anchored.teamId);
-    if (anchored.project) {
-      form.set("linearProjectId", anchored.project.id);
-      form.set("linearProjectName", anchored.project.name);
-    }
+    if (anchored.projectId) form.set("linearProjectId", anchored.projectId);
+    if (anchored.projectName)
+      form.set("linearProjectName", anchored.projectName);
   }
 
   const request = new Request("http://devhub.local/api/ppt-requests", {
@@ -253,6 +427,8 @@ async function executePptRequest(userId: string, payload: JsonRecord) {
 
 async function executeKind(kind: string, userId: string, payload: JsonRecord) {
   if (kind === "create_task") return executeCreateTask(userId, payload);
+  if (kind === "create_bonus_task")
+    return executeCreateBonusTask(userId, payload);
   if (kind === "update_task") return executeUpdateTask(userId, payload);
   if (kind === "comment") return executeComment(userId, payload);
   if (kind === "assign_task") return executeAssign(userId, payload);
@@ -348,16 +524,16 @@ export async function confirmAssistantAction(actionId: string, userId: string) {
         executedAt: new Date(),
         result: result as Prisma.InputJsonValue,
         error: null,
+        errorCode: null,
       },
     });
     try {
       revalidatePath("/dashboard/assistant");
       revalidatePath("/dashboard");
       revalidatePath("/dashboard/ppts");
+      revalidatePath("/dashboard/bonuses");
       revalidateTag(TAGS.workspacePpts, { expire: 0 });
     } catch (cacheError) {
-      // The mutation is already committed and the action is already marked
-      // successful. Cache invalidation must never rewrite that truth.
       console.warn(
         "[assistant] action succeeded but cache refresh failed:",
         cacheError instanceof Error ? cacheError.message : cacheError,
@@ -365,13 +541,110 @@ export async function confirmAssistantAction(actionId: string, userId: string) {
     }
     return { success: true, result };
   } catch (error) {
-    const message = publicError(error);
+    const classified = classifyActionError(error);
+
+    if (classified.isCorrectable) {
+      // Return to PENDING so user can correct inline in UI
+      await prisma.assistantAction.update({
+        where: { id: actionId },
+        data: {
+          status: "PENDING",
+          error: classified.message,
+          errorCode: classified.code,
+        },
+      });
+      return {
+        error: classified.message,
+        errorCode: classified.code,
+        isCorrectable: true,
+      };
+    }
+
     await prisma.assistantAction.update({
       where: { id: actionId },
-      data: { status: "FAILED", error: message, executedAt: new Date() },
+      data: {
+        status: "FAILED",
+        error: classified.message,
+        errorCode: classified.code,
+        executedAt: new Date(),
+      },
     });
-    return { error: message };
+    return { error: classified.message, errorCode: classified.code };
   }
+}
+
+export async function updateAssistantAction(
+  actionId: string,
+  userId: string,
+  patch: JsonRecord,
+) {
+  const existing = await prisma.assistantAction.findFirst({
+    where: { id: actionId, userId, conversation: { userId } },
+  });
+  if (!existing) return { error: "Action not found." };
+  if (existing.status !== "PENDING") {
+    return { error: "Only pending actions can be edited." };
+  }
+
+  const payload = { ...(existing.payload as JsonRecord), ...patch };
+  const tool = assistantToolByName(`propose_${existing.kind}`);
+  const parsed = tool?.schema.safeParse(payload);
+  if (!tool || !parsed?.success) {
+    return { error: "Invalid updated action values." };
+  }
+
+  const updatedPayload = parsed.data as JsonRecord;
+  const profile = await prisma.userProfile.findUnique({
+    where: { id: userId },
+    select: { developerRank: true, paymentMethod: true },
+  });
+  const currency = getCurrencyForPaymentMethod(profile?.paymentMethod ?? "MYR");
+
+  let payout: AssistantPptPayoutPreview | undefined;
+  if (existing.kind === "ppt_request") {
+    const campaign = await getCampaignBadgeFor({
+      scope: "PPT",
+      userId,
+      rank: profile?.developerRank ?? null,
+    });
+    payout = buildAssistantPptPayoutPreview(
+      Number(updatedPayload.estimate ?? 3),
+      currency,
+      campaign,
+    );
+  }
+
+  const preview = actionPreview(
+    `propose_${existing.kind}`,
+    updatedPayload,
+    payout,
+  );
+
+  const updated = await prisma.assistantAction.update({
+    where: { id: actionId },
+    data: {
+      payload: updatedPayload as Prisma.InputJsonValue,
+      preview: preview as Prisma.InputJsonValue,
+      error: null,
+      errorCode: null,
+    },
+  });
+
+  return {
+    success: true,
+    action: {
+      id: updated.id,
+      kind: updated.kind,
+      payload: updated.payload,
+      preview: updated.preview as AssistantPreview,
+      status: updated.status,
+      expiresAt: updated.expiresAt.toISOString(),
+      executedAt: updated.executedAt ? updated.executedAt.toISOString() : null,
+      result: updated.result,
+      error: updated.error,
+      errorCode: updated.errorCode,
+    },
+  };
 }
 
 export async function cancelAssistantAction(actionId: string, userId: string) {

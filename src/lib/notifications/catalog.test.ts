@@ -4,7 +4,6 @@ import {
   channelsForEntry,
   configurablePreferenceKeys,
   NOTIFICATION_CATALOG,
-  NOTIFICATION_CHANNEL_KEYS,
 } from "./catalog";
 import { TYPE_OVERRIDES } from "./copy";
 

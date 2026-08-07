@@ -4,7 +4,6 @@ import {
   buildPptDraftPrompt,
   buildTaskIdeaPrompt,
   buildTaskReasonPrompt,
-  PPT_DRAFT_SCHEMA,
   type PromptDeveloper,
   type PromptIssue,
   TASK_IDEA_SYSTEM,

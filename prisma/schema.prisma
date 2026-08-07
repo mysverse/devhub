@@ -252,6 +252,7 @@ model AssistantConversation {
   userId     String
   user       UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
   title      String
+  entryPoint String?
   archivedAt DateTime?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
@@ -299,6 +300,7 @@ model AssistantAction {
   executedAt     DateTime?
   result         Json?
   error          String?
+  errorCode      String?
   idempotencyKey String                @unique
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt

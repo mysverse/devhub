@@ -96,7 +96,7 @@ export const auth = betterAuth({
           clientSecret: process.env.DISCORD_CLIENT_SECRET ?? "",
           authorizationUrl: "https://discord.com/oauth2/authorize",
           tokenUrl: "https://discord.com/api/oauth2/token",
-          scopes: ["identify", "email"],
+          scopes: ["identify"],
           getUserInfo: async (tokens) => {
             const response = await fetch("https://discord.com/api/users/@me", {
               headers: {
@@ -107,14 +107,16 @@ export const auth = betterAuth({
               id: string;
               username: string;
               avatar: string | null;
-              email: string | null;
-              verified: boolean;
             };
             return {
               id: data.id,
               name: data.username,
-              email: data.email ?? undefined,
-              emailVerified: data.verified ?? false,
+              // DevHub only stores discordId, never an email, from this
+              // provider. better-auth still requires *a* value here, so
+              // this is a stable, non-real placeholder rather than
+              // requesting the email scope from Discord for no reason.
+              email: `discord-${data.id}@oauth.devhub.mysver.se`,
+              emailVerified: false,
               image: data.avatar
                 ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png`
                 : undefined,

@@ -87,7 +87,7 @@ export const auth = betterAuth({
           clientSecret: process.env.DISCORD_CLIENT_SECRET ?? "",
           authorizationUrl: "https://discord.com/oauth2/authorize",
           tokenUrl: "https://discord.com/api/oauth2/token",
-          scopes: ["identify"],
+          scopes: ["identify", "email"],
           getUserInfo: async (tokens) => {
             const response = await fetch("https://discord.com/api/users/@me", {
               headers: {
@@ -98,11 +98,14 @@ export const auth = betterAuth({
               id: string;
               username: string;
               avatar: string | null;
+              email: string | null;
+              verified: boolean;
             };
             return {
               id: data.id,
               name: data.username,
-              emailVerified: false,
+              email: data.email ?? undefined,
+              emailVerified: data.verified ?? false,
               image: data.avatar
                 ? `https://cdn.discordapp.com/avatars/${data.id}/${data.avatar}.png`
                 : undefined,

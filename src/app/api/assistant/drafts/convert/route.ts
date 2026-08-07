@@ -17,11 +17,12 @@ export async function POST(request: Request) {
   try {
     const body = (await request.json()) as {
       conversationId?: string;
+      messageId?: string;
       route?: "PPT" | "TASK" | "BONUS";
       draft?: AssistantTaskDraftDto;
     };
 
-    const { conversationId, route, draft } = body;
+    const { conversationId, messageId, route, draft } = body;
     if (!conversationId || !route || !draft || typeof draft !== "object") {
       return NextResponse.json(
         { error: "Invalid convert payload." },
@@ -38,6 +39,23 @@ export async function POST(request: Request) {
         { error: "Conversation not found." },
         { status: 404 },
       );
+    }
+
+    let targetMessageId: string | null = messageId ?? null;
+    if (targetMessageId) {
+      const msg = await prisma.assistantMessage.findFirst({
+        where: { id: targetMessageId, conversationId },
+        select: { id: true },
+      });
+      if (!msg) targetMessageId = null;
+    }
+    if (!targetMessageId) {
+      const latestAssistantMsg = await prisma.assistantMessage.findFirst({
+        where: { conversationId, role: "ASSISTANT" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
+      });
+      targetMessageId = latestAssistantMsg?.id ?? null;
     }
 
     const profile = await prisma.userProfile.findUnique({
@@ -109,6 +127,7 @@ export async function POST(request: Request) {
     const action = await prisma.assistantAction.create({
       data: {
         conversationId,
+        messageId: targetMessageId,
         userId,
         kind: actionKind,
         payload: payload as Prisma.InputJsonValue,
@@ -127,6 +146,7 @@ export async function POST(request: Request) {
         result: true,
         error: true,
         errorCode: true,
+        messageId: true,
       },
     });
 

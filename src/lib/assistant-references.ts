@@ -86,13 +86,14 @@ export function assistantReferencesFromToolResult(
         assumptions: Array.isArray(item.assumptions)
           ? item.assumptions.filter((a): a is string => typeof a === "string")
           : [],
-        provenance: (item.provenance as AssistantTaskDraftDto["provenance"]) ?? {
-          title: "INFERRED",
-          scope: "INFERRED",
-          complexity: "INFERRED",
-          targetDate: "INFERRED",
-          destination: "INFERRED",
-        },
+        provenance:
+          (item.provenance as AssistantTaskDraftDto["provenance"]) ?? {
+            title: "INFERRED",
+            scope: "INFERRED",
+            complexity: "INFERRED",
+            targetDate: "INFERRED",
+            destination: "INFERRED",
+          },
         routeOptions: Array.isArray(item.routeOptions)
           ? (item.routeOptions as AssistantTaskDraftDto["routeOptions"])
           : ["PPT", "TASK", "BONUS"],

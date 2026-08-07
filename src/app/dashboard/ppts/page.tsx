@@ -770,6 +770,7 @@ async function PPTsPageContent({
             heading="Your active PPTs"
             subtitle="Payout progress for the tasks you've claimed"
             showBoardLink={false}
+            pptOnly
             hideWhenEmpty
           />
         </Suspense>

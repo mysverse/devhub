@@ -29,6 +29,8 @@ type Props = {
   showBoardLink?: boolean;
   /** Render nothing when there are no active tasks (used on the board). */
   hideWhenEmpty?: boolean;
+  /** Filter to strictly PPT tasks only. */
+  pptOnly?: boolean;
 };
 
 export default async function ActiveTasks({
@@ -39,6 +41,7 @@ export default async function ActiveTasks({
   subtitle = "Your work in progress",
   showBoardLink = true,
   hideWhenEmpty = false,
+  pptOnly = false,
 }: Props) {
   let assignedIssues: IssueDTO[] = [];
   let linearError: string | null = null;
@@ -58,47 +61,6 @@ export default async function ActiveTasks({
     ).slice(0, 10);
   } catch (e) {
     linearError = resolveLinearFetchError(e, "/dashboard", "active tasks");
-  }
-
-  const header = (
-    <DashboardSectionHeader
-      title={heading}
-      subtitle={subtitle}
-      icon={<Zap size={16} />}
-      badge={
-        assignedIssues.length > 0 ? (
-          <Badge variant="light" color="blue">
-            {assignedIssues.length} in progress
-          </Badge>
-        ) : undefined
-      }
-      action={
-        showBoardLink ? (
-          <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
-            View PPT Board &rarr;
-          </LinkAnchor>
-        ) : undefined
-      }
-    />
-  );
-
-  if (linearError) {
-    return (
-      <>
-        {header}
-        <Alert color="red">{linearError}</Alert>
-      </>
-    );
-  }
-
-  if (assignedIssues.length === 0) {
-    if (hideWhenEmpty) return null;
-    return (
-      <>
-        {header}
-        <ActiveTasksEmptyState />
-      </>
-    );
   }
 
   const bonusCandidates = await prisma.bonusCandidate.findMany({
@@ -152,6 +114,19 @@ export default async function ActiveTasks({
       selfBlockExpiresAt: true,
     },
   });
+
+  const activeWatchIssueIds = new Set(
+    assignmentWatches.map((watch) => watch.linearIssueId),
+  );
+
+  const displayIssues = pptOnly
+    ? assignedIssues.filter(
+        (issue) =>
+          issue.labelNames.some((label) => label.toUpperCase() === "PPT") ||
+          activeWatchIssueIds.has(issue.id),
+      )
+    : assignedIssues;
+
   const policy = getResolvedPayoutPolicy();
   const renderedAt = new Date();
   const assignmentWatchByIssueId = new Map(
@@ -189,12 +164,58 @@ export default async function ActiveTasks({
     }),
   );
 
+  const header = (
+    <DashboardSectionHeader
+      title={heading}
+      subtitle={subtitle}
+      icon={<Zap size={16} />}
+      badge={
+        displayIssues.length > 0 ? (
+          <Badge variant="light" color="blue">
+            {displayIssues.length}{" "}
+            {pptOnly
+              ? displayIssues.length === 1
+                ? "PPT claimed"
+                : "PPTs claimed"
+              : "in progress"}
+          </Badge>
+        ) : undefined
+      }
+      action={
+        showBoardLink ? (
+          <LinkAnchor href="/dashboard/ppts" fz="sm" fw={500}>
+            View PPT Board &rarr;
+          </LinkAnchor>
+        ) : undefined
+      }
+    />
+  );
+
+  if (linearError) {
+    return (
+      <>
+        {header}
+        <Alert color="red">{linearError}</Alert>
+      </>
+    );
+  }
+
+  if (displayIssues.length === 0) {
+    if (hideWhenEmpty) return null;
+    return (
+      <>
+        {header}
+        <ActiveTasksEmptyState />
+      </>
+    );
+  }
+
   return (
     <FadeIn>
       {header}
       <StaggerContainer>
         <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
-          {assignedIssues.map((issue) => {
+          {displayIssues.map((issue) => {
             const hasPptLabel = issue.labelNames.some(
               (label) => label.toUpperCase() === "PPT",
             );

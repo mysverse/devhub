@@ -424,9 +424,20 @@ function TaskCard({
       <HoverLift>
         <Card withBorder radius="md" padding="lg" h="100%">
           <Group justify="space-between" align="flex-start" mb="xs">
-            <Badge variant="light" color="blue">
-              {identifier}
-            </Badge>
+            <Group gap="xs" align="center" wrap="wrap">
+              <Badge variant="light" color="blue">
+                {identifier}
+              </Badge>
+              {isPpt ? (
+                <Badge variant="dot" color="violet" size="sm">
+                  PPT Task
+                </Badge>
+              ) : earningsText ? (
+                <Badge variant="dot" color="teal" size="sm">
+                  Bonus Candidate
+                </Badge>
+              ) : null}
+            </Group>
             {(earningsText || pptEstimate > 0) && (
               <Group gap={6} wrap="nowrap">
                 {campaign && !earningsText && (

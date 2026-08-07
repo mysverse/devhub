@@ -28,8 +28,34 @@ describe("assistant Linear references", () => {
         stateName: "In Progress",
         labelNames: ["PPT", "Vehicles"],
         imageUrl: "https://uploads.linear.app/example/car.png",
+        payout: null,
       },
     ]);
+  });
+
+  it("keeps the server-priced payout attached to a PPT reference", () => {
+    const payout = {
+      currency: "MYR",
+      baseAmount: 60,
+      amount: 180,
+      baseLabel: "RM60.00",
+      amountLabel: "RM180.00",
+      multiplier: 3,
+      campaign: {
+        slug: "sprint-boost",
+        name: "Sprint Boost",
+        multiplier: 3,
+        accentColor: "violet",
+        endsAt: "2026-08-11T00:00:00.000Z",
+      },
+    };
+    assert.deepEqual(
+      assistantReferencesFromToolResult("list_open_ppts", {
+        ...issue,
+        payout,
+      })[0]?.payout,
+      payout,
+    );
   });
 
   it("ignores non-issue tools and untrusted image hosts", () => {

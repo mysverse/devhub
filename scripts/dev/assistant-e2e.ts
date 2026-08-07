@@ -166,6 +166,13 @@ async function main() {
       waitUntil: "load",
       timeout: 60_000,
     });
+    await page.waitForFunction(
+      () =>
+        document.querySelectorAll('[data-testid="suggested-ppts"]').length ===
+        1,
+      undefined,
+      { timeout: 10_000 },
+    );
     const suggestedPpts = page.getByTestId("suggested-ppts");
     await suggestedPpts.waitFor({ state: "visible", timeout: 30_000 });
     await waitForText(suggestedPpts.getByText("3x", { exact: true }).first());
@@ -182,11 +189,49 @@ async function main() {
       ),
     });
     await page.getByRole("button", { name: "Open DevHub Assistant" }).click();
-    await page
-      .getByRole("dialog", { name: "DevHub Assistant" })
-      .waitFor({ state: "visible" });
+    const assistantDialog = page.getByRole("dialog", {
+      name: "DevHub Assistant",
+    });
+    await assistantDialog.waitFor({ state: "visible" });
     await waitForText(page.getByRole("button", { name: "New chat" }));
     await assertRecentChatsUsable(page);
+
+    await newChat(page);
+    await page.getByRole("button", { name: "Show open PPTs" }).click();
+    const openPptReference = assistantDialog
+      .getByTestId("linear-task-reference")
+      .first();
+    await openPptReference.waitFor({ state: "visible", timeout: 30_000 });
+    await waitForText(
+      openPptReference.getByText("Projected payout", { exact: true }),
+    );
+    await waitForText(openPptReference.getByText("3x", { exact: true }));
+    assert.match(
+      (await openPptReference
+        .getByTestId("linear-task-payout")
+        .textContent()) ?? "",
+      /^RM[\d,.]+$/,
+    );
+    await page.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "assistant-open-ppts-desktop.png",
+      ),
+    });
+    await page.setViewportSize({ width: 390, height: 844 });
+    await openPptReference
+      .getByTestId("linear-task-payout")
+      .scrollIntoViewIfNeeded();
+    await assertChatBounds(page, 390);
+    await page.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "assistant-open-ppts-mobile.png",
+      ),
+    });
+    await page.setViewportSize({ width: 1280, height: 850 });
 
     await newChat(page);
     await send(page, "Find task MYS-201");
@@ -236,9 +281,6 @@ async function main() {
         "Submit PPT request: Create a realistic Proton X90-inspired civilian car",
       ),
     );
-    const assistantDialog = page.getByRole("dialog", {
-      name: "DevHub Assistant",
-    });
     await waitForText(
       assistantDialog.getByText("Projected payout", { exact: true }),
     );
@@ -316,6 +358,7 @@ async function main() {
     assert.deepEqual(pageErrors, []);
     console.log("✓ read tool activity");
     console.log("✓ rich Linear task references");
+    console.log("✓ open PPT references show campaign-aware payouts");
     console.log("✓ campaign-aware suggested PPT cards");
     console.log("✓ multi-round action proposal");
     console.log("✓ rough idea → PPT in three user turns");

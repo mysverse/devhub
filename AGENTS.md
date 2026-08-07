@@ -189,8 +189,9 @@ misprices real payouts:
   surfaces first select the campaign for the developer, rank, and real issue
   labels, then pass it to the shared client-safe presenter. This includes the
   board, dashboard suggestions, active-task totals, request/admin views,
-  notifications, and assistant confirmation cards. Do not re-inline
-  `estimateToAmount() * multiplier` in a display surface.
+  notifications, assistant confirmation cards, and assistant task-reference
+  cards. Do not re-inline `estimateToAmount() * multiplier` in a display
+  surface.
 - **`PayoutCampaignApplication` is both the uplift ledger and the idempotency
   key** — unique on `(campaignId, scope, entityId)`. Rejections and
   cancellations set `reverted`, they never delete.

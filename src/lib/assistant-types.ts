@@ -3,8 +3,8 @@ import type { CampaignBadgeInfo } from "@/lib/payout-campaign";
 
 export type AssistantPptPayoutPreview = {
   currency: CurrencyCode;
-  baseAmount: number;
-  amount: number;
+  baseAmount: number | null;
+  amount: number | null;
   baseLabel: string;
   amountLabel: string;
   multiplier: number;
@@ -47,6 +47,7 @@ export type AssistantLinearIssueReference = {
   stateName: string;
   labelNames: string[];
   imageUrl: string | null;
+  payout: AssistantPptPayoutPreview | null;
 };
 
 export type AssistantReferenceDto = AssistantLinearIssueReference;

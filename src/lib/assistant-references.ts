@@ -1,3 +1,4 @@
+import { parseAssistantPptPayoutPreview } from "@/lib/assistant-payout-preview";
 import type { AssistantReferenceDto } from "@/lib/assistant-types";
 
 const ISSUE_REFERENCE_TOOLS = new Set([
@@ -66,6 +67,7 @@ export function assistantReferencesFromToolResult(
             )
           : [],
         imageUrl: linearImageUrl(description),
+        payout: parseAssistantPptPayoutPreview(issue.payout),
       },
     ];
   });

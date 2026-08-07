@@ -395,6 +395,7 @@ function LinearIssueCard({
       rel="noreferrer"
       underline="never"
       aria-label={`Open ${reference.identifier} in Linear`}
+      data-testid="linear-task-reference"
     >
       {imageUrl && (
         <Image
@@ -428,6 +429,37 @@ function LinearIssueCard({
         <Text size="sm" fw={750} c="bright" lh={1.35}>
           {reference.title}
         </Text>
+        {reference.payout && (
+          <div className={classes.linearReferencePayout}>
+            <Group justify="space-between" align="center" wrap="nowrap">
+              <Stack gap={1} style={{ minWidth: 0 }}>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={750}>
+                  Projected payout
+                </Text>
+                <Text
+                  size="lg"
+                  fw={850}
+                  c={
+                    reference.payout.campaign
+                      ? reference.payout.campaign.accentColor
+                      : "green"
+                  }
+                  data-testid="linear-task-payout"
+                >
+                  {reference.payout.amountLabel}
+                </Text>
+              </Stack>
+              {reference.payout.campaign && (
+                <CampaignBadge campaign={reference.payout.campaign} />
+              )}
+            </Group>
+            {reference.payout.campaign && (
+              <Text size="xs" c="dimmed" mt={3}>
+                Normally {reference.payout.baseLabel}
+              </Text>
+            )}
+          </div>
+        )}
         {reference.description && (
           <Text size="xs" c="dimmed" lineClamp={2} lh={1.45}>
             {reference.description}

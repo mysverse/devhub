@@ -290,6 +290,13 @@
   background: var(--mantine-color-dark-8);
 }
 
+.linearReferencePayout {
+  padding: 8px 10px;
+  border: 1px solid rgba(81, 207, 102, 0.2);
+  border-radius: var(--mantine-radius-sm);
+  background: rgba(81, 207, 102, 0.055);
+}
+
 .moreReferences summary {
   width: fit-content;
   cursor: pointer;

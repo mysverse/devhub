@@ -65,7 +65,7 @@ describe("PPT payout surface contract", () => {
       });
       assert.match(
         source,
-        /projectPptPayout/,
+        /projectPptPayout|buildAssistantPptPayoutPreview/,
         `${relativePath} bypasses the shared PPT payout projection`,
       );
       assert.doesNotMatch(

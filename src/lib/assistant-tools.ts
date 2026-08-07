@@ -1,4 +1,5 @@
 import type { Prisma } from "@prisma/client";
+import { buildAssistantPptPayoutPreview } from "@/lib/assistant-payout-preview";
 import {
   ASSISTANT_TOOLS,
   assistantToolByName,
@@ -12,8 +13,12 @@ import { getCurrencyForPaymentMethod } from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
-import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
-import { projectPptPayout } from "@/lib/ppt-payout-presentation";
+import { selectCampaignBadge } from "@/lib/payout-campaign";
+import {
+  getCampaignBadgeFor,
+  getLiveCampaignRows,
+  toSelectableCampaign,
+} from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
 
 export type AssistantToolContext = {
@@ -25,7 +30,7 @@ export type AssistantToolContext = {
 
 export { ASSISTANT_TOOLS, assistantToolByName };
 
-function safeIssue(issue: {
+type AssistantIssue = {
   id: string;
   identifier: string;
   title: string;
@@ -35,7 +40,12 @@ function safeIssue(issue: {
   stateType: string;
   stateName: string;
   labelNames: string[];
-}) {
+};
+
+function safeIssue(
+  issue: AssistantIssue,
+  payout: AssistantPptPayoutPreview | null = null,
+) {
   return {
     id: issue.id,
     identifier: issue.identifier,
@@ -46,7 +56,45 @@ function safeIssue(issue: {
     stateType: issue.stateType,
     stateName: issue.stateName,
     labelNames: issue.labelNames,
+    payout,
   };
+}
+
+async function safeIssuesWithPayout(
+  issues: AssistantIssue[],
+  context: AssistantToolContext,
+) {
+  const hasPpt = issues.some((issue) =>
+    issue.labelNames.some((label) => label.toLowerCase() === "ppt"),
+  );
+  if (!hasPpt) return issues.map((issue) => safeIssue(issue));
+
+  const [profile, liveCampaignRows] = await Promise.all([
+    prisma.userProfile.findUnique({
+      where: { id: context.userId },
+      select: { developerRank: true, paymentMethod: true },
+    }),
+    getLiveCampaignRows(),
+  ]);
+  const currency = getCurrencyForPaymentMethod(profile?.paymentMethod ?? "MYR");
+  const campaigns = liveCampaignRows.map(toSelectableCampaign);
+
+  return issues.map((issue) => {
+    const isPpt = issue.labelNames.some(
+      (label) => label.toLowerCase() === "ppt",
+    );
+    if (!isPpt) return safeIssue(issue);
+    const campaign = selectCampaignBadge(campaigns, {
+      scope: "PPT",
+      userId: context.userId,
+      rank: profile?.developerRank ?? null,
+      labels: issue.labelNames,
+    });
+    return safeIssue(
+      issue,
+      buildAssistantPptPayoutPreview(issue.estimate, currency, campaign),
+    );
+  });
 }
 
 function normalizedWords(value: string) {
@@ -227,22 +275,11 @@ async function createProposedAction(
     const currency = getCurrencyForPaymentMethod(
       profile?.paymentMethod ?? "MYR",
     );
-    const projection = projectPptPayout(
+    payout = buildAssistantPptPayoutPreview(
       Number(payload.estimate),
       currency,
       campaign,
     );
-    if (projection.baseAmount !== null && projection.finalAmount !== null) {
-      payout = {
-        currency,
-        baseAmount: projection.baseAmount,
-        amount: projection.finalAmount,
-        baseLabel: projection.baseLabel,
-        amountLabel: projection.finalLabel,
-        multiplier: projection.multiplier,
-        campaign,
-      };
-    }
   }
 
   const preview = actionPreview(name, payload, payout);
@@ -308,15 +345,14 @@ async function executeReadTool(
   if (name === "get_task") {
     return withLinearFallback(context.userId, async (client) => {
       const [issue] = await fetchIssuesByIds(client, [String(payload.issueId)]);
-      return issue ? safeIssue(issue) : { error: "Task not found." };
+      if (!issue) return { error: "Task not found." };
+      return (await safeIssuesWithPayout([issue], context))[0];
     });
   }
   if (name === "list_open_ppts") {
     const issues = await getSuggestedPptsForUser(context.userId);
-    return issues
-      .filter((issue) => !issue.assignee)
-      .slice(0, 20)
-      .map(safeIssue);
+    const openIssues = issues.filter((issue) => !issue.assignee).slice(0, 20);
+    return safeIssuesWithPayout(openIssues, context);
   }
   if (name === "list_teams") {
     return withLinearFallback(context.userId, async (client) => {
@@ -400,7 +436,7 @@ async function executeReadTool(
         },
       });
       const ids = response.nodes.map((issue) => issue.id);
-      return (await fetchIssuesByIds(client, ids)).map(safeIssue);
+      return safeIssuesWithPayout(await fetchIssuesByIds(client, ids), context);
     });
   }
   if (name === "search_tasks") {
@@ -409,7 +445,7 @@ async function executeReadTool(
         first: 10,
       });
       const ids = response.nodes.map((issue) => issue.id);
-      return (await fetchIssuesByIds(client, ids)).map(safeIssue);
+      return safeIssuesWithPayout(await fetchIssuesByIds(client, ids), context);
     });
   }
   return { error: "Unknown read tool." };

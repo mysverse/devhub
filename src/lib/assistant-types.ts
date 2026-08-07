@@ -1,7 +1,21 @@
+import type { CurrencyCode } from "@/lib/currency";
+import type { CampaignBadgeInfo } from "@/lib/payout-campaign";
+
+export type AssistantPptPayoutPreview = {
+  currency: CurrencyCode;
+  baseAmount: number;
+  amount: number;
+  baseLabel: string;
+  amountLabel: string;
+  multiplier: number;
+  campaign: CampaignBadgeInfo | null;
+};
+
 export type AssistantPreview = {
   title: string;
   description: string;
   warning?: string;
+  payout?: AssistantPptPayoutPreview;
 };
 
 export type AssistantActionDto = {

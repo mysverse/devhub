@@ -1,7 +1,7 @@
 import type { DeveloperRank, UserProfile } from "@prisma/client";
 import { getUserWeeklyUsage, getWeekBounds } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
-import { estimateToAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
+import { getCurrencyForPaymentMethod } from "@/lib/currency";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import {
@@ -9,7 +9,6 @@ import {
   getPaymentMethodLabel,
 } from "@/lib/payment-validation";
 import {
-  applyMultiplier,
   type SelectableCampaign,
   selectCampaignBadge,
 } from "@/lib/payout-campaign";
@@ -18,6 +17,7 @@ import {
   toSelectableCampaign,
 } from "@/lib/payout-campaign-server";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import prisma from "@/lib/prisma";
 import HeroPrimary from "./HeroPrimary";
 
@@ -107,7 +107,6 @@ async function getActivePptPending({
       // amounts on the task cards it is summing.
       amount: activePptIssues.reduce((sum, issue) => {
         if (!issue.estimate) return sum;
-        const base = estimateToAmount(issue.estimate, currency);
         const campaign = selectCampaignBadge(liveCampaigns, {
           scope: "PPT",
           userId,
@@ -116,9 +115,8 @@ async function getActivePptPending({
         });
         return (
           sum +
-          (campaign
-            ? applyMultiplier(base, campaign.multiplier, currency)
-            : base)
+          (projectPptPayout(issue.estimate, currency, campaign).finalAmount ??
+            0)
         );
       }, 0),
       count: activePptIssues.length,

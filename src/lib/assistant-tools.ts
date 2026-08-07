@@ -3,10 +3,17 @@ import {
   ASSISTANT_TOOLS,
   assistantToolByName,
 } from "@/lib/assistant-tool-definitions";
+import type {
+  AssistantPptPayoutPreview,
+  AssistantPreview,
+} from "@/lib/assistant-types";
 import { hasAdminAccess } from "@/lib/authz";
+import { getCurrencyForPaymentMethod } from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import prisma from "@/lib/prisma";
 
 export type AssistantToolContext = {
@@ -122,12 +129,13 @@ const HELP: Record<HelpTopic, unknown> = {
   },
 };
 
-function actionPreview(name: string, payload: Record<string, unknown>) {
+function actionPreview(
+  name: string,
+  payload: Record<string, unknown>,
+  payout?: AssistantPptPayoutPreview,
+) {
   const title = String(payload.title ?? payload.issueId ?? "task");
-  const previews: Record<
-    string,
-    { title: string; description: string; warning?: string }
-  > = {
+  const previews: Record<string, AssistantPreview> = {
     propose_create_task: {
       title: `Create ordinary Linear issue: ${title}`,
       description: "Creates an unlabelled Linear issue in the selected team.",
@@ -169,6 +177,7 @@ function actionPreview(name: string, payload: Record<string, unknown>) {
       description:
         "Submits this task for admin review using the shown scope, estimate and due date.",
       warning: "Approval is not automatic and attachments are not included.",
+      ...(payout ? { payout } : {}),
     },
     propose_assign_task: {
       title: `Change assignment for ${title}`,
@@ -196,7 +205,7 @@ async function createProposedAction(
 ) {
   const profile = await prisma.userProfile.findUnique({
     where: { id: context.userId },
-    select: { role: true, developerRank: true },
+    select: { role: true, developerRank: true, paymentMethod: true },
   });
   if (
     (name === "propose_assign_task" || name === "propose_task_suggestion") &&
@@ -205,7 +214,38 @@ async function createProposedAction(
     return { error: "This action requires admin access." };
   }
 
-  const preview = actionPreview(name, payload);
+  let payout: AssistantPptPayoutPreview | undefined;
+  if (name === "propose_ppt_request") {
+    // A new request has no trustworthy issue labels yet. Strict campaign
+    // matching therefore includes only campaigns that apply board-wide,
+    // exactly like the standard PPT request flow.
+    const campaign = await getCampaignBadgeFor({
+      scope: "PPT",
+      userId: context.userId,
+      rank: profile?.developerRank ?? null,
+    });
+    const currency = getCurrencyForPaymentMethod(
+      profile?.paymentMethod ?? "MYR",
+    );
+    const projection = projectPptPayout(
+      Number(payload.estimate),
+      currency,
+      campaign,
+    );
+    if (projection.baseAmount !== null && projection.finalAmount !== null) {
+      payout = {
+        currency,
+        baseAmount: projection.baseAmount,
+        amount: projection.finalAmount,
+        baseLabel: projection.baseLabel,
+        amountLabel: projection.finalLabel,
+        multiplier: projection.multiplier,
+        campaign,
+      };
+    }
+  }
+
+  const preview = actionPreview(name, payload, payout);
   const idempotencyKey = `assistant:${context.conversationId}:${context.toolCallId}`;
   const existing = await prisma.assistantAction.findUnique({
     where: { idempotencyKey },

@@ -6,7 +6,6 @@ import PptRequestSubmitted from "@/emails/PptRequestSubmitted";
 import { recordActivationEvent } from "@/lib/activation-events";
 import { getSession } from "@/lib/auth-utils";
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
 import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import {
@@ -14,8 +13,8 @@ import {
   IN_APP_CHANNEL,
   notifyWithPreferences,
 } from "@/lib/notifications";
-import { applyMultiplier } from "@/lib/payout-campaign";
 import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import {
   PPT_ATTACHMENT_MAX_FILES,
   PPT_ATTACHMENT_MAX_TOTAL_SIZE,
@@ -203,14 +202,11 @@ export async function POST(req: Request) {
         userId,
         rank: requester?.developerRank ?? null,
       });
-      const estimatedAmount = formatAmount(
-        applyMultiplier(
-          estimateToAmount(requestedEstimate, "MYR"),
-          requestCampaign?.multiplier ?? 1,
-          "MYR",
-        ),
+      const estimatedAmount = projectPptPayout(
+        requestedEstimate,
         "MYR",
-      );
+        requestCampaign,
+      ).finalLabel;
 
       for (const admin of admins) {
         await notifyWithPreferences({

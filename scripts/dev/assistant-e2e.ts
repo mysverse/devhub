@@ -166,11 +166,25 @@ async function main() {
       waitUntil: "load",
       timeout: 60_000,
     });
+    const suggestedPpts = page.getByTestId("suggested-ppts");
+    await suggestedPpts.waitFor({ state: "visible", timeout: 30_000 });
+    await waitForText(suggestedPpts.getByText("3x", { exact: true }).first());
+    const suggestedPayout = suggestedPpts.getByTestId("ppt-payout").first();
+    await suggestedPayout.waitFor({ state: "visible" });
+    assert.match((await suggestedPayout.textContent()) ?? "", /^RM[\d,.]+$/);
+    await suggestedPayout.scrollIntoViewIfNeeded();
+    fs.mkdirSync(path.join(process.cwd(), "screenshots"), { recursive: true });
+    await suggestedPpts.screenshot({
+      path: path.join(
+        process.cwd(),
+        "screenshots",
+        "suggested-ppts-campaign-desktop.png",
+      ),
+    });
     await page.getByRole("button", { name: "Open DevHub Assistant" }).click();
     await page
       .getByRole("dialog", { name: "DevHub Assistant" })
       .waitFor({ state: "visible" });
-    fs.mkdirSync(path.join(process.cwd(), "screenshots"), { recursive: true });
     await waitForText(page.getByRole("button", { name: "New chat" }));
     await assertRecentChatsUsable(page);
 
@@ -222,6 +236,13 @@ async function main() {
         "Submit PPT request: Create a realistic Proton X90-inspired civilian car",
       ),
     );
+    const assistantDialog = page.getByRole("dialog", {
+      name: "DevHub Assistant",
+    });
+    await waitForText(
+      assistantDialog.getByText("Projected payout", { exact: true }),
+    );
+    await waitForText(assistantDialog.getByText("RM180.00", { exact: true }));
     await waitForText(page.getByRole("button", { name: "Confirm" }));
     await waitForText(page.getByText("2 checks used"));
     await page.getByText("2 checks used").click();
@@ -230,6 +251,9 @@ async function main() {
     );
     await waitForText(page.getByText("Project destination ready"));
     await waitForText(page.getByText(/backup finished the job/i));
+    await assistantDialog
+      .getByText("Projected payout", { exact: true })
+      .scrollIntoViewIfNeeded();
     await assertChatBounds(page, 1280);
     await page.screenshot({
       path: path.join(
@@ -239,6 +263,9 @@ async function main() {
       ),
     });
     await page.setViewportSize({ width: 390, height: 844 });
+    await assistantDialog
+      .getByText("Projected payout", { exact: true })
+      .scrollIntoViewIfNeeded();
     await assertChatBounds(page, 390);
     await page.screenshot({
       path: path.join(
@@ -289,8 +316,10 @@ async function main() {
     assert.deepEqual(pageErrors, []);
     console.log("✓ read tool activity");
     console.log("✓ rich Linear task references");
+    console.log("✓ campaign-aware suggested PPT cards");
     console.log("✓ multi-round action proposal");
     console.log("✓ rough idea → PPT in three user turns");
+    console.log("✓ campaign-aware assistant payout preview");
     console.log("✓ OpenAI 400 → Anthropic tool/action fallback");
     console.log("✓ Mermaid response rendering");
     console.log("✓ recent/new chat controls on desktop and mobile");

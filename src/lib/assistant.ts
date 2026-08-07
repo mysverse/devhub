@@ -4,6 +4,7 @@ import type {
   AssistantConversationDto,
   AssistantConversationSummary,
   AssistantMessageDto,
+  AssistantPptPayoutPreview,
   AssistantPreview,
   AssistantReferenceDto,
 } from "@/lib/assistant-types";
@@ -27,6 +28,7 @@ function preview(value: Prisma.JsonValue): AssistantPreview {
     };
   }
   const row = value as Record<string, Prisma.JsonValue>;
+  const payout = pptPayoutPreview(row.payout);
   return {
     title: typeof row.title === "string" ? row.title : "Confirm action",
     description:
@@ -34,6 +36,53 @@ function preview(value: Prisma.JsonValue): AssistantPreview {
         ? row.description
         : "Review before continuing.",
     ...(typeof row.warning === "string" ? { warning: row.warning } : {}),
+    ...(payout ? { payout } : {}),
+  };
+}
+
+function pptPayoutPreview(
+  value: Prisma.JsonValue | undefined,
+): AssistantPptPayoutPreview | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, Prisma.JsonValue>;
+  if (
+    (row.currency !== "MYR" && row.currency !== "ROBUX") ||
+    typeof row.baseAmount !== "number" ||
+    typeof row.amount !== "number" ||
+    typeof row.baseLabel !== "string" ||
+    typeof row.amountLabel !== "string" ||
+    typeof row.multiplier !== "number"
+  ) {
+    return null;
+  }
+  const campaign = row.campaign;
+  const parsedCampaign =
+    campaign && typeof campaign === "object" && !Array.isArray(campaign)
+      ? (campaign as Record<string, Prisma.JsonValue>)
+      : null;
+  const validCampaign =
+    parsedCampaign &&
+    typeof parsedCampaign.slug === "string" &&
+    typeof parsedCampaign.name === "string" &&
+    typeof parsedCampaign.multiplier === "number" &&
+    typeof parsedCampaign.accentColor === "string" &&
+    typeof parsedCampaign.endsAt === "string"
+      ? {
+          slug: parsedCampaign.slug,
+          name: parsedCampaign.name,
+          multiplier: parsedCampaign.multiplier,
+          accentColor: parsedCampaign.accentColor,
+          endsAt: parsedCampaign.endsAt,
+        }
+      : null;
+  return {
+    currency: row.currency,
+    baseAmount: row.baseAmount,
+    amount: row.amount,
+    baseLabel: row.baseLabel,
+    amountLabel: row.amountLabel,
+    multiplier: row.multiplier,
+    campaign: validCampaign,
   };
 }
 

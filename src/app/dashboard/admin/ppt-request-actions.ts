@@ -6,11 +6,7 @@ import PptRequestApproved from "@/emails/PptRequestApproved";
 import PptRequestRejected from "@/emails/PptRequestRejected";
 import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
-import {
-  complexityLevelToLinearEstimate,
-  estimateToAmount,
-  formatAmount,
-} from "@/lib/currency";
+import { complexityLevelToLinearEstimate, formatAmount } from "@/lib/currency";
 import { resolveDisplayName } from "@/lib/display-name";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { findTodoWorkflowStateId } from "@/lib/linear-queries";
@@ -20,8 +16,8 @@ import {
   IN_APP_CHANNEL,
   notifyWithPreferences,
 } from "@/lib/notifications";
-import { applyMultiplier } from "@/lib/payout-campaign";
 import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import { DEVHUB_PPT_REQUEST_DESCRIPTION_MARKER } from "@/lib/ppt-request-marker";
 import prisma from "@/lib/prisma";
 import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
@@ -360,14 +356,11 @@ export async function approvePptRequest(
           userId: request.requesterId,
           rank: request.requester.developerRank,
         });
-        const estimatedAmount = formatAmount(
-          applyMultiplier(
-            estimateToAmount(request.requestedEstimate, "MYR"),
-            approvalCampaign?.multiplier ?? 1,
-            "MYR",
-          ),
+        const estimatedAmount = projectPptPayout(
+          request.requestedEstimate,
           "MYR",
-        );
+          approvalCampaign,
+        ).finalLabel;
 
         await notifyWithPreferences({
           userId: request.requesterId,

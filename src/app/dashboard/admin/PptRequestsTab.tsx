@@ -26,8 +26,7 @@ import { StaggerContainer, StaggerItem } from "@/components/animations";
 import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import EmptyState from "@/components/EmptyState";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { applyMultiplier } from "@/lib/payout-campaign";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import type { PptRequestData } from "./PptRequestCard";
 import classes from "./PptRequestsTab.module.css";
 import { approvePptRequest, rejectPptRequest } from "./ppt-request-actions";
@@ -156,23 +155,16 @@ export default function PptRequestsTab({
 
   const assigneeChoice =
     assigneeChoices[selected.id] ?? defaultAssigneeChoice(selected);
-  const selectedMultiplier = selected.campaign?.multiplier ?? 1;
-  const estimatedMYR = formatAmount(
-    applyMultiplier(
-      estimateToAmount(selected.requestedEstimate, "MYR"),
-      selectedMultiplier,
-      "MYR",
-    ),
+  const estimatedMYR = projectPptPayout(
+    selected.requestedEstimate,
     "MYR",
-  );
-  const estimatedRobux = formatAmount(
-    applyMultiplier(
-      estimateToAmount(selected.requestedEstimate, "ROBUX"),
-      selectedMultiplier,
-      "ROBUX",
-    ),
+    selected.campaign,
+  ).finalLabel;
+  const estimatedRobux = projectPptPayout(
+    selected.requestedEstimate,
     "ROBUX",
-  );
+    selected.campaign,
+  ).finalLabel;
 
   async function handleApprove() {
     if (!selected) return;

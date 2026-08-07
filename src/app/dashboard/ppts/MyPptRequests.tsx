@@ -18,9 +18,8 @@ import CampaignBadge from "@/components/CampaignBadge";
 import LinkAnchor from "@/components/LinkAnchor";
 import StatusBadge from "@/components/StatusBadge";
 import type { CurrencyCode } from "@/lib/currency";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { applyMultiplier } from "@/lib/payout-campaign";
 import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import prisma from "@/lib/prisma";
 import { PPT_REQUEST_STATUS, statusCopy } from "@/lib/status-copy";
 
@@ -113,14 +112,13 @@ export default async function MyPptRequests({
                       <Group gap={6} wrap="nowrap">
                         <Text fz="sm">
                           {req.requestedEstimate} &middot;{" "}
-                          {formatAmount(
-                            applyMultiplier(
-                              estimateToAmount(req.requestedEstimate, currency),
-                              campaign?.multiplier ?? 1,
+                          {
+                            projectPptPayout(
+                              req.requestedEstimate,
                               currency,
-                            ),
-                            currency,
-                          )}
+                              campaign,
+                            ).finalLabel
+                          }
                         </Text>
                         {campaign && <CampaignBadge campaign={campaign} />}
                       </Group>

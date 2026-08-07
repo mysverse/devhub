@@ -10,6 +10,9 @@ import type { CurrencyCode } from "@/lib/currency";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
+import { selectCampaignBadge } from "@/lib/payout-campaign";
+import { getLiveCampaignRows } from "@/lib/payout-campaign-server";
+import prisma from "@/lib/prisma";
 import { rankPptsForUser } from "@/lib/task-recommendation-server";
 import DashboardSectionHeader from "./DashboardSectionHeader";
 
@@ -58,13 +61,18 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
   // Previously this was the whole board sorted by payout — the same list for
   // everyone, labelled "Suggested for You". Rank it against what this
   // developer actually does, and show why each task is here.
-  const [claimContext, ranked] = await Promise.all([
+  const [claimContext, ranked, liveCampaigns, profile] = await Promise.all([
     getClaimContext(userId),
     rankPptsForUser(userId, issues),
+    getLiveCampaignRows(),
+    prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { developerRank: true },
+    }),
   ]);
 
   return (
-    <>
+    <section data-testid="suggested-ppts">
       <DashboardSectionHeader
         title="Suggested for You"
         subtitle="Open tasks matched to your specialties and the size of work you take on"
@@ -98,10 +106,16 @@ export default async function SuggestedPPTs({ userId, currency }: Props) {
               currency={currency}
               claimContext={claimContext}
               recommendationReason={because}
+              campaign={selectCampaignBadge(liveCampaigns, {
+                scope: "PPT",
+                userId,
+                rank: profile?.developerRank ?? null,
+                labels: issue.labelNames,
+              })}
             />
           );
         })}
       />
-    </>
+    </section>
   );
 }

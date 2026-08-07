@@ -4,14 +4,15 @@ import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import { ACHIEVEMENTS, type AchievementKey } from "@/lib/achievements";
 import type { CurrencyCode } from "@/lib/currency";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { getLeaderboardIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
-import { applyMultiplier, selectCampaignBadge } from "@/lib/payout-campaign";
+import { selectCampaignBadge } from "@/lib/payout-campaign";
 import {
   getLiveCampaignRows,
   toSelectableCampaign,
 } from "@/lib/payout-campaign-server";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import prisma from "@/lib/prisma";
 import AnimatedProgressBar from "./AnimatedProgressBar";
 import DashboardSectionHeader from "./DashboardSectionHeader";
@@ -192,9 +193,6 @@ export default async function Leaderboard({
       const assignee = issue.assignee;
       if (!assignee) continue;
 
-      const baseAmount = issue.estimate
-        ? estimateToAmount(issue.estimate, currency)
-        : 0;
       const isCompleted = issue.stateType === "completed";
       const assigneeProfile = profileByLinearId.get(assignee.id);
       const assigneeCampaign =
@@ -206,9 +204,9 @@ export default async function Leaderboard({
               rank: assigneeProfile.developerRank,
               labels: issue.labelNames,
             });
-      const amount = assigneeCampaign
-        ? applyMultiplier(baseAmount, assigneeCampaign.multiplier, currency)
-        : baseAmount;
+      const amount =
+        projectPptPayout(issue.estimate, currency, assigneeCampaign)
+          .finalAmount ?? 0;
       const isActive =
         issue.stateType === "started" || issue.stateType === "unstarted";
       const existing = byAssignee.get(assignee.id);

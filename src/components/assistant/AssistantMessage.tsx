@@ -40,6 +40,7 @@ import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
+import CampaignBadge from "@/components/CampaignBadge";
 import MermaidDiagram from "@/components/MermaidDiagram";
 import type {
   AssistantActionDto,
@@ -206,6 +207,39 @@ function ActionCard({
             {status.label}
           </Badge>
         </Group>
+
+        {action.kind === "ppt_request" && action.preview.payout && (
+          <div className={classes.actionPayout}>
+            <Group justify="space-between" align="flex-start" wrap="nowrap">
+              <Stack gap={3} style={{ minWidth: 0 }}>
+                <Text size="xs" c="dimmed" tt="uppercase" fw={750}>
+                  Projected payout
+                </Text>
+                <Text
+                  size="xl"
+                  fw={850}
+                  c={
+                    action.preview.payout.campaign
+                      ? action.preview.payout.campaign.accentColor
+                      : "green"
+                  }
+                >
+                  {action.preview.payout.amountLabel}
+                </Text>
+              </Stack>
+              {action.preview.payout.campaign && (
+                <CampaignBadge campaign={action.preview.payout.campaign} />
+              )}
+            </Group>
+            <Text size="xs" c="dimmed" mt={5} lh={1.45}>
+              {action.preview.payout.campaign
+                ? `Normally ${action.preview.payout.baseLabel}. ${action.preview.payout.multiplier}x applies if approved and payable before ${new Date(
+                    action.preview.payout.campaign.endsAt,
+                  ).toLocaleString()}.`
+                : `Based on your current ${action.preview.payout.currency} rate.`}
+            </Text>
+          </div>
+        )}
 
         {fields.length > 0 && (
           <div className={classes.payloadGrid}>

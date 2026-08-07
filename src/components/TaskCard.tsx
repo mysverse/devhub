@@ -21,8 +21,7 @@ import CampaignBadge, {
   type CampaignBadgeInfo,
 } from "@/components/CampaignBadge";
 import type { CurrencyCode } from "@/lib/currency";
-import { estimateToAmount, formatAmount, formatEstimate } from "@/lib/currency";
-import { applyMultiplier } from "@/lib/payout-campaign";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import { PPT_OWNER_COPY, type PptNextStepOwner } from "@/lib/ppt-reason-copy";
 import {
   PPT_ASSIGNMENT_WATCH_STATUS,
@@ -350,22 +349,12 @@ function TaskCard({
   campaign,
   recommendationReason,
 }: TaskCardProps) {
-  const baseEstimate = estimate ? estimateToAmount(estimate, currency) : 0;
   // What this task actually pays right now. The engine re-derives it
-  // server-side at payout time; this is the honest preview of that number.
-  const pptEstimate = campaign
-    ? applyMultiplier(baseEstimate, campaign.multiplier, currency)
-    : baseEstimate;
-  const estimateLabel = estimate
-    ? campaign
-      ? formatAmount(pptEstimate, currency)
-      : formatEstimate(estimate, currency)
-    : null;
-  const payoutLabel = estimate
-    ? campaign
-      ? formatAmount(pptEstimate, currency)
-      : formatEstimate(estimate, currency)
-    : formatEstimate(estimate, currency);
+  // server-side at payout time; every display uses the same projection helper.
+  const payout = projectPptPayout(estimate, currency, campaign);
+  const pptEstimate = payout.finalAmount ?? 0;
+  const estimateLabel = estimate ? payout.finalLabel : null;
+  const payoutLabel = payout.finalLabel;
 
   if (variant === "compact") {
     return (
@@ -387,7 +376,11 @@ function TaskCard({
             </Badge>
             <Group gap={6} wrap="nowrap">
               {campaign && <CampaignBadge campaign={campaign} />}
-              <Text fw={700} c={campaign ? campaign.accentColor : "green"}>
+              <Text
+                fw={700}
+                c={campaign ? campaign.accentColor : "green"}
+                data-testid="ppt-payout"
+              >
                 {payoutLabel}
               </Text>
             </Group>
@@ -439,9 +432,13 @@ function TaskCard({
                 {campaign && !earningsText && (
                   <CampaignBadge campaign={campaign} />
                 )}
-                <Text fw={700} c={earningsColor} fz="sm">
-                  {earningsText ??
-                    `${formatAmount(pptEstimate, currency)} (Pending)`}
+                <Text
+                  fw={700}
+                  c={earningsColor}
+                  fz="sm"
+                  data-testid="ppt-payout"
+                >
+                  {earningsText ?? `${payout.finalLabel} (Pending)`}
                 </Text>
               </Group>
             )}
@@ -534,6 +531,7 @@ function TaskCard({
               fw={700}
               c={campaign ? campaign.accentColor : "green"}
               fz="sm"
+              data-testid="ppt-payout"
             >
               {payoutLabel}
             </Text>

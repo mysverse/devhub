@@ -4,11 +4,8 @@ import { Badge, Card, Group, List, ListItem, Stack, Text } from "@mantine/core";
 import HelpDrawerShell from "@/components/HelpDrawerShell";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount, getRateMultiplier } from "@/lib/currency";
-import {
-  applyMultiplier,
-  type CampaignBadgeInfo,
-  formatMultiplier,
-} from "@/lib/payout-campaign";
+import type { CampaignBadgeInfo } from "@/lib/payout-campaign";
+import { formatMultiplier } from "@/lib/payout-campaign";
 import {
   DEFAULT_PAYOUT_POLICY,
   describeProofRequirement,
@@ -16,6 +13,7 @@ import {
   describeWatchPolicy,
   type PayoutPolicy,
 } from "@/lib/payout-policy";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 
 type Props = {
   currency: CurrencyCode;
@@ -72,17 +70,7 @@ export default function HelpDrawer({
                 color={campaign ? campaign.accentColor : "blue"}
                 size="lg"
               >
-                {pt}pt ={" "}
-                {formatAmount(
-                  campaign
-                    ? applyMultiplier(
-                        pt * multiplier,
-                        campaign.multiplier,
-                        currency,
-                      )
-                    : pt * multiplier,
-                  currency,
-                )}
+                {pt}pt = {projectPptPayout(pt, currency, campaign).finalLabel}
               </Badge>
             ))}
           </Group>

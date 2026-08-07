@@ -19,8 +19,8 @@ import { toast } from "sonner";
 import { SPRING } from "@/components/animations";
 import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
-import { applyMultiplier, type CampaignBadgeInfo } from "@/lib/payout-campaign";
+import type { CampaignBadgeInfo } from "@/lib/payout-campaign";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import { approvePptRequest, rejectPptRequest } from "./ppt-request-actions";
 
 export type PptRequestData = {
@@ -81,23 +81,16 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
   const [rejectReason, setRejectReason] = useState("");
   const [assignRequester, setAssignRequester] = useState(true);
 
-  const multiplier = request.campaign?.multiplier ?? 1;
-  const estimatedMYR = formatAmount(
-    applyMultiplier(
-      estimateToAmount(request.requestedEstimate, "MYR"),
-      multiplier,
-      "MYR",
-    ),
+  const estimatedMYR = projectPptPayout(
+    request.requestedEstimate,
     "MYR",
-  );
-  const estimatedRobux = formatAmount(
-    applyMultiplier(
-      estimateToAmount(request.requestedEstimate, "ROBUX"),
-      multiplier,
-      "ROBUX",
-    ),
+    request.campaign,
+  ).finalLabel;
+  const estimatedRobux = projectPptPayout(
+    request.requestedEstimate,
     "ROBUX",
-  );
+    request.campaign,
+  ).finalLabel;
 
   async function handleApprove() {
     setApproving(true);

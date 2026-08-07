@@ -52,12 +52,11 @@ import {
 } from "@/components/animations";
 import CampaignBadge from "@/components/CampaignBadge";
 import { signIn } from "@/lib/auth-client";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
 import {
-  applyMultiplier,
   type CampaignBadgeInfo,
   formatMultiplier,
 } from "@/lib/payout-campaign";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import type { PptRequestPrefill } from "@/lib/task-idea";
 import {
   draftPptFromLinearIssue,
@@ -105,11 +104,8 @@ const MAX_TOTAL_SIZE = 30 * 1024 * 1024;
  */
 function estimateOptions(campaign: CampaignBadgeInfo | null) {
   return [1, 2, 3, 4, 5].map((n) => {
-    const base = estimateToAmount(n, "MYR");
-    const amount = campaign
-      ? applyMultiplier(base, campaign.multiplier, "MYR")
-      : base;
-    return { value: String(n), label: `${n} · ${formatAmount(amount, "MYR")}` };
+    const payout = projectPptPayout(n, "MYR", campaign);
+    return { value: String(n), label: `${n} · ${payout.finalLabel}` };
   });
 }
 
@@ -982,14 +978,10 @@ export default function PptRequestModal({
                     fw={700}
                     c={campaign ? campaign.accentColor : "green"}
                   >
-                    {formatAmount(
-                      applyMultiplier(
-                        estimateToAmount(Number(estimate), "MYR"),
-                        campaign?.multiplier ?? 1,
-                        "MYR",
-                      ),
-                      "MYR",
-                    )}
+                    {
+                      projectPptPayout(Number(estimate), "MYR", campaign)
+                        .finalLabel
+                    }
                   </Text>
                 </Group>
               </Group>

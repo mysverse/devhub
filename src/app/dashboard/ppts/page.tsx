@@ -28,17 +28,11 @@ import TaskCard from "@/components/TaskCard";
 import { getSession } from "@/lib/auth-utils";
 import { getClaimContext } from "@/lib/claim-context";
 import type { CurrencyCode } from "@/lib/currency";
-import {
-  estimateToAmount,
-  formatAmount,
-  formatEstimate,
-  getCurrencyForPaymentMethod,
-} from "@/lib/currency";
+import { formatAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
 import { getPptBoardIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { PptBoardIssueDTO } from "@/lib/linear-queries";
 import {
-  applyMultiplier,
   type CampaignBadgeInfo,
   formatMultiplier,
   getCampaignWindowState,
@@ -51,6 +45,7 @@ import {
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { ensureUserProfile } from "@/lib/user-profile";
@@ -320,12 +315,10 @@ function ProjectSection({
   // Campaign-aware so the project total agrees with the sum of its cards.
   const totalPayout = items.reduce((sum, item) => {
     if (!item.issue.estimate) return sum;
-    const base = estimateToAmount(item.issue.estimate, currency);
     return (
       sum +
-      (item.campaign
-        ? applyMultiplier(base, item.campaign.multiplier, currency)
-        : base)
+      (projectPptPayout(item.issue.estimate, currency, item.campaign)
+        .finalAmount ?? 0)
     );
   }, 0);
   return (
@@ -614,16 +607,16 @@ async function PPTList({
                     c={item.campaign ? item.campaign.accentColor : "green"}
                     fw={700}
                   >
-                    {item.campaign && item.issue.estimate
-                      ? `${formatMultiplier(item.campaign.multiplier)} · ${formatAmount(
-                          applyMultiplier(
-                            estimateToAmount(item.issue.estimate, currency),
-                            item.campaign.multiplier,
+                    {item.campaign
+                      ? `${formatMultiplier(item.campaign.multiplier)} · ${
+                          projectPptPayout(
+                            item.issue.estimate,
                             currency,
-                          ),
-                          currency,
-                        )}`
-                      : formatEstimate(item.issue.estimate, currency)}
+                            item.campaign,
+                          ).finalLabel
+                        }`
+                      : projectPptPayout(item.issue.estimate, currency)
+                          .finalLabel}
                   </Text>
                   <Text size="xs" c="dimmed" mx="sm">
                     |

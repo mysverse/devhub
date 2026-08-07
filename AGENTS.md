@@ -188,6 +188,12 @@ misprices real payouts:
   promo spend.
 - **Every multiplied amount goes through `roundAmount()`**; a 1.5x campaign
   would otherwise send fractional Robux to FinSys and sub-cent MYR to Billplz.
+- **Every projected PPT amount goes through `projectPptPayout()`.** Server
+  surfaces first select the campaign for the developer, rank, and real issue
+  labels, then pass it to the shared client-safe presenter. This includes the
+  board, dashboard suggestions, active-task totals, request/admin views,
+  notifications, and assistant confirmation cards. Do not re-inline
+  `estimateToAmount() * multiplier` in a display surface.
 - **`PayoutCampaignApplication` is both the uplift ledger and the idempotency
   key** — unique on `(campaignId, scope, entityId)`. Rejections and
   cancellations set `reverted`, they never delete.

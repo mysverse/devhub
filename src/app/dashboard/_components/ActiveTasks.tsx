@@ -4,16 +4,17 @@ import { FadeIn, StaggerContainer, StaggerItem } from "@/components/animations";
 import LinkAnchor from "@/components/LinkAnchor";
 import TaskCard from "@/components/TaskCard";
 import type { CurrencyCode } from "@/lib/currency";
-import { estimateToAmount, formatAmount } from "@/lib/currency";
+import { formatAmount } from "@/lib/currency";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import type { IssueDTO } from "@/lib/linear-queries";
-import { applyMultiplier, selectCampaignBadge } from "@/lib/payout-campaign";
+import { selectCampaignBadge } from "@/lib/payout-campaign";
 import { getLiveCampaignRows } from "@/lib/payout-campaign-server";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import { getAssignmentWatchTiming } from "@/lib/ppt-assignment-watch-activity";
 import { describePptNextStep, formatReason } from "@/lib/ppt-eligibility";
+import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import prisma from "@/lib/prisma";
 import ActiveTasksEmptyState from "./ActiveTasksEmptyState";
 import DashboardSectionHeader from "./DashboardSectionHeader";
@@ -214,14 +215,7 @@ export default async function ActiveTasks({
             });
             const earningsText = hasPptLabel
               ? issue.estimate
-                ? `${formatAmount(
-                    applyMultiplier(
-                      estimateToAmount(issue.estimate, currency),
-                      campaign?.multiplier ?? 1,
-                      currency,
-                    ),
-                    currency,
-                  )} (Pending)`
+                ? `${projectPptPayout(issue.estimate, currency, campaign).finalLabel} (Pending)`
                 : null
               : bonus
                 ? `Up to ${formatAmount(bonus.maxAmount, bonusCurrency)}`

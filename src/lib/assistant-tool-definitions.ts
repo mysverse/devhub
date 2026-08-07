@@ -22,6 +22,13 @@ const CreateBonusTaskSchema = z.object({
 const SearchTasksSchema = z.object({
   query: z.string().trim().min(1).max(160),
 });
+const WikiSearchSchema = z.object({
+  query: z.string().trim().min(1).max(160),
+  game: z.enum(["all", "bandaraya", "lebuhraya", "sumaya", "faq"]).nullable(),
+});
+const WikiArticleSchema = z.object({
+  slug: z.string().trim().min(1).max(160),
+});
 const EmptySchema = z.object({});
 const TeamSchema = z.object({ teamId: z.string().min(1) });
 const DestinationSchema = z.object({
@@ -92,6 +99,28 @@ const SuggestSchema = z.object({
 });
 
 export const ASSISTANT_TOOLS: AssistantToolDefinition[] = [
+  {
+    name: "search_game_wiki",
+    description:
+      "Search the MYSverse Wiki documentation across games (Bandaraya, Lebuhraya, Sumaya) for gameplay mechanics, emergency services, economy, jobs, rules, and housing before suggesting feature improvements or task ideas.",
+    schema: WikiSearchSchema,
+    mutation: false,
+    activity: {
+      running: "Searching game wiki",
+      complete: "Game wiki search ready",
+    },
+  },
+  {
+    name: "get_game_wiki_article",
+    description:
+      "Read full details and sections of an exact game wiki article by slug (e.g. 'sumaya/jobs-fishing' or 'bandaraya/emergency-services').",
+    schema: WikiArticleSchema,
+    mutation: false,
+    activity: {
+      running: "Reading wiki article",
+      complete: "Wiki article ready",
+    },
+  },
   {
     name: "search_tasks",
     description:

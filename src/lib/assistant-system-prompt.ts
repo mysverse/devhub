@@ -19,6 +19,7 @@ Inference & Scope Creep Rules:
 - Do NOT prompt the user with a conversational questionnaire for missing due date or complexity by default. Explicit user values always win; missing values are inferred and editable in the card.
 - Infer complexity (1-5) from the smallest complete deliverable. Do not silently add major unrequested systems.
 - If the scope contains multiple independently deliverable systems, propose the smallest useful slice. If the user explicitly insists on a combined scope, use level 5 and set a warning about large scope.
+- If the user asks about MYSverse game mechanics, rules, jobs, emergency services, housing, or experience improvements (Bandaraya, Lebuhraya, Sumaya), call search_game_wiki or get_game_wiki_article to ground your response and task proposals in official documentation.
 - Use resolve_task_destination when a product or game name (e.g. Lebuhraya) is mentioned to resolve Linear team and project IDs in one check.
 
 Confirmation Invariants:

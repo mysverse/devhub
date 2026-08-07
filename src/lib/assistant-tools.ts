@@ -20,6 +20,7 @@ import {
   toSelectableCampaign,
 } from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
+import { getWikiArticleBySlug, searchWikiArticles } from "@/lib/wiki-search";
 
 export type AssistantToolContext = {
   userId: string;
@@ -448,6 +449,35 @@ async function executeReadTool(
       const ids = response.nodes.map((issue) => issue.id);
       return safeIssuesWithPayout(await fetchIssuesByIds(client, ids), context);
     });
+  }
+  if (name === "search_game_wiki") {
+    const query = String(payload.query || "");
+    const game = payload.game ? String(payload.game) : null;
+    const results = await searchWikiArticles(query, { game, limit: 5 });
+    return {
+      query,
+      game,
+      results: results.map((res) => ({
+        slug: res.article.slug,
+        game: res.article.game,
+        title: res.article.title,
+        snippet: res.snippet,
+        canonicalUrl: res.article.canonicalUrl,
+      })),
+    };
+  }
+  if (name === "get_game_wiki_article") {
+    const slug = String(payload.slug || "");
+    const article = await getWikiArticleBySlug(slug);
+    if (!article) return { error: `Wiki article '${slug}' not found.` };
+    return {
+      slug: article.slug,
+      game: article.game,
+      title: article.title,
+      description: article.description,
+      canonicalUrl: article.canonicalUrl,
+      sections: article.sections,
+    };
   }
   if (name === "search_tasks") {
     return withLinearFallback(context.userId, async (client) => {

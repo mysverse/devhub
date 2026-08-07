@@ -63,16 +63,13 @@ to diagnose:
   schema. Keep that ordering; prerenders defer all DB IO, so the build never
   needs the new schema. Deploys run the same `build` script as local runs on
   purpose — put build steps in `package.json`, not in `vercel.json`.
-- **Keep `sharp` pinned to the version Next depends on.** sharp's prebuilt
+- **Keep `sharp` aligned with the version Next depends on.** sharp's prebuilt
   binding reaches `libvips-cpp.so.*` through an RPATH rather than an import,
-  so tracing only bundles the library when it recognises sharp's package
-  layout — which it does for the release Next ships (0.34.x, `next`'s own
-  optional dependency) but not for 0.35.x, whose binding hides behind an
-  `index.cjs` indirection. On 0.35.x every route touching an image 500s in
-  production with `ERR_DLOPEN_FAILED: libvips-cpp.so.<version>: cannot open
-  shared object file`, while working fine locally where `node_modules` still
-  holds the file. Check with `pnpm why sharp` before bumping it; matching
-  Next also keeps a single copy in the tree.
+  so tracing must recognise that package layout. Upgrade Next and sharp as a
+  pair, confirm `pnpm why sharp` reports one shared version, and require
+  `pnpm build:mock` to prove every traced binding carries its matching libvips.
+  Next 16.3 + sharp 0.35.3 is the first verified 0.35 pairing here; older Next
+  releases with sharp 0.35 produced `ERR_DLOPEN_FAILED` only after deployment.
 - **Do not reach for `outputFileTracingIncludes` to fix a missing native
   library.** A glob naming a file inside pnpm's store gets re-derived through
   every symlink pointing at it, and Vercel then rejects the upload with "The
@@ -459,3 +456,13 @@ CRON_SECRET
 - **Server component navigation**: do not pass `component={Link}` to Mantine components from Server Components. Use `LinkButton` (`src/components/LinkButton.tsx`) and `LinkAnchor` (`src/components/LinkAnchor.tsx`) for internal navigation wrappers.
 - Tailwind CSS 4 is available alongside Mantine. PostCSS uses the Mantine preset and breakpoint variables.
 - Path alias: `@/*` maps to `src/*`.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->

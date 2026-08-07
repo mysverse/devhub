@@ -9,6 +9,10 @@ const nextConfig: NextConfig = {
   // somewhere else; production is unset and keeps .next.
   distDir: process.env.NEXT_DIST_DIR ?? ".next",
   cacheComponents: true,
+  // Next 16.3's dev-server external ESM bridge can load pg's CJS default as
+  // undefined while compiling a new route. Bundle pg so Prisma's adapter sees
+  // the same module shape in every App Router chunk.
+  transpilePackages: ["pg"],
   // The EasyParcel export route reads the committed .xlsx template from disk at
   // runtime; trace it into that route's bundle so it survives deployment.
   outputFileTracingIncludes: {
@@ -16,13 +20,8 @@ const nextConfig: NextConfig = {
       "./src/lib/welcome-pack/easyparcel-template.xlsx",
     ],
   },
-  experimental: {
-    // Switches App Router to the vendored experimental React channel, which
-    // exports ViewTransition/addTransitionType — required by
-    // motion-plus/animate-view (dashboard route transitions in template.tsx).
-    // Revert this flag together with that template if it causes trouble.
-    viewTransition: true,
-  },
+  // Next 16.3 ships App Router view-transition support through its vendored
+  // React runtime. The former experimental.viewTransition switch was removed.
   images: {
     remotePatterns: [
       {

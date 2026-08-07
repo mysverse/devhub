@@ -52,7 +52,7 @@ import {
   SPRING,
   StepTransition,
 } from "@/components/animations";
-import { signIn } from "@/lib/auth-client";
+import { oauth2 } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 import { formatAmount, getRateMultiplier } from "@/lib/currency";
 import type {
@@ -155,7 +155,11 @@ export default function OnboardingFlow({
     }
 
     setLinkingProvider(providerId);
-    signIn.oauth2({
+    // This page only runs once the user already has a session (established
+    // by the earlier Linear sign-in) — use the account-linking endpoint, not
+    // signIn.oauth2, or Discord/Roblox get created as a brand new user and
+    // silently swap the session out from under the onboarding flow.
+    oauth2.link({
       providerId,
       callbackURL: "/onboarding",
     });

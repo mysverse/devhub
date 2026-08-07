@@ -45,6 +45,13 @@ export type TaskIdeaAnchor =
       projectName: string | null;
     };
 
+export type TaskIdeaWikiReference = {
+  game: string;
+  slug: string;
+  articleTitle: string;
+  canonicalUrl: string;
+};
+
 export type TaskIdea = {
   /** Stable within one batch; keys selection and conversion. */
   ref: string;
@@ -63,6 +70,7 @@ export type TaskIdea = {
   because: string;
   origin: TaskIdeaOrigin;
   anchor: TaskIdeaAnchor;
+  wikiReference?: TaskIdeaWikiReference | null;
 };
 
 /** DevHub's complexity scale. Anything outside it is not submittable. */

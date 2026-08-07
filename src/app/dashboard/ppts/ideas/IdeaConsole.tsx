@@ -52,6 +52,7 @@ export default function IdeaConsole({
   canPrompt: boolean;
 }) {
   const [prompt, setPrompt] = useState("");
+  const [gameFilter, setGameFilter] = useState<string | null>("all");
   const [teamId, setTeamId] = useState<string | null>(null);
   const [projects, setProjects] = useState<LinearProject[]>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
@@ -75,6 +76,7 @@ export default function IdeaConsole({
     startGenerating(async () => {
       const result = await generateTaskIdeas({
         prompt: prompt.trim() || undefined,
+        gameFilter,
         teamId,
         teamName: teams.find((team) => team.id === teamId)?.name ?? null,
         projectId,
@@ -119,6 +121,18 @@ export default function IdeaConsole({
           )}
 
           <Group grow align="flex-end">
+            <Select
+              label="Game Experience"
+              placeholder="All games"
+              value={gameFilter}
+              onChange={setGameFilter}
+              data={[
+                { value: "all", label: "All Experiences" },
+                { value: "bandaraya", label: "Bandaraya" },
+                { value: "lebuhraya", label: "Lebuhraya" },
+                { value: "sumaya", label: "Sumaya" },
+              ]}
+            />
             <Select
               label="Team"
               placeholder="Any team"
@@ -206,6 +220,19 @@ export default function IdeaConsole({
                         {idea.specialty && (
                           <Badge size="sm" variant="light" color="blue">
                             {idea.specialty.toLowerCase()}
+                          </Badge>
+                        )}
+                        {idea.wikiReference && (
+                          <Badge
+                            size="sm"
+                            variant="outline"
+                            color="teal"
+                            component="a"
+                            href={idea.wikiReference.canonicalUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            📖 {idea.wikiReference.articleTitle}
                           </Badge>
                         )}
                       </Group>

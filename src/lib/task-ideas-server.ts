@@ -14,6 +14,7 @@ import {
   type TaskIdea,
 } from "@/lib/task-idea";
 import { getRecommendationHistory } from "@/lib/task-recommendation-server";
+import { searchWikiArticles } from "@/lib/wiki-search";
 
 // Turns "what should I work on" into concrete ideas: the open board ranked for
 // this developer, plus — when the adapter is configured — backlog issues and
@@ -139,6 +140,7 @@ export async function generateIdeasForDeveloper(input: {
   backlog: PromptIssue[];
   scope: IdeaScope;
   request: string | null;
+  gameFilter?: string | null;
   limit?: number;
 }): Promise<GeneratedIdeas> {
   const limit = input.limit ?? 5;
@@ -148,15 +150,20 @@ export async function generateIdeasForDeveloper(input: {
     return { ideas: rankedIdeas, llmUsed: false };
   }
 
-  const context = await getPromptContextForUser(input.userId, input.linearId);
+  const [context, wikiResults] = await Promise.all([
+    getPromptContextForUser(input.userId, input.linearId),
+    searchWikiArticles(input.request || "gameplay experience mechanics", {
+      game: input.gameFilter,
+      limit: 3,
+    }),
+  ]);
+
   const promptScope: PromptScope = {
     teamName: input.scope.teamName ?? null,
     projectName: input.scope.projectName ?? null,
   };
 
   const suggestions = await proposeTaskIdeas({
-    // A batch-local handle, not the real user id — PromptDeveloper.ref is
-    // documented as opaque and should stay that way.
     developer: {
       ref: "dev-1",
       specialties: input.profile
@@ -183,6 +190,8 @@ export async function generateIdeasForDeveloper(input: {
         ? backlogByIdentifier.get(idea.identifier)
         : undefined;
 
+    const wikiMatch = wikiResults[index % (wikiResults.length || 1)]?.article;
+
     return {
       ref: `model:${index}`,
       title: idea.title,
@@ -192,11 +201,17 @@ export async function generateIdeasForDeveloper(input: {
       specialty: idea.specialty,
       because: idea.because?.trim() || "Suggested from your recent work.",
       origin: "model",
+      wikiReference: wikiMatch
+        ? {
+            game: wikiMatch.game,
+            slug: wikiMatch.slug,
+            articleTitle: wikiMatch.title,
+            canonicalUrl: wikiMatch.canonicalUrl,
+          }
+        : null,
       anchor: anchorIssue
         ? {
             kind: "existing",
-            // Identifier is the only thing the model supplied; everything
-            // else comes from the row we sent it.
             linearIssueId: anchorIssue.identifier,
             identifier: anchorIssue.identifier,
             url: null,

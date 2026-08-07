@@ -27,6 +27,7 @@ export type GenerateIdeasResult =
  */
 export async function generateTaskIdeas(input: {
   prompt?: string;
+  gameFilter?: string | null;
   teamId?: string | null;
   teamName?: string | null;
   projectId?: string | null;
@@ -79,6 +80,7 @@ export async function generateTaskIdeas(input: {
       backlog,
       scope,
       request,
+      gameFilter: input.gameFilter,
     });
   } catch (e) {
     if (e instanceof LinearReauthRequiredError) {

@@ -129,7 +129,7 @@ export const auth = betterAuth({
           clientSecret: process.env.ROBLOX_CLIENT_SECRET ?? "",
           authorizationUrl: "https://apis.roblox.com/oauth/v1/authorize",
           tokenUrl: "https://apis.roblox.com/oauth/v1/token",
-          scopes: ["openid", "profile", "email"],
+          scopes: ["openid", "profile"],
           pkce: true,
           getUserInfo: async (tokens) => {
             const response = await fetch(
@@ -145,14 +145,15 @@ export const auth = betterAuth({
               preferred_username: string;
               nickname: string;
               picture: string | null;
-              email?: string;
-              email_verified?: boolean;
             };
             return {
               id: data.sub,
               name: data.preferred_username || data.nickname,
-              email: data.email,
-              emailVerified: data.email_verified ?? false,
+              // DevHub only stores robloxId, never an email, from this
+              // provider — see the matching Discord comment above. Also
+              // sidesteps Roblox accounts with no verified email on file.
+              email: `roblox-${data.sub}@oauth.devhub.mysver.se`,
+              emailVerified: false,
               image: data.picture ?? undefined,
             };
           },

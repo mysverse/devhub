@@ -461,7 +461,7 @@ async function executeReadTool(
         slug: res.article.slug,
         game: res.article.game,
         title: res.article.title,
-        snippet: res.snippet,
+        snippet: res.snippet.slice(0, 150),
         canonicalUrl: res.article.canonicalUrl,
       })),
     };
@@ -476,7 +476,10 @@ async function executeReadTool(
       title: article.title,
       description: article.description,
       canonicalUrl: article.canonicalUrl,
-      sections: article.sections,
+      sections: article.sections.map((sec) => ({
+        heading: sec.heading,
+        summary: sec.summary || sec.content.slice(0, 150),
+      })),
     };
   }
   if (name === "search_tasks") {

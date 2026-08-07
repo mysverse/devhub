@@ -1,3 +1,4 @@
+import type { DeveloperSpecialtyValue } from "@/lib/developer-access";
 import { getWikiKnowledgeIndex, type WikiArticle } from "@/lib/wiki-knowledge";
 
 export type WikiSearchResult = {
@@ -8,7 +9,7 @@ export type WikiSearchResult = {
 
 export type WikiSearchOptions = {
   game?: string | null;
-  specialties?: string[];
+  specialties?: DeveloperSpecialtyValue[];
   limit?: number;
 };
 
@@ -20,15 +21,15 @@ function normalizeWords(text: string): string[] {
     .filter((w) => w.length > 1);
 }
 
-function specialtyToTags(specialty: string): string[] {
-  const s = specialty.toUpperCase();
-  if (s.includes("SCRIPT"))
-    return ["scripting", "economy", "jobs", "emergency"];
-  if (s.includes("BUILD") || s.includes("MAP") || s.includes("MODEL"))
-    return ["building", "housing", "vehicles"];
-  if (s.includes("UI") || s.includes("GUI")) return ["ui", "scripting"];
-  if (s.includes("ANIM")) return ["combat", "emergency", "jobs"];
-  return [];
+const SPECIALTY_TAG_MAP: Record<DeveloperSpecialtyValue, string[]> = {
+  SCRIPTING: ["scripting", "economy", "ui", "emergency"],
+  BUILDING: ["building", "jobs", "emergency"],
+  MESHING: ["building", "vehicles", "ui"],
+  VEHICLES: ["vehicles", "emergency"],
+};
+
+function specialtyToTags(specialty: DeveloperSpecialtyValue): string[] {
+  return SPECIALTY_TAG_MAP[specialty] ?? [];
 }
 
 export async function searchWikiArticles(

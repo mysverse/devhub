@@ -9,11 +9,12 @@ import {
   List,
   ListItem,
   Select,
+  SimpleGrid,
   Stack,
   Text,
   Textarea,
 } from "@mantine/core";
-import { Clipboard, Lightbulb, Send, Sparkles } from "lucide-react";
+import { BookOpen, Clipboard, Lightbulb, Send, Sparkles } from "lucide-react";
 import dynamic from "next/dynamic";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -120,7 +121,7 @@ export default function IdeaConsole({
             />
           )}
 
-          <Group grow align="flex-end">
+          <SimpleGrid cols={{ base: 1, sm: 3 }}>
             <Select
               label="Game Experience"
               placeholder="All games"
@@ -156,7 +157,7 @@ export default function IdeaConsole({
                 label: project.name,
               }))}
             />
-          </Group>
+          </SimpleGrid>
 
           <Group justify="flex-end">
             <Button
@@ -232,7 +233,8 @@ export default function IdeaConsole({
                             target="_blank"
                             rel="noopener noreferrer"
                           >
-                            📖 {idea.wikiReference.articleTitle}
+                            <BookOpen size={12} style={{ marginRight: 4 }} />
+                            {idea.wikiReference.articleTitle}
                           </Badge>
                         )}
                       </Group>

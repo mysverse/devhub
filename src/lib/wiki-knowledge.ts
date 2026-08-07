@@ -1,33 +1,38 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import * as z from "zod/v4";
 import { isDevMode } from "@/lib/dev-mode";
 
-export type WikiSection = {
-  heading: string;
-  summary?: string;
-  content: string;
-  systemTags?: string[];
-};
+const WikiSectionSchema = z.object({
+  heading: z.string(),
+  summary: z.string().optional(),
+  content: z.string().optional().default(""),
+  systemTags: z.array(z.string()).optional(),
+});
 
-export type WikiArticle = {
-  slug: string;
-  game: "bandaraya" | "lebuhraya" | "sumaya" | "faq" | "general" | string;
-  title: string;
-  description: string;
-  summary?: string;
-  canonicalUrl: string;
-  systemTags?: string[];
-  sections: WikiSection[];
-  content?: string;
-  tags: string[];
-};
+const WikiArticleSchema = z.object({
+  slug: z.string(),
+  game: z.string(),
+  title: z.string(),
+  description: z.string(),
+  summary: z.string().optional(),
+  canonicalUrl: z.string(),
+  systemTags: z.array(z.string()).optional(),
+  sections: z.array(WikiSectionSchema),
+  content: z.string().optional(),
+  tags: z.array(z.string()),
+});
 
-export type WikiKnowledgeIndex = {
-  version: string;
-  generatedAt: string;
-  totalArticles: number;
-  articles: WikiArticle[];
-};
+const WikiKnowledgeIndexSchema = z.object({
+  version: z.string(),
+  generatedAt: z.string(),
+  totalArticles: z.number(),
+  articles: z.array(WikiArticleSchema),
+});
+
+export type WikiSection = z.infer<typeof WikiSectionSchema>;
+export type WikiArticle = z.infer<typeof WikiArticleSchema>;
+export type WikiKnowledgeIndex = z.infer<typeof WikiKnowledgeIndexSchema>;
 
 const DEFAULT_WIKI_URL = "https://mys.wiki/knowledge-base.json";
 const LOCAL_WIKI_PATH = path.resolve(
@@ -39,6 +44,12 @@ let cachedIndex: WikiKnowledgeIndex | null = null;
 let lastCacheTime = 0;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 
+function parseKnowledgeIndex(data: unknown): WikiKnowledgeIndex | null {
+  const result = WikiKnowledgeIndexSchema.safeParse(data);
+  if (!result.success) return null;
+  return result.data;
+}
+
 export async function fetchRemoteKnowledgeIndex(): Promise<WikiKnowledgeIndex | null> {
   const url = process.env.WIKI_KNOWLEDGE_URL || DEFAULT_WIKI_URL;
   try {
@@ -47,11 +58,7 @@ export async function fetchRemoteKnowledgeIndex(): Promise<WikiKnowledgeIndex | 
       signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) return null;
-    const data = (await response.json()) as WikiKnowledgeIndex;
-    if (data && Array.isArray(data.articles)) {
-      return data;
-    }
-    return null;
+    return parseKnowledgeIndex(await response.json());
   } catch (_error) {
     return null;
   }
@@ -60,15 +67,18 @@ export async function fetchRemoteKnowledgeIndex(): Promise<WikiKnowledgeIndex | 
 export async function readLocalKnowledgeIndex(): Promise<WikiKnowledgeIndex | null> {
   try {
     const raw = await readFile(LOCAL_WIKI_PATH, "utf8");
-    const data = JSON.parse(raw) as WikiKnowledgeIndex;
-    if (data && Array.isArray(data.articles)) {
-      return data;
-    }
-    return null;
+    return parseKnowledgeIndex(JSON.parse(raw));
   } catch {
     return null;
   }
 }
+
+const EMPTY_INDEX: WikiKnowledgeIndex = {
+  version: "1.0",
+  generatedAt: new Date().toISOString(),
+  totalArticles: 0,
+  articles: [],
+};
 
 export async function getWikiKnowledgeIndex(): Promise<WikiKnowledgeIndex> {
   const now = Date.now();
@@ -102,10 +112,8 @@ export async function getWikiKnowledgeIndex(): Promise<WikiKnowledgeIndex> {
     return localFallback;
   }
 
-  return {
-    version: "1.0",
-    generatedAt: new Date().toISOString(),
-    totalArticles: 0,
-    articles: [],
-  };
+  // 4. Cache the empty fallback to prevent stampede on repeated calls
+  cachedIndex = EMPTY_INDEX;
+  lastCacheTime = now;
+  return EMPTY_INDEX;
 }

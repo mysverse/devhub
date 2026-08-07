@@ -78,6 +78,8 @@ export async function proposeTaskIdeas(input: {
   request: string | null;
   limit: number;
   userId: string | null;
+  /** Compact wiki summaries grounding the model in real game systems. */
+  gameWikiContext?: string[] | null;
 }): Promise<TaskIdeaSuggestions | null> {
   return generateStructured({
     surface: "task_ideas",
@@ -90,6 +92,7 @@ export async function proposeTaskIdeas(input: {
       scope: input.scope,
       request: input.request,
       limit: input.limit,
+      gameWikiContext: input.gameWikiContext,
     }),
     schema: TASK_IDEA_SCHEMA,
     // Several ideas, each with criteria — the largest shape here, and the

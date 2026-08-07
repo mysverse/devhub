@@ -166,6 +166,8 @@ export function buildTaskIdeaPrompt(input: {
   scope: PromptScope | null;
   request: string | null;
   limit: number;
+  /** Compact wiki summaries grounding the model in real game systems. */
+  gameWikiContext?: string[] | null;
 }) {
   const lines = [
     `Suggest up to ${input.limit} pieces of work.`,
@@ -199,6 +201,14 @@ export function buildTaskIdeaPrompt(input: {
           .join("\n---\n")
       : "(empty — every suggestion must be original)",
   );
+
+  if (input.gameWikiContext?.length) {
+    lines.push(
+      "",
+      "Game wiki (grounding — reference these systems in suggestions when relevant):",
+      ...input.gameWikiContext,
+    );
+  }
 
   if (input.request) {
     lines.push("", "Developer request:", input.request);

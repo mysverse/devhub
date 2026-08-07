@@ -1,4 +1,5 @@
 import type { LinearClient } from "@linear/sdk";
+import type { DeveloperSpecialtyValue } from "@/lib/developer-access";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { isLlmConfigured } from "@/lib/llm";
 import type {
@@ -14,7 +15,7 @@ import {
   type TaskIdea,
 } from "@/lib/task-idea";
 import { getRecommendationHistory } from "@/lib/task-recommendation-server";
-import { searchWikiArticles } from "@/lib/wiki-search";
+import { searchWikiArticles, searchWikiSummaries } from "@/lib/wiki-search";
 
 // Turns "what should I work on" into concrete ideas: the open board ranked for
 // this developer, plus — when the adapter is configured — backlog issues and
@@ -135,7 +136,7 @@ export type GeneratedIdeas = {
 export async function generateIdeasForDeveloper(input: {
   userId: string;
   linearId: string | null;
-  profile: { specialties: string[]; developerRank: string };
+  profile: { specialties: DeveloperSpecialtyValue[]; developerRank: string };
   rankedIdeas: TaskIdea[];
   backlog: PromptIssue[];
   scope: IdeaScope;
@@ -150,13 +151,17 @@ export async function generateIdeasForDeveloper(input: {
     return { ideas: rankedIdeas, llmUsed: false };
   }
 
-  const [context, wikiResults] = await Promise.all([
+  const wikiQuery = input.request || "gameplay experience mechanics";
+  const wikiOpts = {
+    game: input.gameFilter,
+    specialties: input.profile.specialties,
+    limit: 3,
+  };
+
+  const [context, wikiResults, wikiSummaries] = await Promise.all([
     getPromptContextForUser(input.userId, input.linearId),
-    searchWikiArticles(input.request || "gameplay experience mechanics", {
-      game: input.gameFilter,
-      specialties: input.profile.specialties,
-      limit: 3,
-    }),
+    searchWikiArticles(wikiQuery, wikiOpts),
+    searchWikiSummaries(wikiQuery, wikiOpts),
   ]);
 
   const promptScope: PromptScope = {
@@ -177,6 +182,7 @@ export async function generateIdeasForDeveloper(input: {
     request: input.request,
     limit,
     userId: input.userId,
+    gameWikiContext: wikiSummaries.length > 0 ? wikiSummaries : null,
   });
 
   if (!suggestions) return { ideas: rankedIdeas, llmUsed: false };
@@ -191,7 +197,16 @@ export async function generateIdeasForDeveloper(input: {
         ? backlogByIdentifier.get(idea.identifier)
         : undefined;
 
-    const wikiMatch = wikiResults[index % (wikiResults.length || 1)]?.article;
+    // Match wiki article by best title overlap with the idea title
+    const wikiMatch =
+      wikiResults.find((wr) =>
+        idea.title
+          .toLowerCase()
+          .split(/\s+/)
+          .some(
+            (w) => w.length > 3 && wr.article.title.toLowerCase().includes(w),
+          ),
+      )?.article ?? wikiResults[0]?.article;
 
     return {
       ref: `model:${index}`,

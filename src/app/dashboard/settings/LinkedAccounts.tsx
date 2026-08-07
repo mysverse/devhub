@@ -4,7 +4,7 @@ import { Alert, Badge, Button, Group, Stack, Text } from "@mantine/core";
 import { useState } from "react";
 import { toast } from "sonner";
 import FormSection from "@/components/FormSection";
-import { signIn } from "@/lib/auth-client";
+import { oauth2 } from "@/lib/auth-client";
 import type { SetupIntegrationAvailability } from "@/lib/integration-availability";
 import { unlinkAccount } from "./account-actions";
 
@@ -46,7 +46,11 @@ export default function LinkedAccounts({
     }
 
     setLoading(providerId);
-    await signIn.oauth2({
+    // Use the dedicated account-linking endpoint, not signIn.oauth2 — the
+    // user already has a session here. signIn.oauth2 doesn't know to attach
+    // the new provider to it, so it falls through to creating a brand new
+    // (unonboarded) user and switches the session to that instead.
+    await oauth2.link({
       providerId,
       callbackURL: "/dashboard/settings",
     });

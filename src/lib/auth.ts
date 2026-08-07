@@ -14,6 +14,15 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: isDevMode(),
   },
+  // Discord, Roblox, and Linear are independent identity providers with
+  // unrelated emails (Linear's is the only one DevHub actually cares
+  // about). Without this, linking a second/third provider to an existing
+  // account fails with email_doesn't_match as soon as the emails differ.
+  account: {
+    accountLinking: {
+      allowDifferentEmails: true,
+    },
+  },
   databaseHooks: {
     account: {
       create: {

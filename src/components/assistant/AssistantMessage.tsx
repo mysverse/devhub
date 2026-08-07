@@ -158,10 +158,12 @@ function actionCtaLabel(kind: string): string {
 function TaskDraftCard({
   draft,
   conversationId,
+  messageId,
   onActionCreated,
 }: {
   draft: Extract<AssistantReferenceDto, { kind: "task_draft" }>;
   conversationId: string;
+  messageId: string;
   onActionCreated: (action: AssistantActionDto) => void;
 }) {
   const [busyRoute, setBusyRoute] = useState<string | null>(null);
@@ -172,7 +174,7 @@ function TaskDraftCard({
       const response = await fetch("/api/assistant/drafts/convert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ conversationId, route, draft }),
+        body: JSON.stringify({ conversationId, messageId, route, draft }),
       });
       const data = (await response.json()) as {
         action?: AssistantActionDto;
@@ -786,10 +788,12 @@ function LinearIssueCard({
 function MessageReferences({
   references,
   conversationId,
+  messageId,
   onActionChange,
 }: {
   references: AssistantReferenceDto[];
   conversationId: string;
+  messageId: string;
   onActionChange: (action: AssistantActionDto) => void;
 }) {
   if (!references || references.length === 0) return null;
@@ -803,6 +807,7 @@ function MessageReferences({
             key={reference.id}
             draft={reference}
             conversationId={conversationId}
+            messageId={messageId}
             onActionCreated={onActionChange}
           />
         ) : (
@@ -821,6 +826,7 @@ function MessageReferences({
                   key={reference.id}
                   draft={reference}
                   conversationId={conversationId}
+                  messageId={messageId}
                   onActionCreated={onActionChange}
                 />
               ) : (
@@ -966,6 +972,7 @@ export function AssistantMessage({
           <MessageReferences
             references={message.references}
             conversationId={message.conversationId}
+            messageId={message.id}
             onActionChange={onActionChange}
           />
 

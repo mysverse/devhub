@@ -82,18 +82,48 @@ function upsertAction(
   messages: AssistantMessageDto[],
   action: AssistantActionDto,
 ) {
-  return messages.map((message) => {
-    const index = message.actions.findIndex((item) => item.id === action.id);
-    if (index >= 0) {
-      const actions = [...message.actions];
-      actions[index] = action;
+  const existingMsgIndex = messages.findIndex((m) =>
+    m.actions.some((item) => item.id === action.id),
+  );
+
+  if (existingMsgIndex >= 0) {
+    return messages.map((message, i) => {
+      if (i !== existingMsgIndex) return message;
+      const actions = message.actions.map((item) =>
+        item.id === action.id ? action : item,
+      );
       return { ...message, actions };
-    }
-    if (message.role === "assistant" && message.status === "PENDING") {
+    });
+  }
+
+  let targetIndex = -1;
+  if (action.messageId) {
+    targetIndex = messages.findIndex((m) => m.id === action.messageId);
+  }
+
+  if (targetIndex < 0) {
+    targetIndex = messages.findIndex(
+      (m) => m.role === "assistant" && m.status === "PENDING",
+    );
+  }
+
+  if (targetIndex < 0) {
+    targetIndex = messages.findLastIndex((m) => m.role === "assistant");
+  }
+
+  if (targetIndex < 0 && messages.length > 0) {
+    targetIndex = messages.length - 1;
+  }
+
+  if (targetIndex >= 0) {
+    return messages.map((message, i) => {
+      if (i !== targetIndex) return message;
+      if (message.actions.some((a) => a.id === action.id)) return message;
       return { ...message, actions: [...message.actions, action] };
-    }
-    return message;
-  });
+    });
+  }
+
+  return messages;
 }
 
 function addReferences(

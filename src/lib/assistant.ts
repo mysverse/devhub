@@ -155,6 +155,7 @@ export function serializeAssistantAction(
     result: action.result,
     error: action.error,
     errorCode: action.errorCode ?? null,
+    messageId: action.messageId ?? null,
   };
 }
 

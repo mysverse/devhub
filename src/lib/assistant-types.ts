@@ -36,6 +36,7 @@ export type AssistantActionDto = {
   result: unknown;
   error: string | null;
   errorCode?: string | null;
+  messageId?: string | null;
 };
 
 export type AssistantLinearIssueReference = {

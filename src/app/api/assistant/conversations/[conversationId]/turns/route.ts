@@ -113,10 +113,14 @@ export async function POST(request: Request, { params }: { params: Params }) {
           },
         });
         const content = result.content.trim() || accumulated.trim();
+        const fallbackContent =
+          result.actionIds.length > 0
+            ? "I prepared the action for your review."
+            : "I checked the requested information.";
         const message = await finishAssistantMessage({
           messageId: prepared.assistantMessage.id,
           userId,
-          content: content || "I prepared the action for your review.",
+          content: content || fallbackContent,
           status: "COMPLETE",
           provider: result.provider,
           model: result.model,

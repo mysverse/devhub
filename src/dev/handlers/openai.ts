@@ -163,6 +163,21 @@ function toolRequest(body: ResponsesRequest) {
     }
     return null;
   }
+  if (/sumaya|bandaraya|lebuhraya|wiki|improvement/i.test(text)) {
+    if (resultCount === 0) {
+      return {
+        name: "search_game_wiki",
+        arguments: { query: "sumaya", game: "sumaya" },
+      };
+    }
+    if (resultCount === 1) {
+      return {
+        name: "get_game_wiki_article",
+        arguments: { slug: "sumaya/jobs-fishing" },
+      };
+    }
+    return null;
+  }
   if (resultCount > 0) return null;
   if (/\bmys-201\b|find (?:a )?task|search tasks?/.test(text)) {
     return { name: "search_tasks", arguments: { query: "MYS-201" } };
@@ -192,6 +207,9 @@ function chatText(body: ResponsesRequest) {
   if (hasToolOutput) {
     if (/proton x90|civilian car|car for lebuhraya/i.test(text)) {
       return "Your PPT request is ready to review below. Check the scope, estimate, and due date, then confirm when it looks right.";
+    }
+    if (/sumaya|bandaraya|lebuhraya|wiki|improvement/i.test(text)) {
+      return "Based on the official Sumaya wiki documentation, here are key improvement areas for Sumaya:\n\n1. **Civilian Careers (Fishing & Palm Oil)**: Add more fish species, processing equipment, and balanced payout tiers.\n2. **Housing & Property Plots**: Improve plot customization UI and furniture placement controls.\n3. **Quests & Progression**: Introduce daily career milestones and team contract goals.\n\nTell me which area you want to develop and I can prepare a task draft or PPT request for you.";
     }
     return "I checked the current DevHub data. The results above are the source of truth; tell me which item you want to develop or act on.";
   }

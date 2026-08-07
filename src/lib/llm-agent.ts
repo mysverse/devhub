@@ -26,7 +26,7 @@ import {
 import { openAiAssistantTools } from "@/lib/openai-assistant-tools";
 import { openAiResponseOutputAsInput } from "@/lib/openai-response-replay";
 
-const MAX_TOOL_ROUNDS = 4;
+const MAX_TOOL_ROUNDS = 6;
 const MAX_OUTPUT_TOKENS = 2_500;
 
 export type AssistantHistoryMessage = {
@@ -323,6 +323,53 @@ async function runOpenAi(
     }
   }
 
+  // If tool rounds completed without generating prose content, run one final synthesis turn
+  if (!content.trim()) {
+    const startedAt = Date.now();
+    try {
+      const stream = client.responses.stream(
+        {
+          model,
+          instructions: assistantSystemPrompt(input.isAdmin),
+          input: items,
+          tools: [], // No tools during synthesis pass
+          max_output_tokens: MAX_OUTPUT_TOKENS,
+          reasoning: { effort: "low", context: "current_turn" },
+          text: { verbosity: "medium" },
+          parallel_tool_calls: false,
+          safety_identifier: safetyIdentifier(input.userId),
+          store: false,
+        },
+        { signal: input.signal },
+      );
+      for await (const event of stream) {
+        if (event.type === "response.output_text.delta" && event.delta) {
+          content += event.delta;
+          await input.onEvent({ type: "delta", delta: event.delta });
+        }
+      }
+      const response = await stream.finalResponse();
+      lastCallId = await recordLlmCall({
+        surface: "assistant_chat",
+        userId: input.userId,
+        provider: "openai",
+        model,
+        inputTokens: response.usage?.input_tokens,
+        outputTokens: response.usage?.output_tokens,
+        cachedInputTokens: response.usage?.input_tokens_details.cached_tokens,
+        reasoningTokens: response.usage?.output_tokens_details.reasoning_tokens,
+        latencyMs: Date.now() - startedAt,
+        failureKind: null,
+        conversationId: input.conversationId,
+        runId: input.runId,
+        fallbackFromId: lastCallId,
+        ok: true,
+      });
+    } catch (error) {
+      console.warn("[assistant] OpenAI synthesis pass failed:", error);
+    }
+  }
+
   return {
     kind: "success",
     callId: lastCallId,
@@ -455,6 +502,51 @@ async function runAnthropic(
         hadOutput: Boolean(content),
         hadAction: actionIds.length > 0,
       };
+    }
+  }
+
+  // If tool rounds completed without generating prose content, run one final synthesis turn
+  if (!content.trim()) {
+    const startedAt = Date.now();
+    try {
+      const stream = client.messages.stream(
+        {
+          model,
+          max_tokens: MAX_OUTPUT_TOKENS,
+          system: assistantSystemPrompt(input.isAdmin),
+          messages,
+          tools: [], // No tools during synthesis pass
+        },
+        { signal: input.signal },
+      );
+      for await (const event of stream) {
+        if (
+          event.type === "content_block_delta" &&
+          event.delta.type === "text_delta" &&
+          event.delta.text
+        ) {
+          content += event.delta.text;
+          await input.onEvent({ type: "delta", delta: event.delta.text });
+        }
+      }
+      const message = await stream.finalMessage();
+      lastCallId = await recordLlmCall({
+        surface: "assistant_chat",
+        userId: input.userId,
+        provider: "anthropic",
+        model,
+        inputTokens: message.usage.input_tokens,
+        outputTokens: message.usage.output_tokens,
+        cachedInputTokens: message.usage.cache_read_input_tokens ?? 0,
+        latencyMs: Date.now() - startedAt,
+        failureKind: null,
+        conversationId: input.conversationId,
+        runId: input.runId,
+        fallbackFromId: lastCallId,
+        ok: true,
+      });
+    } catch (error) {
+      console.warn("[assistant] Anthropic synthesis pass failed:", error);
     }
   }
 

@@ -154,6 +154,7 @@ export async function generateIdeasForDeveloper(input: {
     getPromptContextForUser(input.userId, input.linearId),
     searchWikiArticles(input.request || "gameplay experience mechanics", {
       game: input.gameFilter,
+      specialties: input.profile.specialties,
       limit: 3,
     }),
   ]);

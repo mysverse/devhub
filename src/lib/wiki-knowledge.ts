@@ -4,7 +4,9 @@ import { isDevMode } from "@/lib/dev-mode";
 
 export type WikiSection = {
   heading: string;
+  summary?: string;
   content: string;
+  systemTags?: string[];
 };
 
 export type WikiArticle = {
@@ -12,9 +14,11 @@ export type WikiArticle = {
   game: "bandaraya" | "lebuhraya" | "sumaya" | "faq" | "general" | string;
   title: string;
   description: string;
+  summary?: string;
   canonicalUrl: string;
+  systemTags?: string[];
   sections: WikiSection[];
-  content: string;
+  content?: string;
   tags: string[];
 };
 

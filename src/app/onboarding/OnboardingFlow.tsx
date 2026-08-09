@@ -144,7 +144,7 @@ export default function OnboardingFlow({
   const robloxAvailability = integrationAvailability.roblox;
   const robuxPaymentsAvailable = robuxPayoutAvailability.configured;
 
-  function handleLinkProvider(providerId: "discord" | "roblox") {
+  async function handleLinkProvider(providerId: "discord" | "roblox") {
     const availability = integrationAvailability[providerId];
     if (!availability.configured) {
       toast.error(
@@ -159,10 +159,20 @@ export default function OnboardingFlow({
     // by the earlier Linear sign-in) — use the account-linking endpoint, not
     // signIn.oauth2, or Discord/Roblox get created as a brand new user and
     // silently swap the session out from under the onboarding flow.
-    oauth2.link({
+    const result = await oauth2.link({
       providerId,
       callbackURL: "/onboarding",
+      errorCallbackURL: "/onboarding",
     });
+    // On success the client navigates away. Otherwise clear the spinner so the
+    // onboarding step doesn't sit there looking hung.
+    if (result?.error) {
+      toast.error(
+        result.error.message ??
+          `Couldn't start ${availability.label} linking. Please reload and try again.`,
+      );
+      setLinkingProvider(null);
+    }
   }
 
   function nextStep() {

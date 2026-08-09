@@ -62,3 +62,37 @@ test("linear sign-in is not blocked by the provider guard", async () => {
   // locked every user out of the only way into DevHub.
   assert.equal(blocked, false, "linear sign-in must not be rejected");
 });
+
+async function linkWith(providerId: string) {
+  const { auth } = await import("./auth");
+  try {
+    await auth.api.oAuth2LinkAccount({
+      body: { providerId, callbackURL: "/dashboard/settings" },
+      headers: new Headers(),
+    });
+    return { blocked: false, message: "" };
+  } catch (error) {
+    const status = (error as { status?: string }).status;
+    const message =
+      (error as { body?: { message?: string } }).body?.message ??
+      (error as Error).message;
+    return { blocked: status === "BAD_REQUEST", message };
+  }
+}
+
+test("linear cannot be linked separately from signing in", async () => {
+  // Otherwise a signed-in user could attach a second Linear identity and
+  // silently repoint UserProfile.linearId at it.
+  const { blocked, message } = await linkWith("linear");
+  assert.equal(blocked, true, `linear link was not rejected (got: ${message})`);
+  assert.match(message, /cannot be linked separately/);
+});
+
+for (const providerId of ["discord", "roblox"]) {
+  test(`${providerId} is not blocked on the link route`, async () => {
+    // These must stay linkable — that is the whole point of the flow. Without
+    // a session the call still fails, but on UNAUTHORIZED, never BAD_REQUEST.
+    const { blocked } = await linkWith(providerId);
+    assert.equal(blocked, false, `${providerId} linking must not be rejected`);
+  });
+}

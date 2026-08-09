@@ -1,7 +1,7 @@
 "use client";
 
 import { Alert, Badge, Button, Group, Stack, Text } from "@mantine/core";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import FormSection from "@/components/FormSection";
 import { oauth2 } from "@/lib/auth-client";
@@ -23,6 +23,30 @@ const PROVIDERS = [
   { id: "roblox", label: "Roblox", color: "red" },
 ] as const;
 
+/**
+ * better-auth redirects OAuth callback failures to `errorCallbackURL` with a
+ * machine-readable `?error=` code. Without this the user completes the consent
+ * screen, gets bounced back, and sees nothing at all.
+ */
+const LINK_ERROR_MESSAGES: Record<string, string> = {
+  account_already_linked_to_different_user:
+    "That account is already linked to a different DevHub user. Ask an admin to detach it, then try again.",
+  email_doesn_t_match: "That account's email doesn't match this DevHub user.",
+  unable_to_link_account: "We couldn't link that account. Please try again.",
+  oauth_code_verification_failed:
+    "The sign-in with that provider expired. Please try again.",
+  email_is_missing: "That provider didn't return enough profile information.",
+  please_restart_the_process:
+    "The link request expired. Please start it from this page again.",
+};
+
+function describeLinkError(code: string) {
+  return (
+    LINK_ERROR_MESSAGES[code] ??
+    `Linking failed (${code.replace(/_/g, " ")}). Please try again.`
+  );
+}
+
 export default function LinkedAccounts({
   linkedAccounts,
   linearEmail,
@@ -30,6 +54,23 @@ export default function LinkedAccounts({
   integrationAvailability,
 }: LinkedAccountsProps) {
   const [loading, setLoading] = useState<string | null>(null);
+
+  // Surface a failed OAuth callback, then strip the param so a refresh doesn't
+  // replay the toast.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("error");
+    if (!error) return;
+    toast.error(describeLinkError(error));
+    params.delete("error");
+    params.delete("error_description");
+    const query = params.toString();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}`,
+    );
+  }, []);
 
   function getAccount(providerId: string) {
     return linkedAccounts.find((a) => a.providerId === providerId);
@@ -50,10 +91,21 @@ export default function LinkedAccounts({
     // user already has a session here. signIn.oauth2 doesn't know to attach
     // the new provider to it, so it falls through to creating a brand new
     // (unonboarded) user and switches the session to that instead.
-    await oauth2.link({
+    const result = await oauth2.link({
       providerId,
       callbackURL: "/dashboard/settings",
+      errorCallbackURL: "/dashboard/settings",
     });
+    // On success the client redirects away and this never runs. Anything else
+    // (notably a 401 once the session has expired) resolves without navigating,
+    // so clear the spinner and say something instead of hanging forever.
+    if (result?.error) {
+      toast.error(
+        result.error.message ??
+          `Couldn't start ${availability.label} linking. Please reload and try again.`,
+      );
+      setLoading(null);
+    }
   }
 
   async function handleUnlink(providerId: "discord" | "roblox") {

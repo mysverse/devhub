@@ -12,6 +12,16 @@ import prisma from "./prisma";
  */
 const LINK_ONLY_PROVIDERS = new Set(["discord", "roblox"]);
 
+/**
+ * The mirror of {@link LINK_ONLY_PROVIDERS}: Linear is established by signing
+ * in and is never linked after the fact (the UI offers no such button). Left
+ * open, /oauth2/link would let a signed-in user attach a *second* Linear
+ * identity — allowDifferentEmails means the mismatch is no longer rejected —
+ * and the account.create.after hook below would silently repoint
+ * UserProfile.linearId at it, breaking assignee matching for payouts.
+ */
+const SIGN_IN_ONLY_PROVIDERS = new Set(["linear"]);
+
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
@@ -40,12 +50,23 @@ export const auth = betterAuth({
     // self-register. Reject those providers on the sign-in route; /oauth2/link
     // (session-gated) is unaffected.
     before: createAuthMiddleware(async (ctx) => {
-      if (ctx.path !== "/sign-in/oauth2") return;
       const providerId = (ctx.body as { providerId?: string } | undefined)
         ?.providerId;
-      if (providerId && LINK_ONLY_PROVIDERS.has(providerId)) {
+      if (!providerId) return;
+      if (
+        ctx.path === "/sign-in/oauth2" &&
+        LINK_ONLY_PROVIDERS.has(providerId)
+      ) {
         throw new APIError("BAD_REQUEST", {
           message: `${providerId} cannot be used to sign in. Sign in with Linear, then link it from settings.`,
+        });
+      }
+      if (
+        ctx.path === "/oauth2/link" &&
+        SIGN_IN_ONLY_PROVIDERS.has(providerId)
+      ) {
+        throw new APIError("BAD_REQUEST", {
+          message: `${providerId} is linked by signing in and cannot be linked separately.`,
         });
       }
     }),

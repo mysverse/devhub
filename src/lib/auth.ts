@@ -1,9 +1,16 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { APIError, createAuthMiddleware } from "better-auth/api";
 import { genericOAuth } from "better-auth/plugins";
 import { syncUserAccess } from "./access-sync";
 import { isDevMode } from "./dev-mode";
 import prisma from "./prisma";
+
+/**
+ * Providers that may only ever be *linked* to an existing DevHub account,
+ * never used to authenticate one. Linear is the account's anchor identity.
+ */
+const LINK_ONLY_PROVIDERS = new Set(["discord", "roblox"]);
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, {
@@ -22,6 +29,26 @@ export const auth = betterAuth({
     accountLinking: {
       allowDifferentEmails: true,
     },
+  },
+  hooks: {
+    // Linear is the sole authenticator; Discord and Roblox are attribute
+    // links only (see LINK_ONLY_PROVIDERS). POST /sign-in/oauth2 is public
+    // and unauthenticated, and better-auth resolves an existing account by
+    // (providerId, accountId) before it ever looks at email — so without
+    // this guard a stolen Discord/Roblox account would mint a full DevHub
+    // session as that user, and any Discord/Roblox identity could
+    // self-register. Reject those providers on the sign-in route; /oauth2/link
+    // (session-gated) is unaffected.
+    before: createAuthMiddleware(async (ctx) => {
+      if (ctx.path !== "/sign-in/oauth2") return;
+      const providerId = (ctx.body as { providerId?: string } | undefined)
+        ?.providerId;
+      if (providerId && LINK_ONLY_PROVIDERS.has(providerId)) {
+        throw new APIError("BAD_REQUEST", {
+          message: `${providerId} cannot be used to sign in. Sign in with Linear, then link it from settings.`,
+        });
+      }
+    }),
   },
   databaseHooks: {
     account: {

@@ -216,6 +216,11 @@ function TaskPreviewImage({ src, title }: { src: string; title: string }) {
 
   return (
     <CardSection
+      // Card only tags *direct* CardSection children with data-orientation,
+      // and the negative-margin edge bleed is gated on it. This section lives
+      // behind a wrapper component, so set it ourselves or the image sits
+      // inset by the card padding.
+      data-orientation="vertical"
       mb="md"
       style={{
         overflow: "hidden",

@@ -418,6 +418,7 @@ LLM_ASSISTANT_ENABLED           # optional; false hides/disables chat
 LLM_ASSISTANT_MAX_TURNS_PER_HOUR # optional; default 20, 0 disables
 LLM_MAX_CALLS_PER_HOUR          # optional; rolling-hour cap, 0 disables
 LLM_MAX_CALLS_PER_USER_PER_HOUR # optional; per-user cap, 0 disables
+LLM_MAX_WRITING_CALLS_PER_USER_PER_HOUR # optional; write_*/review_* ledger, default 30
 DISCORD_CLIENT_ID
 DISCORD_CLIENT_SECRET
 DISCORD_BOT_TOKEN

@@ -35,6 +35,20 @@ const THINKING_BUDGET_TOKENS = 1_024;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const DEFAULT_MAX_CALLS_PER_HOUR = 200;
 const DEFAULT_MAX_CALLS_PER_USER_PER_HOUR = 12;
+const DEFAULT_MAX_WRITING_CALLS_PER_USER_PER_HOUR = 30;
+
+/**
+ * Writing assist is metered on its own ledger, identified by the surface
+ * prefix rather than by a column, so `LlmCall` keeps one shape.
+ *
+ * A polish button sits on a dozen fields; drafting a PPT sits on one. Counting
+ * them together means someone who tidies three proof comments finds task ideas
+ * unavailable for the rest of the hour — a cap surfacing as a broken feature,
+ * which is the one thing metering must never do. Both budgets still sit under
+ * the global hourly cap, so total spend is unchanged in the only place that
+ * bounds it.
+ */
+const WRITING_SURFACE_PREFIXES = ["write_", "review_"];
 
 export function resolveLlmModel(): LlmModel {
   const configured = process.env.ANTHROPIC_MODEL;
@@ -123,11 +137,45 @@ function getHourlyLimit(name: string, fallback: number) {
 
 export type LlmRateLimitScope = "global" | "user";
 
+/**
+ * Which per-user ledger a call is counted against. `"writing"` selects the
+ * writing budget and counts only `write_*`/`review_*` surfaces; `"default"`
+ * counts everything else. The two are disjoint by construction, so neither can
+ * starve the other.
+ */
+export type LlmBudget = "default" | "writing";
+
+/**
+ * Whether a surface id spends from the writing budget. The naming rule is the
+ * mechanism — a new writing surface opts in by being called `write_*`, and
+ * `ai-assist-config.test.ts` asserts every configured field satisfies this.
+ */
+export function usesWritingBudget(surface: string) {
+  return WRITING_SURFACE_PREFIXES.some((prefix) => surface.startsWith(prefix));
+}
+
+/**
+ * The surface filter for one budget, applied to the per-user count only.
+ *
+ * Written as `OR` / `NOT: { OR }` rather than a bare `NOT: [...]`, whose
+ * list form negates the conjunction — the wrong half of De Morgan, and a
+ * silently over-counting cap.
+ */
+function budgetSurfaceFilter(budget: LlmBudget) {
+  const matchesWriting = {
+    OR: WRITING_SURFACE_PREFIXES.map((prefix) => ({
+      surface: { startsWith: prefix },
+    })),
+  };
+  return budget === "writing" ? matchesWriting : { NOT: matchesWriting };
+}
+
 export async function checkLlmRateLimits(
   userId: string | null,
-  options: { chat?: boolean } = {},
+  options: { chat?: boolean; budget?: LlmBudget } = {},
 ): Promise<{ limited: false } | { limited: true; scope: LlmRateLimitScope }> {
   const since = new Date(Date.now() - RATE_LIMIT_WINDOW_MS);
+  const budget: LlmBudget = options.budget ?? "default";
   const globalLimit = getHourlyLimit(
     "LLM_MAX_CALLS_PER_HOUR",
     DEFAULT_MAX_CALLS_PER_HOUR,
@@ -137,17 +185,28 @@ export async function checkLlmRateLimits(
   // does not change when agent turns need multiple tool rounds.
   const userLimit = options.chat
     ? 0
-    : getHourlyLimit(
-        "LLM_MAX_CALLS_PER_USER_PER_HOUR",
-        DEFAULT_MAX_CALLS_PER_USER_PER_HOUR,
-      );
+    : budget === "writing"
+      ? getHourlyLimit(
+          "LLM_MAX_WRITING_CALLS_PER_USER_PER_HOUR",
+          DEFAULT_MAX_WRITING_CALLS_PER_USER_PER_HOUR,
+        )
+      : getHourlyLimit(
+          "LLM_MAX_CALLS_PER_USER_PER_HOUR",
+          DEFAULT_MAX_CALLS_PER_USER_PER_HOUR,
+        );
 
   const [globalCount, userCount] = await Promise.all([
     globalLimit > 0
       ? prisma.llmCall.count({ where: { createdAt: { gte: since } } })
       : Promise.resolve(0),
     userLimit > 0 && userId
-      ? prisma.llmCall.count({ where: { userId, createdAt: { gte: since } } })
+      ? prisma.llmCall.count({
+          where: {
+            userId,
+            createdAt: { gte: since },
+            ...budgetSurfaceFilter(budget),
+          },
+        })
       : Promise.resolve(0),
   ]);
 
@@ -229,6 +288,8 @@ export type LlmRequest<Schema extends z.ZodType> = {
   maxTokens?: number;
   conversationId?: string | null;
   runId?: string | null;
+  /** Which per-user hourly ledger to count against. Defaults to `"default"`. */
+  budget?: LlmBudget;
 };
 
 export function llmFailureKind(error: unknown) {
@@ -442,7 +503,9 @@ export async function generateStructured<Schema extends z.ZodType>(
   let fallbackFromId: string | null = null;
 
   for (const provider of providers) {
-    const limit = await checkLlmRateLimits(request.userId ?? null);
+    const limit = await checkLlmRateLimits(request.userId ?? null, {
+      budget: request.budget,
+    });
     if (limit.limited) {
       console.warn(
         `[llm] ${request.surface} skipped — hourly ${limit.scope} cap reached`,

@@ -8,6 +8,7 @@ let isAssistantConfigured: typeof import("@/lib/llm")["isAssistantConfigured"];
 let isFallbackEligible: typeof import("@/lib/llm")["isFallbackEligible"];
 let llmFailureKind: typeof import("@/lib/llm")["llmFailureKind"];
 let resetLlmClientForTests: typeof import("@/lib/llm")["resetLlmClientForTests"];
+let usesWritingBudget: typeof import("@/lib/llm")["usesWritingBudget"];
 
 before(async () => {
   process.env.DATABASE_URL ??=
@@ -18,6 +19,7 @@ before(async () => {
     isFallbackEligible,
     llmFailureKind,
     resetLlmClientForTests,
+    usesWritingBudget,
   } = await import("@/lib/llm"));
 });
 
@@ -82,5 +84,34 @@ describe("LLM provider selection", () => {
   it("does not route aborts or refusals through another provider", () => {
     assert.equal(isFallbackEligible("aborted"), false);
     assert.equal(isFallbackEligible("refusal"), false);
+  });
+});
+
+describe("writing budget", () => {
+  it("claims the write_ and review_ surfaces and nothing else", () => {
+    for (const surface of [
+      "write_ppt_proof",
+      "write_campaign",
+      "review_ppt_proof",
+    ]) {
+      assert.equal(usesWritingBudget(surface), true, surface);
+    }
+  });
+
+  it("leaves every existing surface on the default ledger", () => {
+    // If one of these ever started spending from the writing budget, the cap
+    // that protects drafting would be silently measuring the wrong thing.
+    for (const surface of [
+      "ppt_draft",
+      "task_ideas",
+      "task_reason",
+      "assistant_chat",
+      "proof_review",
+      "bonus_month_summary",
+      "week_summary",
+      "search_intent",
+    ]) {
+      assert.equal(usesWritingBudget(surface), false, surface);
+    }
   });
 });

@@ -40,10 +40,11 @@ import {
   Users,
 } from "lucide-react";
 import { motion } from "motion/react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import {
   MODAL_TRANSITION,
   OVERLAY_PROPS,
@@ -244,6 +245,8 @@ export default function PptRequestModal({
   const [estimate, setEstimate] = useState(initial.estimate);
   const [dueDate, setDueDate] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const descriptionRef = useRef<HTMLTextAreaElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   const selectedProject = useMemo(
     () => projects.find((project) => project.id === selectedProjectId) ?? null,
@@ -699,6 +702,7 @@ export default function PptRequestModal({
                 </TabsList>
                 <TabsPanel value="write" pt="sm">
                   <Textarea
+                    ref={descriptionRef}
                     label="Description"
                     placeholder="Acceptance criteria, references, constraints, and anything admins need to judge the PPT request."
                     value={description}
@@ -708,6 +712,16 @@ export default function PptRequestModal({
                     autosize
                     minRows={7}
                     maxRows={12}
+                  />
+                  {/* Sits under the description rather than in the tab strip:
+                      "Draft from issue" fills an empty form from Linear, this
+                      works on what has already been written. */}
+                  <AiAssistField
+                    fieldId="ppt_request_description"
+                    value={description}
+                    onChange={setDescription}
+                    textareaRef={descriptionRef}
+                    disabled={submitting}
                   />
                 </TabsPanel>
                 <TabsPanel value="preview" pt="sm">
@@ -725,15 +739,25 @@ export default function PptRequestModal({
                 </TabsPanel>
               </Tabs>
 
-              <Textarea
-                label="Admin note"
-                placeholder="Why should this be a PPT? Anything sensitive or decision-specific goes here."
-                value={note}
-                onChange={(event) => setNote(event.currentTarget.value)}
-                autosize
-                minRows={2}
-                maxRows={4}
-              />
+              <div>
+                <Textarea
+                  ref={noteRef}
+                  label="Admin note"
+                  placeholder="Why should this be a PPT? Anything sensitive or decision-specific goes here."
+                  value={note}
+                  onChange={(event) => setNote(event.currentTarget.value)}
+                  autosize
+                  minRows={2}
+                  maxRows={4}
+                />
+                <AiAssistField
+                  fieldId="ppt_request_note"
+                  value={note}
+                  onChange={setNote}
+                  textareaRef={noteRef}
+                  disabled={submitting}
+                />
+              </div>
 
               <FileInput
                 label="Attachments"

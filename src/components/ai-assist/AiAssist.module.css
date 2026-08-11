@@ -1,0 +1,38 @@
+/* Writing assist chrome.
+ *
+ * The proposal sits directly under the field it belongs to, close enough to
+ * read as "instead of that", and is accented rather than boxed in a colour —
+ * it is a suggestion, not a warning.
+ */
+
+.proposal {
+  border: 1px solid var(--mantine-color-default-border);
+  border-left: 3px solid var(--mantine-color-blue-6);
+  border-radius: var(--mantine-radius-sm);
+  padding: var(--mantine-spacing-sm);
+  background: var(--mantine-color-default);
+}
+
+.proposalBody {
+  /* Pre-wrap so a structured rewrite keeps the headings it just added, without
+     paying for a markdown renderer in a panel nobody reads twice. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 22rem;
+  overflow-y: auto;
+  font-size: var(--mantine-font-size-sm);
+  line-height: 1.55;
+}
+
+.concerns {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  padding: var(--mantine-spacing-sm);
+}
+
+.bar {
+  /* Wraps rather than overflows: this row sits inside a modal that has to hold
+     together at 390px, which is what pnpm visual fails on. */
+  flex-wrap: wrap;
+  row-gap: 6px;
+}

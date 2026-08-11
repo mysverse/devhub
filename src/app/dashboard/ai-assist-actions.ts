@@ -65,7 +65,7 @@ export async function assistWriting(input: {
   if (!ACTIONS.has(action)) return { available: false };
 
   const config = await resolveField(userId, input.fieldId);
-  if (!config || !config.actions.includes(action)) return { available: false };
+  if (!config?.actions.includes(action)) return { available: false };
 
   return runWritingAssist({ config, action, text: input.text, userId });
 }

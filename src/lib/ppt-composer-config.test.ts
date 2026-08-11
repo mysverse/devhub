@@ -52,6 +52,25 @@ describe("mode table", () => {
 });
 
 describe("proof requirements", () => {
+  // Regression: routing the evidence row through `checkProofBody` and testing
+  // `reason !== "no-evidence"` reads as equivalent and is not — that function
+  // reports the length failure first, so an untouched composer rendered a green
+  // tick next to "attach a screenshot" before anything was attached. Caught in
+  // the browser, not by the type checker.
+  it("does not report evidence as satisfied on an untouched composer", () => {
+    assert.equal(met("proof", "evidence", ctx("")), false);
+    assert.equal(
+      met("proof", "evidence", ctx(PPT_COMPOSER_MODES.proof.template)),
+      false,
+    );
+  });
+
+  it("does not let a short body imply evidence", () => {
+    // Under PROOF_MIN_CHARS *and* with nothing checkable: both rows unmet.
+    assert.equal(met("proof", "evidence", ctx("done")), false);
+    assert.equal(met("proof", "describe", ctx("done")), false);
+  });
+
   it("interpolates the shared minimum into the label so copy cannot drift", () => {
     const describe = PPT_COMPOSER_MODES.proof.requirements.find(
       (requirement) => requirement.id === "describe",

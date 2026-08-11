@@ -19,7 +19,7 @@ import {
   hasMeaningfulPptProgress,
   PPT_PROGRESS_TEMPLATE,
 } from "@/lib/ppt-progress";
-import { checkProofBody, proofContent } from "@/lib/ppt-proof";
+import { hasEvidenceReference, proofContent } from "@/lib/ppt-proof";
 
 export type PptComposerMode = "progress" | "proof";
 
@@ -183,17 +183,20 @@ export const PPT_COMPOSER_MODES: Record<
         label: "Attach a screenshot or clip, or paste a link",
         hint: "A commit SHA or an issue reference works too. Saying you tested it is not evidence.",
         /**
-         * Routed through the shared rule rather than re-testing the evidence
-         * pattern here. `checkProofBody` reports the length failure first, so
-         * this row can read as met while the body is still too short — but the
-         * row above is unmet in exactly that case, and the conjunction of the
-         * two required rows is precisely
-         * `checkProofBody(body, { hasAttachments }) === null`, which is what
-         * the server and the payout evaluator apply. That equivalence is
-         * asserted in the tests.
+         * Tests the evidence rule directly, which is why `ppt-proof` exports
+         * `hasEvidenceReference` separately from `checkProofBody`.
+         *
+         * Going through `checkProofBody` and asking "is the reason something
+         * other than no-evidence?" looks equivalent and is not: that function
+         * reports the length failure FIRST, so an empty composer returns
+         * `too-short` and this row renders as already satisfied — a green tick
+         * next to "attach a screenshot" before the developer has attached
+         * anything. The conjunction of the required rows would still gate
+         * submission correctly, but the checklist would be telling them the
+         * opposite of the truth about the one thing this feature exists to fix.
          */
         test: ({ body, attachmentCount }) =>
-          attachmentCount > 0 || checkProofBody(body)?.reason !== "no-evidence",
+          attachmentCount > 0 || hasEvidenceReference(proofContent(body)),
         required: true,
       },
       {

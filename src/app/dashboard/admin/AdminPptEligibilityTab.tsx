@@ -16,8 +16,9 @@ import {
 } from "@mantine/core";
 import { ExternalLink, RotateCw, ShieldCheck, X } from "lucide-react";
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import {
   MODAL_TRANSITION,
   OVERLAY_PROPS,
@@ -96,6 +97,7 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
   const [retrying, setRetrying] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideNote, setOverrideNote] = useState("");
+  const overrideRef = useRef<HTMLTextAreaElement>(null);
   const [overriding, setOverriding] = useState(false);
   const [clearing, setClearing] = useState(false);
   const title = state.linearIssueIdentifier
@@ -327,14 +329,23 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
           <Text size="sm" c="dimmed">
             {title}
           </Text>
-          <Textarea
-            label="Justification"
-            placeholder="Why is this PPT payable without #ppt-proof from the assignee?"
-            minRows={4}
-            value={overrideNote}
-            onChange={(event) => setOverrideNote(event.currentTarget.value)}
-            required
-          />
+          <div>
+            <Textarea
+              ref={overrideRef}
+              label="Justification"
+              placeholder="Why is this PPT payable without #ppt-proof from the assignee?"
+              minRows={4}
+              value={overrideNote}
+              onChange={(event) => setOverrideNote(event.currentTarget.value)}
+              required
+            />
+            <AiAssistField
+              fieldId="ppt_override_justification"
+              value={overrideNote}
+              onChange={setOverrideNote}
+              textareaRef={overrideRef}
+            />
+          </div>
           <Group justify="flex-end">
             <Button
               variant="subtle"

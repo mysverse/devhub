@@ -31,8 +31,9 @@ import {
   Search,
   UserX,
 } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import StatusBadge from "@/components/StatusBadge";
 import { PPT_ASSIGNMENT_WATCH_STATUS, statusCopy } from "@/lib/status-copy";
 import {
@@ -147,6 +148,7 @@ export default function AdminPptAssignmentWatchTab({
     row: AdminPptAssignmentWatchRow;
   } | null>(null);
   const [note, setNote] = useState("");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const [isPending, startTransition] = useTransition();
 
   const summary = useMemo(() => {
@@ -528,14 +530,23 @@ export default function AdminPptAssignmentWatchTab({
               {issueTitle(selected.row)}
             </Text>
           )}
-          <Textarea
-            label="Admin note"
-            value={note}
-            onChange={(event) => setNote(event.currentTarget.value)}
-            minRows={4}
-            autosize
-            required
-          />
+          <div>
+            <Textarea
+              ref={noteRef}
+              label="Admin note"
+              value={note}
+              onChange={(event) => setNote(event.currentTarget.value)}
+              minRows={4}
+              autosize
+              required
+            />
+            <AiAssistField
+              fieldId="assignment_watch_note"
+              value={note}
+              onChange={setNote}
+              textareaRef={noteRef}
+            />
+          </div>
           <Group justify="flex-end">
             <Button variant="subtle" onClick={() => setSelected(null)}>
               Cancel

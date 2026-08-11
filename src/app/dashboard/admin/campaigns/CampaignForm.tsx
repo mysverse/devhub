@@ -20,8 +20,9 @@ import {
 import { DateTimePicker } from "@mantine/dates";
 import dayjs from "dayjs";
 import { Save, Sparkles, TriangleAlert } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { formatAmount } from "@/lib/currency";
 import { DEVELOPER_RANK_LABELS, DEVELOPER_RANKS } from "@/lib/developer-access";
 import {
@@ -93,6 +94,8 @@ export default function CampaignForm({
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [preview, setPreview] = useState<CostPreviewRow[] | null>(null);
+  const headlineRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   function set<K extends keyof CampaignFormData>(
     key: K,
@@ -225,6 +228,7 @@ export default function CampaignForm({
           </SimpleGrid>
 
           <TextInput
+            ref={headlineRef}
             label="Headline"
             description={`The first thing developers read, on the dashboard banner. The banner already shows "${formatMultiplier(draft.multiplier)}" beside it — don't repeat the multiplier here.`}
             placeholder="Every PPT task pays extra this sprint"
@@ -233,8 +237,15 @@ export default function CampaignForm({
             error={errors.headline}
             maxLength={CAMPAIGN_LIMITS.headline}
           />
+          <AiAssistField
+            fieldId="campaign_headline"
+            value={draft.headline}
+            onChange={(next) => set("headline", next)}
+            textareaRef={headlineRef}
+          />
 
           <Textarea
+            ref={bodyRef}
             label="Details"
             description="Optional second line — the rules, in plain language"
             value={draft.body}
@@ -243,6 +254,12 @@ export default function CampaignForm({
             maxLength={CAMPAIGN_LIMITS.body}
             autosize
             minRows={2}
+          />
+          <AiAssistField
+            fieldId="campaign_body"
+            value={draft.body}
+            onChange={(next) => set("body", next)}
+            textareaRef={bodyRef}
           />
 
           <SimpleGrid cols={{ base: 1, md: 2 }}>

@@ -49,7 +49,8 @@ export type UseAiAssistOptions = {
   fieldId: AiAssistFieldId;
   value: string;
   onChange: (next: string) => void;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  /** Textarea or single-line input — both carry the selection API. */
+  textareaRef: RefObject<HTMLTextAreaElement | HTMLInputElement | null>;
   /**
    * Server-computed. False renders nothing at all. Defaults to the dashboard
    * shell's value, so most hosts pass nothing.

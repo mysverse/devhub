@@ -13,13 +13,14 @@ import {
 } from "@mantine/core";
 import dayjs from "dayjs";
 import { Send } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   getSuggestionCandidates,
   type SuggestableDeveloper,
   suggestTaskToDeveloper,
 } from "@/app/dashboard/admin/task-suggestion-actions";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import EmptyState from "@/components/EmptyState";
 
 type SuggestTask = {
@@ -64,6 +65,7 @@ export default function SuggestTaskConsole({
   const [candidates, setCandidates] = useState<SuggestableDeveloper[]>([]);
   const [developerId, setDeveloperId] = useState<string | null>(null);
   const [note, setNote] = useState("");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   const [loading, startLoading] = useTransition();
   const [sending, startSending] = useTransition();
 
@@ -155,15 +157,25 @@ export default function SuggestTaskConsole({
             </Alert>
           )}
 
-          <Textarea
-            label="Note (optional)"
-            description="Anything the ranker can't know — context, urgency, who to ask."
-            autosize
-            minRows={2}
-            maxLength={500}
-            value={note}
-            onChange={(event) => setNote(event.currentTarget.value)}
-          />
+          <div>
+            <Textarea
+              ref={noteRef}
+              label="Note (optional)"
+              description="Anything the ranker can't know — context, urgency, who to ask."
+              autosize
+              minRows={2}
+              maxLength={500}
+              value={note}
+              onChange={(event) => setNote(event.currentTarget.value)}
+            />
+            <AiAssistField
+              fieldId="task_suggestion_note"
+              value={note}
+              onChange={setNote}
+              textareaRef={noteRef}
+              disabled={sending}
+            />
+          </div>
 
           <Group justify="flex-end">
             <Button

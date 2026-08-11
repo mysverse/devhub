@@ -23,6 +23,7 @@ import PageSkeleton from "@/components/PageSkeleton";
 import StatCard from "@/components/StatCard";
 import StatusBadge from "@/components/StatusBadge";
 import { getSession } from "@/lib/auth-utils";
+import { explainBonusIneligibility } from "@/lib/bonus-reason-copy";
 import { formatAmount } from "@/lib/currency";
 import { formatMultiplier } from "@/lib/payout-campaign";
 import prisma from "@/lib/prisma";
@@ -391,10 +392,26 @@ async function BonusesContent() {
                           {candidate.linearIssueTitle || "Untitled issue"}
                         </Text>
                       )}
-                      <Text fz="xs" c="dimmed">
-                        {candidate.ineligibilityReason ??
-                          "Doesn't meet the current bonus criteria."}
-                      </Text>
+                      {(() => {
+                        // The stored reason is written for an operator's eye —
+                        // it names the state without naming the consequence or
+                        // the fix. This says both.
+                        const copy = explainBonusIneligibility(
+                          candidate.ineligibilityReason,
+                        );
+                        return (
+                          <>
+                            <Text fz="xs" c="dimmed">
+                              {copy.meaning}
+                            </Text>
+                            {copy.nextStep && (
+                              <Text fz="xs" c="blue.4">
+                                {copy.nextStep}
+                              </Text>
+                            )}
+                          </>
+                        );
+                      })()}
                     </Stack>
                   </Group>
                 ))}

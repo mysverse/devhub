@@ -124,6 +124,7 @@ model UserProfile {
   pptRequestsMade         PptRequest[]                @relation("PptRequestRequester")
   pptRequestsReviewed     PptRequest[]                @relation("PptRequestReviewer")
   pptRequestAttachments   PptRequestAttachment[]      @relation("PptRequestAttachmentUploader")
+  pptCommentAttachments   PptCommentAttachment[]      @relation("PptCommentAttachmentUploader")
   kycVerifications        KycVerification[]
   welcomePackOrders       WelcomePackOrder[]
   projectMemberships      ProjectMembership[]         @relation("ProjectMember")
@@ -1419,6 +1420,65 @@ model PptRequestAttachment {
 
   @@index([requestId, sortOrder])
   @@index([uploadedById])
+}
+
+// ── PPT progress / proof comment attachments ────────────────────────────────
+
+enum PptCommentAttachmentKind {
+  PROGRESS
+  PROOF
+}
+
+enum PptCommentAttachmentStatus {
+  /// Bytes are on Linear, but no comment references them yet.
+  UPLOADED
+  /// Referenced by a posted Linear comment. Terminal.
+  POSTED
+}
+
+/// An image, PDF or video attached to a PPT progress or proof comment.
+///
+/// Both upload paths (the multipart proxy and the Vercel Blob relay) finish
+/// synchronously, so a row only ever exists for bytes that reached Linear —
+/// there is no pending state to reconcile.
+///
+/// The reason this is persisted rather than just embedded in the comment
+/// markdown: the client must never hand a URL to a comment-posting path. It
+/// sends these ids, the server resolves the URLs from its own table, and a
+/// tampered or replayed id therefore resolves to nothing instead of putting an
+/// attacker-chosen URL into a third-party system. It doubles as the
+/// rate-limit ledger and lets admins see proof attachments even when
+/// PptPayoutState.proofCommentBody truncates past them.
+model PptCommentAttachment {
+  id            String @id @default(cuid())
+  linearIssueId String
+  uploadedById  String
+  uploadedBy    UserProfile @relation("PptCommentAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  kind   PptCommentAttachmentKind
+  status PptCommentAttachmentStatus @default(UPLOADED)
+
+  filename       String
+  mimeType       String
+  byteSize       Int
+  width          Int?
+  height         Int?
+  linearAssetUrl String
+  /// How the bytes travelled: "proxy" | "relay" | "dev". Diagnostic only.
+  transport      String
+  sortOrder      Int    @default(0)
+
+  linearCommentId String?
+  postedAt        DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([linearIssueId, uploadedById, status])
+  /// Rolling-hour rate-limit ledger scan.
+  @@index([uploadedById, createdAt])
+  /// Retention sweep for uploads that were never posted.
+  @@index([status, createdAt])
 }
 
 // ── KYC Verification tables ─────────────────────────────────────────────────

@@ -1,0 +1,199 @@
+/* Modal chrome ------------------------------------------------------------
+ *
+ * The phone layout is a full-bleed sheet, done in CSS rather than with
+ * Mantine's `fullScreen` prop. `fullScreen` needs useMediaQuery, which returns
+ * false during SSR and flips after hydration — every phone open would show the
+ * centered dialog for a frame and then snap to full screen. A media query is
+ * resolved by the browser before first paint, so there is nothing to pop.
+ *
+ * 48em is Mantine's `sm` breakpoint; 47.99em keeps the two rules exclusive.
+ */
+
+.modalInner {
+  /* Named so the mobile rule below has something to override. */
+  padding-inline: var(--modal-inner-x-offset, var(--modal-x-offset));
+}
+
+.modalContent {
+  display: flex;
+  flex-direction: column;
+}
+
+.modalHeader {
+  /* Mantine already sticks the header; restated because the mobile sheet
+     scrolls a much longer body underneath it. Its z-index is deliberately left
+     alone — everything inside the body stays below it. */
+  position: sticky;
+  top: 0;
+}
+
+.modalBody {
+  display: flex;
+  flex-direction: column;
+  /* Fills the sheet on a phone so the sticky footer sits at the bottom edge
+     even when the composer is barely written in. No-op on desktop, where the
+     modal is only as tall as its content. */
+  flex: 1;
+  min-height: 0;
+}
+
+@media (max-width: 47.99em) {
+  .modalInner {
+    --modal-inner-y-offset: 0;
+    --modal-inner-x-offset: 0;
+    padding: 0;
+  }
+
+  .modalContent {
+    --modal-content-flex: 0 0 100%;
+    --modal-content-max-height: none;
+    --modal-content-height: 100dvh;
+    width: 100vw;
+    max-width: 100vw;
+    border-radius: 0;
+  }
+
+  .modalHeader {
+    border-bottom: 1px solid var(--mantine-color-default-border);
+  }
+}
+
+/* Sticky action bar. Bleeds to the modal edges by cancelling the body padding
+ * (`--mb-padding`, which is what Mantine's ModalBody uses), so the content
+ * scrolling underneath disappears behind it rather than beside it.
+ * env(safe-area-inset-bottom) keeps the buttons above the iOS home indicator. */
+.footer {
+  position: sticky;
+  bottom: calc(-1 * var(--mb-padding, var(--mantine-spacing-md)));
+  z-index: 3;
+  margin-inline: calc(-1 * var(--mb-padding, var(--mantine-spacing-md)));
+  margin-bottom: calc(-1 * var(--mb-padding, var(--mantine-spacing-md)));
+  padding: var(--mantine-spacing-sm)
+    var(--mb-padding, var(--mantine-spacing-md));
+  padding-bottom: calc(
+    var(--mantine-spacing-sm) +
+    env(safe-area-inset-bottom, 0px)
+  );
+  background: var(--mantine-color-body);
+  border-top: 1px solid var(--mantine-color-default-border);
+}
+
+/* Write panel ------------------------------------------------------------- */
+
+.writePanel {
+  position: relative;
+  border-radius: var(--mantine-radius-md);
+  transition: box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.writePanel[data-dragging] {
+  box-shadow: 0 0 0 2px var(--mantine-color-blue-6);
+}
+
+.dropOverlay {
+  position: absolute;
+  inset: 0;
+  /* Above the textarea and the tiles, below the sticky footer. */
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--mantine-spacing-xs);
+  border: 2px dashed var(--mantine-color-blue-5);
+  border-radius: var(--mantine-radius-md);
+  background: color-mix(
+    in srgb,
+    var(--mantine-color-blue-9) 45%,
+    var(--mantine-color-body)
+  );
+  /* The overlay sits inside the drop zone, so it must never receive the
+     dragleave/drop itself — that would fire a leave for every pointer move. */
+  pointer-events: none;
+}
+
+/* Attachment tiles -------------------------------------------------------- */
+
+.tileGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  gap: var(--mantine-spacing-xs);
+}
+
+.tile {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-sm);
+  background: var(--mantine-color-dark-6);
+  transition: border-color var(--duration-fast) var(--ease-out);
+}
+
+.tile[data-status="error"] {
+  border-color: var(--mantine-color-red-6);
+}
+
+.tile[data-status="done"] {
+  border-color: color-mix(
+    in srgb,
+    var(--mantine-color-green-6) 55%,
+    var(--mantine-color-default-border)
+  );
+}
+
+.tileMedia {
+  position: relative;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--mantine-color-dark-7);
+}
+
+.thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tileMeta {
+  padding: 4px 6px 6px;
+}
+
+.tileScrim {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+}
+
+.tileBadge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+}
+
+/* Always in the DOM and always focusable — `display: none` until hover would
+ * put the only way to remove an attachment out of reach of the keyboard. It is
+ * revealed on hover, on focus anywhere in the tile, and unconditionally on
+ * touch devices, which have no hover state to trigger it. */
+.removeButton {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.tile:hover .removeButton,
+.tile:focus-within .removeButton {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .removeButton {
+    opacity: 1;
+  }
+}

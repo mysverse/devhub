@@ -250,10 +250,13 @@ function formatWatchDate(value: string | null) {
 function AssignmentWatchPanel({
   issueId,
   identifier,
+  url,
   watch,
 }: {
   issueId: string;
   identifier: string;
+  /** Linear issue URL, threaded to the progress composer's "open in Linear". */
+  url: string;
   watch: PptAssignmentWatchCardData;
 }) {
   const copy = statusCopy(PPT_ASSIGNMENT_WATCH_STATUS, watch.status);
@@ -282,7 +285,12 @@ function AssignmentWatchPanel({
         <Group justify="space-between" align="center">
           <StatusBadge copy={copy} size="sm" />
           <Group gap={4}>
-            <PptProgressButton issueId={issueId} compact />
+            <PptProgressButton
+              issueId={issueId}
+              identifier={identifier}
+              issueUrl={url}
+              compact
+            />
             <BlockedTaskButton
               issueId={issueId}
               isBlocked={isBlocked}
@@ -481,6 +489,7 @@ function TaskCard({
             <AssignmentWatchPanel
               issueId={issueId}
               identifier={identifier}
+              url={url}
               watch={assignmentWatch}
             />
           )}
@@ -489,7 +498,14 @@ function TaskCard({
               {estimate ? `${estimate} pts` : "Unestimated"}
             </Text>
             <Group gap="xs">
-              {isPpt && <PptProofButton issueId={issueId} compact />}
+              {isPpt && (
+                <PptProofButton
+                  issueId={issueId}
+                  identifier={identifier}
+                  issueUrl={url}
+                  compact
+                />
+              )}
               <LinearIcon url={url} />
             </Group>
           </Group>

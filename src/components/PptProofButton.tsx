@@ -1,62 +1,35 @@
 "use client";
 
-import { Button, Group, Modal, Stack, Text, Textarea } from "@mantine/core";
+import { Button, Group } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { ClipboardCheck, RotateCw } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useTransition } from "react";
 import { toast } from "sonner";
-import {
-  retryPptPayoutCheck,
-  submitPptProof,
-} from "@/app/dashboard/ppts/actions";
-import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
+import { retryPptPayoutCheck } from "@/app/dashboard/ppts/actions";
+import PptComposerModal from "@/components/ppt-composer/PptComposerModal";
 import { signIn } from "@/lib/auth-client";
-import { checkProofBody, describeProofEvidence } from "@/lib/ppt-proof";
 
+/**
+ * Trigger for the proof composer, plus the manual payout re-check.
+ *
+ * Retry stays here rather than inside the modal: it is what you press when the
+ * proof is already posted and the payout has not moved, so it must be reachable
+ * without opening a composer that would ask you to write proof again.
+ */
 export default function PptProofButton({
   issueId,
   compact,
+  identifier,
+  issueUrl,
 }: {
   issueId: string;
   compact?: boolean;
+  /** Linear identifier, used in the sheet title and pasted screenshot names. */
+  identifier?: string;
+  issueUrl?: string;
 }) {
   const [opened, { open, close }] = useDisclosure(false);
-  const [body, setBody] = useState("");
-  const [submitting, startSubmitTransition] = useTransition();
   const [retrying, startRetryTransition] = useTransition();
-
-  // The exact rule the payout evaluator applies, run live. Previously the
-  // button accepted anything over 20 characters and the evaluator quietly
-  // demanded 40 plus evidence, so proof could post to Linear and then never
-  // release payout with nothing explaining why.
-  const rejection = checkProofBody(body);
-  const touched = body.trim().length > 0;
-
-  function handleSubmit() {
-    const draft = body;
-    close();
-    const toastId = toast.loading("Submitting PPT proof...");
-
-    startSubmitTransition(async () => {
-      const result = await submitPptProof(issueId, draft);
-
-      if ("reauth" in result && result.reauth) {
-        signIn.oauth2({
-          providerId: "linear",
-          callbackURL: "/dashboard",
-        });
-        return;
-      }
-      if (result.error) {
-        setBody(draft);
-        open();
-        toast.error(result.error, { id: toastId });
-        return;
-      }
-      toast.success("PPT proof submitted", { id: toastId });
-      setBody("");
-    });
-  }
 
   function handleRetry() {
     const toastId = toast.loading("Queueing payout check...");
@@ -103,50 +76,14 @@ export default function PptProofButton({
         </Button>
       </Group>
 
-      <Modal
+      <PptComposerModal
+        mode="proof"
         opened={opened}
-        onClose={submitting ? () => {} : close}
-        title="Submit PPT proof"
-        centered
-        radius="md"
-        transitionProps={MODAL_TRANSITION}
-        overlayProps={{ ...OVERLAY_PROPS }}
-      >
-        <Stack gap="md">
-          <Text size="sm" c="dimmed">
-            Include what changed, proof links or screenshots, where it is
-            implemented, and how it was verified. DevHub will add #ppt-proof if
-            it is missing.
-          </Text>
-          <Textarea
-            minRows={6}
-            autosize
-            value={body}
-            onChange={(event) => setBody(event.currentTarget.value)}
-            placeholder={`#ppt-proof\n\nWhat changed:\nProof links/screenshots:\nLocation:\nVerification:`}
-            error={touched && rejection ? rejection.message : undefined}
-          />
-          {!rejection && (
-            <Text size="xs" c="dimmed">
-              {describeProofEvidence()}
-            </Text>
-          )}
-          <Group justify="flex-end">
-            <Button variant="default" onClick={close} disabled={submitting}>
-              Cancel
-            </Button>
-            <Button
-              color="green"
-              onClick={handleSubmit}
-              loading={submitting}
-              disabled={Boolean(rejection)}
-              leftSection={<ClipboardCheck size={14} />}
-            >
-              Submit Proof
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
+        onClose={close}
+        issueId={issueId}
+        identifier={identifier}
+        issueUrl={issueUrl}
+      />
     </>
   );
 }

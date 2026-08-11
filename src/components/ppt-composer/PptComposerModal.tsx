@@ -42,6 +42,7 @@ import {
   submitPptProof,
 } from "@/app/dashboard/ppts/actions";
 import AiAssistBar from "@/components/ai-assist/AiAssistBar";
+import AiAssistConcerns from "@/components/ai-assist/AiAssistConcerns";
 import { useAiAssist } from "@/components/ai-assist/useAiAssist";
 import {
   MODAL_TRANSITION,
@@ -714,6 +715,19 @@ export default function PptComposerModal({
             showErrors={attempted}
           />
         </Shake>
+
+        {/* A sibling of the checklist, never a row inside it. The checklist
+            means one specific thing — "this is what gates the payout" — and it
+            is the only thing on this screen that means it. A model opinion
+            mixed into those rows would make a green tick stop being a promise.
+            This blocks nothing: `unmetRequired()` never sees it and the submit
+            button never reads it. */}
+        {assist.review && (
+          <AiAssistConcerns
+            review={assist.review}
+            onDismiss={assist.dismissReview}
+          />
+        )}
 
         {/* Shake renders nothing under prefers-reduced-motion (MotionConfig
             runs reducedMotion="user"), so the refusal has to be spoken too. */}

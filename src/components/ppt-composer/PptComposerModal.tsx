@@ -41,6 +41,8 @@ import {
   submitPptProgress,
   submitPptProof,
 } from "@/app/dashboard/ppts/actions";
+import AiAssistBar from "@/components/ai-assist/AiAssistBar";
+import { useAiAssist } from "@/components/ai-assist/useAiAssist";
 import {
   MODAL_TRANSITION,
   OVERLAY_PROPS,
@@ -202,6 +204,17 @@ export default function PptComposerModal({
       }),
     [mode, body, readyIds.length],
   );
+
+  // Announces through the composer's own live region rather than adding a
+  // second one: two polite regions in one dialog interleave unpredictably.
+  const assist = useAiAssist({
+    fieldId: mode === "proof" ? "ppt_proof" : "ppt_progress",
+    value: body,
+    onChange: setBody,
+    textareaRef,
+    disabled: submitting,
+    onAnnounce: setLiveMessage,
+  });
 
   const updateAttachment = useCallback(
     (localId: string, patch: Partial<ComposerAttachment>) => {
@@ -571,8 +584,10 @@ export default function PptComposerModal({
                   onPaste={onPaste}
                   // readOnly, never disabled: disabling the focused textarea
                   // blurs it, which is the caret loss this rewrite exists to
-                  // end. The body still has to be frozen while it is in flight.
-                  readOnly={submitting}
+                  // end. The body still has to be frozen while it is in flight
+                  // — including while a rewrite is being fetched for it, since
+                  // the reply is spliced against the text that was sent.
+                  readOnly={submitting || assist.busy}
                 />
 
                 <Group gap={6}>
@@ -595,6 +610,8 @@ export default function PptComposerModal({
                     </Text>
                   )}
                 </Group>
+
+                <AiAssistBar assist={assist} compact />
 
                 <AttachmentTray
                   attachments={attachments}

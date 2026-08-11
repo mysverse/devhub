@@ -57,8 +57,14 @@ async function readError(response: Response): Promise<AttachmentUploadError> {
   const body = (await response.json().catch(() => ({}))) as ErrorBody;
   const message = body.error || `Upload failed (${response.status})`;
 
-  if (response.status === 401 && (body.reauth || body.error === "reauth_required")) {
-    return new AttachmentUploadError(message, { retryable: false, reauth: true });
+  if (
+    response.status === 401 &&
+    (body.reauth || body.error === "reauth_required")
+  ) {
+    return new AttachmentUploadError(message, {
+      retryable: false,
+      reauth: true,
+    });
   }
   // 4xx other than 429 means the file or the request is wrong; retrying the
   // same bytes would fail identically.
@@ -115,7 +121,9 @@ function postWithProgress(
         ),
       );
     xhr.onabort = () =>
-      reject(new AttachmentUploadError("Upload cancelled", { retryable: false }));
+      reject(
+        new AttachmentUploadError("Upload cancelled", { retryable: false }),
+      );
 
     if (signal) {
       if (signal.aborted) {
@@ -127,6 +135,32 @@ function postWithProgress(
 
     xhr.send(form);
   });
+}
+
+/**
+ * Recovers the real reason a relay upload was refused.
+ *
+ * Falls back to the SDK's own message if the preflight cannot say anything
+ * useful — a vague error beats swallowing the failure.
+ */
+async function explainRelayFailure(
+  issueId: string,
+  original: unknown,
+): Promise<AttachmentUploadError> {
+  try {
+    const response = await fetch(
+      `/api/ppt-attachments?issueId=${encodeURIComponent(issueId)}`,
+    );
+    if (!response.ok) return await readError(response);
+  } catch {
+    // Network failure while asking — fall through to the generic message.
+  }
+
+  const message =
+    original instanceof Error && original.message
+      ? original.message
+      : "Upload failed";
+  return new AttachmentUploadError(message);
 }
 
 export type UploadOptions = {
@@ -193,15 +227,26 @@ export async function uploadAttachment(
   // Relay. The blob is a short-lived staging area: the server fetches it,
   // forwards it to Linear, and deletes it. `multipart: false` keeps the SDK on
   // a single non-streamed PUT, which the dev-mode blob mock can serve.
-  const blob = await upload(`ppt-attachments/${issueId}/${file.name}`, file, {
-    access: "public",
-    handleUploadUrl: "/api/ppt-attachments/blob-token",
-    clientPayload: JSON.stringify({ issueId, kind }),
-    multipart: false,
-    contentType: mimeType,
-    onUploadProgress: ({ percentage }) => onProgress(percentage / 100),
-    abortSignal: signal,
-  });
+  let blob: { url: string };
+  try {
+    blob = await upload(`ppt-attachments/${issueId}/${file.name}`, file, {
+      access: "public",
+      handleUploadUrl: "/api/ppt-attachments/blob-token",
+      clientPayload: JSON.stringify({ issueId, kind }),
+      multipart: false,
+      contentType: mimeType,
+      onUploadProgress: ({ percentage }) => onProgress(percentage / 100),
+      abortSignal: signal,
+    });
+  } catch (error) {
+    if (signal?.aborted) {
+      throw new AttachmentUploadError("Upload cancelled", { retryable: false });
+    }
+    // The SDK discards the status, body and headers of any non-2xx from our
+    // token route, so "rate limited" and "reconnect Linear" both arrive here as
+    // a bare "Failed to retrieve the client token". Ask the server why.
+    throw await explainRelayFailure(issueId, error);
+  }
 
   const response = await fetch("/api/ppt-attachments/relay", {
     method: "POST",

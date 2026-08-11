@@ -32,7 +32,11 @@ export type AttachmentRateLimitScope = "count" | "bytes";
 
 export type AttachmentRateLimitResult =
   | { limited: false }
-  | { limited: true; scope: AttachmentRateLimitScope; retryAfterSeconds: number };
+  | {
+      limited: true;
+      scope: AttachmentRateLimitScope;
+      retryAfterSeconds: number;
+    };
 
 /**
  * Rolling-hour cap on uploads, using the attachment rows as their own ledger —
@@ -164,20 +168,23 @@ export type ClaimedAttachments = {
   ids: string[];
 };
 
+/** Rolls the claim transaction back when not every requested row was claimable. */
+class PartialClaimError extends Error {}
+
 /**
  * Atomically claims the caller's uploaded attachments for a comment about to
  * be posted, and returns the markdown to append.
  *
- * The claim is a compare-and-set: rows move UPLOADED -> POSTED in one
- * `updateMany` scoped to this user, this issue and this kind. If the number
- * updated does not match what was asked for, the caller is claiming rows it
+ * The claim is an all-or-nothing compare-and-set: rows move UPLOADED -> POSTED
+ * scoped to this user, this issue and this kind. If the number updated does not
+ * match what was asked for, the caller is claiming rows it
  * does not own, rows already spent, or rows that do not exist — every one of
  * which is a bug or an attack, so it fails loudly instead of silently posting
  * a partial set. It also makes a double submit safe: the second one claims
  * zero.
  *
- * Rows are marked POSTED *before* the comment exists, so `releaseClaim` must
- * run if posting then fails. That ordering is deliberate — the alternative
+ * Rows are marked POSTED *before* the comment exists, so `releaseAttachmentClaim`
+ * must run if posting then fails. That ordering is deliberate — the alternative
  * (claim after posting) leaves a window where two concurrent submits both
  * succeed and the same attachment lands in two comments.
  */
@@ -197,34 +204,55 @@ export async function claimAttachmentsForComment(input: {
     kind: input.kind,
   } as const;
 
-  const claimed = await prisma.pptCommentAttachment.updateMany({
-    where: { ...scope, status: "UPLOADED" as const },
-    data: { status: "POSTED" as const },
-  });
+  // The claim and its all-or-nothing check run in one transaction so a partial
+  // claim is rolled back by the database rather than compensated for afterwards.
+  //
+  // Compensating by hand is what would go wrong: an "un-claim everything in
+  // scope with a null linearCommentId" cleanup cannot tell rows THIS call just
+  // claimed from rows a concurrent submit by the same user on the same issue
+  // legitimately claimed a millisecond earlier — so it would hand the other
+  // caller's attachments back while its comment was already being posted.
+  let found: (MarkdownAttachment & { id: string })[];
+  try {
+    found = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.pptCommentAttachment.updateMany({
+        where: { ...scope, status: "UPLOADED" as const },
+        data: { status: "POSTED" as const },
+      });
+      if (claimed.count !== ids.length) throw new PartialClaimError();
 
-  if (claimed.count !== ids.length) {
-    // Put back whatever this call did claim, so a retry can succeed.
-    await prisma.pptCommentAttachment.updateMany({
-      where: { ...scope, status: "POSTED" as const, linearCommentId: null },
-      data: { status: "UPLOADED" as const },
+      return tx.pptCommentAttachment.findMany({
+        where: scope,
+        select: {
+          id: true,
+          filename: true,
+          mimeType: true,
+          byteSize: true,
+          linearAssetUrl: true,
+        },
+      });
     });
-    return {
-      error:
-        "Some attachments are no longer available. Remove them and try again.",
-    };
+  } catch (error) {
+    if (error instanceof PartialClaimError) {
+      return {
+        error:
+          "Some attachments are no longer available. Remove them and try again.",
+      };
+    }
+    throw error;
   }
 
-  const rows = await prisma.pptCommentAttachment.findMany({
-    where: scope,
-    orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    select: {
-      id: true,
-      filename: true,
-      mimeType: true,
-      byteSize: true,
-      linearAssetUrl: true,
-    },
-  });
+  // Order by the caller's `ids` array, not by any database column.
+  //
+  // `ids` is the order the developer arranged the tray in. Sorting by
+  // sortOrder/createdAt instead would order by upload *completion*: uploads run
+  // in parallel, and a 200 KB screenshot on the fast proxy path finishes before
+  // a 20 MB clip that went through the relay — so a before/after pair would
+  // routinely post as after/before.
+  const byId = new Map(found.map((row) => [row.id, row]));
+  const rows = ids
+    .map((id) => byId.get(id))
+    .filter((row): row is (typeof found)[number] => row !== undefined);
 
   return {
     rows,

@@ -17,7 +17,13 @@ test("an email address never survives", () => {
 });
 
 test("a phone number survives neither spacing nor punctuation", () => {
-  for (const written of ["0198765432", "+60 19-876 5432", "019-876 5432"]) {
+  for (const written of [
+    "0198765432",
+    "+60 19-876 5432",
+    "019-876 5432",
+    "(019) 876-5432",
+    "+6 (019) 876 5432",
+  ]) {
     assert.equal(
       redactPatterns(`call ${written} today`),
       `call ${REDACTED_NUMBER} today`,

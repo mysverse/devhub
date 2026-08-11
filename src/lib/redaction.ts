@@ -30,14 +30,16 @@ export const REDACTED_PERSONAL = "[redacted personal data]";
  * Shape-based redaction. Deliberately eager: a false positive costs the model a
  * little context, a false negative sends someone's phone number to a provider.
  *
- * The number pattern matches 9+ digits with optional separators, which covers
- * Malaysian mobiles, bank account numbers and NRIC digits. It does not match a
- * Linear estimate, a year, or a short issue number.
+ * The number pattern matches 9+ digits separated by up to two punctuation or
+ * space characters each, which covers Malaysian mobiles, bank account numbers
+ * and NRIC digits however they are grouped. It does not match a Linear
+ * estimate, a year, or a short issue number: a comma is not a separator, so
+ * "MYS-201, due 2026" ends the run twice.
  */
 export function redactPatterns(text: string) {
   return text
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, REDACTED_EMAIL)
-    .replace(/(?:\+?\d[\s().-]?){8,}\d/g, REDACTED_NUMBER)
+    .replace(/\+?\(?\d(?:[\s().-]{0,2}\d){8,}/g, REDACTED_NUMBER)
     .replace(
       /\b(?:sk|api|token|secret|password)[-_ ]?[A-Za-z0-9_-]{12,}\b/gi,
       REDACTED_SECRET,

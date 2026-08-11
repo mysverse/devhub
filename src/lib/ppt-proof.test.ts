@@ -8,6 +8,7 @@ import {
   isProofFollowUpQuestion,
   PROOF_QUESTION_MIN_CHARS,
   proofContent,
+  summarizeProofEvidence,
 } from "@/lib/ppt-proof";
 import {
   describePptNextStep,
@@ -229,5 +230,63 @@ describe("isProofFollowUpQuestion", () => {
       PROOF_QUESTION_MIN_CHARS - 1,
     );
     assert.equal(isProofFollowUpQuestion(short), false);
+  });
+});
+
+describe("summarizeProofEvidence", () => {
+  it("counts an embedded image once, not as an image and a link", () => {
+    const inventory = summarizeProofEvidence(
+      "Fixed the gate. ![shot](https://uploads.linear.app/a.png)",
+    );
+    assert.equal(inventory.images, 1);
+    assert.equal(inventory.links, 0);
+  });
+
+  it("counts links and images separately when both are present", () => {
+    const inventory = summarizeProofEvidence(
+      "See https://example.com/a and https://example.com/b ![x](https://uploads.linear.app/c.png)",
+    );
+    assert.equal(inventory.links, 2);
+    assert.equal(inventory.images, 1);
+  });
+
+  it("names references and de-duplicates them", () => {
+    const inventory = summarizeProofEvidence(
+      "Follows MYS-201, blocked by MYS-201, split from MYS-88.",
+    );
+    assert.deepEqual(inventory.references, ["MYS-201", "MYS-88"]);
+  });
+
+  it("counts what the gate counts, with the marker stripped", () => {
+    const body = "#ppt-proof Fixed the spawn timer.";
+    assert.equal(
+      summarizeProofEvidence(body).contentChars,
+      proofContent(body).length,
+    );
+  });
+
+  it("reports nothing rather than guessing on empty proof", () => {
+    assert.deepEqual(summarizeProofEvidence(""), {
+      links: 0,
+      images: 0,
+      references: [],
+      contentChars: 0,
+    });
+  });
+
+  it("agrees with the gate about whether there is any evidence at all", () => {
+    // The inventory reports on the rule; it must never claim evidence the rule
+    // does not see, or an admin reads "1 link" next to a rejected payout.
+    for (const body of [
+      "Fixed it, see https://example.com/x, plenty long enough to pass.",
+      "Fixed it in MYS-201, and that is plenty long enough to pass the gate.",
+      "Nothing here at all but words, though it is long enough to pass length.",
+    ]) {
+      const inventory = summarizeProofEvidence(body);
+      const counted =
+        inventory.links + inventory.images + inventory.references.length > 0;
+      const gated = checkProofBody(body)?.reason !== "no-evidence";
+      assert.equal(counted, gated, body);
+    }
   });
 });

@@ -109,6 +109,51 @@ export function isMeaningfulProofBody(
   return checkProofBody(body, context) === null;
 }
 
+/**
+ * What the evidence rule actually matched, for a reviewer reading the proof.
+ *
+ * Derived from the same two patterns `hasEvidenceReference` uses rather than
+ * from a second set — this reports on the gate, it does not re-implement it,
+ * and it deliberately returns no verdict. `checkProofBody` stays the only
+ * function in this codebase that says whether proof qualifies.
+ *
+ * Counting is the point: "3 links · 2 images" tells an admin at a glance
+ * whether there is anything to open, which is the question they actually have
+ * when a payout board shows a hundred rows.
+ */
+export type ProofEvidenceInventory = {
+  links: number;
+  images: number;
+  /** Issue identifiers and commit SHAs, de-duplicated, in the order found. */
+  references: string[];
+  /** Length of the proof text with the marker stripped — what the gate counts. */
+  contentChars: number;
+};
+
+const LINK_PATTERN = /https?:\/\/\S+/g;
+const IMAGE_PATTERN = /!\[[^\]]*\]\([^)]*\)/g;
+const REFERENCE_PATTERN = new RegExp(EVIDENCE_REFERENCE_PATTERN, "g");
+
+export function summarizeProofEvidence(body: string): ProofEvidenceInventory {
+  const content = proofContent(body);
+  // Images are markdown links too, so they are removed before counting links —
+  // otherwise a single pasted screenshot reads as one image AND one link.
+  const withoutImages = content.replace(IMAGE_PATTERN, " ");
+
+  return {
+    links: withoutImages.match(LINK_PATTERN)?.length ?? 0,
+    images: content.match(IMAGE_PATTERN)?.length ?? 0,
+    references: [
+      ...new Set(
+        (withoutImages.match(REFERENCE_PATTERN) ?? []).map((match) =>
+          match.trim(),
+        ),
+      ),
+    ],
+    contentChars: content.length,
+  };
+}
+
 /** Composer hint, shown before the developer submits rather than after. */
 export function describeProofEvidence() {
   return "Attach a screenshot or clip, or paste a link, commit SHA, or issue reference — proof without one of these can't be verified.";

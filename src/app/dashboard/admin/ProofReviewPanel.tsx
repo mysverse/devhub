@@ -24,6 +24,7 @@ import {
   isAttachmentImage,
   isAttachmentVideo,
 } from "@/lib/ppt-attachment-policy";
+import { summarizeProofEvidence } from "@/lib/ppt-proof";
 import type { ProofAttachmentSummary } from "./types";
 
 /**
@@ -72,6 +73,41 @@ function splitProofBody(body: string, previewLines: number) {
     }
   }
   return { head: body, tail: "" };
+}
+
+/**
+ * "2 attachments · 1 link · MYS-201 · 412 characters", or nothing when there is
+ * nothing to count. Plural handling is written out rather than computed so the
+ * strings stay greppable.
+ */
+function describeEvidenceInventory(
+  body: string | null,
+  attachmentCount: number,
+) {
+  if (!body && attachmentCount === 0) return "";
+  const inventory = summarizeProofEvidence(body ?? "");
+  const parts: string[] = [];
+
+  if (attachmentCount === 1) parts.push("1 attachment");
+  else if (attachmentCount > 1) parts.push(`${attachmentCount} attachments`);
+
+  if (inventory.images === 1) parts.push("1 embedded image");
+  else if (inventory.images > 1)
+    parts.push(`${inventory.images} embedded images`);
+
+  if (inventory.links === 1) parts.push("1 link");
+  else if (inventory.links > 1) parts.push(`${inventory.links} links`);
+
+  // Named rather than counted: an admin wants to see MYS-201, not "1 reference".
+  if (inventory.references.length > 0) {
+    parts.push(inventory.references.slice(0, 3).join(", "));
+  }
+
+  if (inventory.contentChars > 0) {
+    parts.push(`${inventory.contentChars} characters`);
+  }
+
+  return parts.join(" · ");
 }
 
 function AttachmentChip({
@@ -177,6 +213,7 @@ export default function ProofReviewPanel({
     ? splitProofBody(body, previewLines)
     : { head: "", tail: "" };
   const truncated = (body?.length ?? 0) >= PROOF_BODY_CAP;
+  const evidenceSummary = describeEvidenceInventory(body, attachments.length);
 
   return (
     <>
@@ -255,6 +292,17 @@ export default function ProofReviewPanel({
           {truncated && (
             <Text size="xs" c="dimmed" fs="italic">
               Truncated — open in Linear for the full comment.
+            </Text>
+          )}
+
+          {/* What the evidence rule matched, counted rather than judged. The
+              question an admin actually has on a board of a hundred rows is
+              "is there anything here to open", and reading the prose to find
+              out is the tax this removes. Never a verdict: checkProofBody() is
+              the only thing that says whether proof qualifies. */}
+          {evidenceSummary && (
+            <Text size="xs" c="dimmed">
+              {evidenceSummary}
             </Text>
           )}
 

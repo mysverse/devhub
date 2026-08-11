@@ -13,6 +13,7 @@ import {
   assistEligibility,
 } from "@/lib/ai-assist-config";
 import type { WritingReviewResult } from "@/lib/llm-prompts";
+import { useAiAssistAvailable } from "./AiAssistAvailability";
 
 /**
  * The state machine behind every writing-assist affordance.
@@ -49,8 +50,11 @@ export type UseAiAssistOptions = {
   value: string;
   onChange: (next: string) => void;
   textareaRef: RefObject<HTMLTextAreaElement | null>;
-  /** Server-computed. False renders nothing at all. */
-  available: boolean;
+  /**
+   * Server-computed. False renders nothing at all. Defaults to the dashboard
+   * shell's value, so most hosts pass nothing.
+   */
+  available?: boolean;
   /** True while the host form is submitting. */
   disabled?: boolean;
   /**
@@ -65,11 +69,13 @@ export function useAiAssist({
   value,
   onChange,
   textareaRef,
-  available,
+  available: availableProp,
   disabled,
   onAnnounce,
 }: UseAiAssistOptions) {
   const config = AI_ASSIST_FIELDS[fieldId];
+  const shellAvailable = useAiAssistAvailable();
+  const available = availableProp ?? shellAvailable;
 
   const [running, setRunning] = useState<AiAssistAction | "review" | null>(
     null,

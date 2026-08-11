@@ -26,6 +26,7 @@ import { motion } from "motion/react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Suspense, use } from "react";
+import { AiAssistAvailabilityProvider } from "@/components/ai-assist/AiAssistAvailability";
 import AssistantOverlay from "@/components/assistant/AssistantOverlay";
 import CampaignBanner, {
   type CampaignBannerData,
@@ -272,11 +273,13 @@ export default function DashboardLayoutClient({
   adminPromise,
   campaignPromise,
   assistantAvailable,
+  writingAssistAvailable,
 }: {
   children: React.ReactNode;
   adminPromise: Promise<boolean>;
   campaignPromise: Promise<CampaignBannerData | null>;
   assistantAvailable: boolean;
+  writingAssistAvailable: boolean;
 }) {
   const [opened, { toggle, close }] = useDisclosure();
   const { data: session } = useSession();
@@ -284,138 +287,144 @@ export default function DashboardLayoutClient({
 
   return (
     <NotificationsProvider>
-      <AppShell
-        header={{ height: 60 }}
-        navbar={{
-          width: 300,
-          breakpoint: "md",
-          collapsed: { desktop: true, mobile: !opened },
-        }}
-        padding="md"
-      >
-        <AppShellHeader>
-          <Container size="lg" h="100%">
-            <Group h="100%" px="md" justify="space-between" wrap="nowrap">
-              <Group wrap="nowrap">
-                <Burger
-                  opened={opened}
-                  onClick={toggle}
-                  hiddenFrom="md"
-                  size="sm"
-                />
-                <Link
-                  href="/dashboard"
-                  style={{
-                    textDecoration: "none",
-                    color: "inherit",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "10px",
-                  }}
-                >
-                  <Logo size={32} />
-                </Link>
-              </Group>
+      <AiAssistAvailabilityProvider available={writingAssistAvailable}>
+        <AppShell
+          header={{ height: 60 }}
+          navbar={{
+            width: 300,
+            breakpoint: "md",
+            collapsed: { desktop: true, mobile: !opened },
+          }}
+          padding="md"
+        >
+          <AppShellHeader>
+            <Container size="lg" h="100%">
+              <Group h="100%" px="md" justify="space-between" wrap="nowrap">
+                <Group wrap="nowrap">
+                  <Burger
+                    opened={opened}
+                    onClick={toggle}
+                    hiddenFrom="md"
+                    size="sm"
+                  />
+                  <Link
+                    href="/dashboard"
+                    style={{
+                      textDecoration: "none",
+                      color: "inherit",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "10px",
+                    }}
+                  >
+                    <Logo size={32} />
+                  </Link>
+                </Group>
 
-              <Group gap={4} visibleFrom="md" wrap="nowrap">
-                <Suspense fallback={<DesktopNavLinksFallback />}>
-                  <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
-                </Suspense>
-              </Group>
+                <Group gap={4} visibleFrom="md" wrap="nowrap">
+                  <Suspense fallback={<DesktopNavLinksFallback />}>
+                    <DesktopNavLinksWithAdmin adminPromise={adminPromise} />
+                  </Suspense>
+                </Group>
 
-              <Group gap="xs" wrap="nowrap">
-                {assistantAvailable && (
-                  <Tooltip label="Ask DevHub (Alt+A)">
-                    <ActionIcon
-                      variant="subtle"
-                      color="gray"
-                      aria-label="Open DevHub Assistant"
-                      onClick={() =>
-                        window.dispatchEvent(new Event("devhub:assistant-open"))
-                      }
-                    >
-                      <Bot size={18} />
-                    </ActionIcon>
-                  </Tooltip>
-                )}
-                <NotificationBell />
-                <Menu
-                  shadow="md"
-                  width={200}
-                  transitionProps={{ duration: 160 }}
-                >
-                  <MenuTarget>
-                    <UnstyledButton>
-                      <Avatar
-                        src={session?.user?.image}
-                        alt={session?.user?.name ?? "User"}
-                        radius="xl"
-                        size="sm"
-                      />
-                    </UnstyledButton>
-                  </MenuTarget>
-                  <MenuDropdown>
-                    <MenuLabel>
-                      {session?.user?.name ?? session?.user?.email}
-                    </MenuLabel>
-                    {MENU_LINKS.map((link) => (
-                      <MenuItem
-                        key={link.href}
-                        component={Link}
-                        href={link.href}
-                        leftSection={
-                          link.href === "/dashboard/assistant" ? (
-                            <Bot size={14} />
-                          ) : link.href === "/dashboard/documents" ? (
-                            <FileText size={14} />
-                          ) : (
-                            <Package size={14} />
+                <Group gap="xs" wrap="nowrap">
+                  {assistantAvailable && (
+                    <Tooltip label="Ask DevHub (Alt+A)">
+                      <ActionIcon
+                        variant="subtle"
+                        color="gray"
+                        aria-label="Open DevHub Assistant"
+                        onClick={() =>
+                          window.dispatchEvent(
+                            new Event("devhub:assistant-open"),
                           )
                         }
                       >
-                        {link.label}
+                        <Bot size={18} />
+                      </ActionIcon>
+                    </Tooltip>
+                  )}
+                  <NotificationBell />
+                  <Menu
+                    shadow="md"
+                    width={200}
+                    transitionProps={{ duration: 160 }}
+                  >
+                    <MenuTarget>
+                      <UnstyledButton>
+                        <Avatar
+                          src={session?.user?.image}
+                          alt={session?.user?.name ?? "User"}
+                          radius="xl"
+                          size="sm"
+                        />
+                      </UnstyledButton>
+                    </MenuTarget>
+                    <MenuDropdown>
+                      <MenuLabel>
+                        {session?.user?.name ?? session?.user?.email}
+                      </MenuLabel>
+                      {MENU_LINKS.map((link) => (
+                        <MenuItem
+                          key={link.href}
+                          component={Link}
+                          href={link.href}
+                          leftSection={
+                            link.href === "/dashboard/assistant" ? (
+                              <Bot size={14} />
+                            ) : link.href === "/dashboard/documents" ? (
+                              <FileText size={14} />
+                            ) : (
+                              <Package size={14} />
+                            )
+                          }
+                        >
+                          {link.label}
+                        </MenuItem>
+                      ))}
+                      <MenuItem
+                        leftSection={<LogOut size={14} />}
+                        onClick={async () => {
+                          await signOut();
+                          router.push("/");
+                        }}
+                      >
+                        Sign out
                       </MenuItem>
-                    ))}
-                    <MenuItem
-                      leftSection={<LogOut size={14} />}
-                      onClick={async () => {
-                        await signOut();
-                        router.push("/");
-                      }}
-                    >
-                      Sign out
-                    </MenuItem>
-                  </MenuDropdown>
-                </Menu>
+                    </MenuDropdown>
+                  </Menu>
+                </Group>
               </Group>
-            </Group>
-          </Container>
-        </AppShellHeader>
+            </Container>
+          </AppShellHeader>
 
-        <AppShellNavbar p="md">
-          <Stack gap={4}>
-            <Suspense fallback={<MobileNavLinksFallback onNavigate={close} />}>
-              <MobileNavLinksWithAdmin
-                adminPromise={adminPromise}
-                onNavigate={close}
-              />
-            </Suspense>
-          </Stack>
-        </AppShellNavbar>
+          <AppShellNavbar p="md">
+            <Stack gap={4}>
+              <Suspense
+                fallback={<MobileNavLinksFallback onNavigate={close} />}
+              >
+                <MobileNavLinksWithAdmin
+                  adminPromise={adminPromise}
+                  onNavigate={close}
+                />
+              </Suspense>
+            </Stack>
+          </AppShellNavbar>
 
-        <AppShellMain>
-          <Container size="lg" py="xl">
-            <Suspense fallback={null}>
-              <CampaignBannerSlot campaignPromise={campaignPromise} />
-            </Suspense>
-            {children}
-          </Container>
-        </AppShellMain>
-        <NotificationPoller />
-        <Suspense fallback={null}>
-          <AssistantOverlay available={assistantAvailable} />
-        </Suspense>
-      </AppShell>
+          <AppShellMain>
+            <Container size="lg" py="xl">
+              <Suspense fallback={null}>
+                <CampaignBannerSlot campaignPromise={campaignPromise} />
+              </Suspense>
+              {children}
+            </Container>
+          </AppShellMain>
+          <NotificationPoller />
+          <Suspense fallback={null}>
+            <AssistantOverlay available={assistantAvailable} />
+          </Suspense>
+        </AppShell>
+      </AiAssistAvailabilityProvider>
     </NotificationsProvider>
   );
 }

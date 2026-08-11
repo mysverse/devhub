@@ -6,7 +6,11 @@
  * via globalThis), while stored bytes are SERVED to browsers and loopback
  * fetches by the Next route at /api/dev/blob/[[...path]].
  *
- * .env.mock points VERCEL_BLOB_API_URL at this server.
+ * .env.mock points VERCEL_BLOB_API_URL at this server for server-side calls,
+ * and NEXT_PUBLIC_VERCEL_BLOB_API_URL for browser-side ones — @vercel/blob's
+ * getApiUrl() reads either. Browser uploads are cross-origin (:3000 → :4983)
+ * and the SDK sends custom x-* headers, so every request preflights; the CORS
+ * handling below is what makes client uploads work at all in dev mode.
  */
 
 import { createServer } from "node:http";
@@ -42,6 +46,24 @@ export function startDevBlobServer(): void {
   const port = Number(new URL(apiUrl).port || "4983");
 
   const server = createServer((req, res) => {
+    // Mirror whatever the SDK asks for rather than enumerating its headers —
+    // they change between versions, and this server only ever runs in dev.
+    const cors: Record<string, string> = {
+      "access-control-allow-origin": req.headers.origin ?? "*",
+      "access-control-allow-methods": "GET, PUT, POST, OPTIONS",
+      "access-control-allow-headers":
+        (req.headers["access-control-request-headers"] as string | undefined) ??
+        "*",
+      "access-control-max-age": "86400",
+      "access-control-expose-headers": "*",
+    };
+
+    if (req.method === "OPTIONS") {
+      res.writeHead(204, cors);
+      res.end();
+      return;
+    }
+
     const chunks: Buffer[] = [];
     req.on("data", (chunk: Buffer) => chunks.push(chunk));
     req.on("end", () => {
@@ -71,7 +93,7 @@ export function startDevBlobServer(): void {
           `[dev-mode] blob stored: ${pathname} (${body.byteLength} bytes)`,
         );
         const publicUrl = publicBlobUrl(pathname);
-        res.writeHead(200, { "content-type": "application/json" });
+        res.writeHead(200, { ...cors, "content-type": "application/json" });
         res.end(
           JSON.stringify({
             url: publicUrl,
@@ -92,7 +114,7 @@ export function startDevBlobServer(): void {
         for (const target of urls ?? []) {
           blobs.delete(toPathname(target));
         }
-        res.writeHead(200, { "content-type": "application/json" });
+        res.writeHead(200, { ...cors, "content-type": "application/json" });
         res.end("{}");
         return;
       }
@@ -100,13 +122,13 @@ export function startDevBlobServer(): void {
       if (req.method === "GET") {
         const blob = getDevState().blobs.get(toPathname(url.pathname));
         if (blob) {
-          res.writeHead(200, { "content-type": blob.contentType });
+          res.writeHead(200, { ...cors, "content-type": blob.contentType });
           res.end(Buffer.from(blob.bytes));
           return;
         }
       }
 
-      res.writeHead(404, { "content-type": "text/plain" });
+      res.writeHead(404, { ...cors, "content-type": "text/plain" });
       res.end(
         `[dev-mode] blob mock: unhandled ${req.method} ${req.url} — see src/dev/blob-server.ts`,
       );

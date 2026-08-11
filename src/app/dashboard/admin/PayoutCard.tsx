@@ -47,6 +47,7 @@ import {
   rejectTransaction,
 } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
+import ProofReviewPanel from "./ProofReviewPanel";
 import type { PayoutPaymentDetails, PayoutTransaction } from "./types";
 
 function renderPaymentDetails(
@@ -159,6 +160,10 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const isRejected = tx.status === "REJECTED";
   const isBonus = tx.source === "BONUS";
   const isIncentive = tx.source === "INCENTIVE";
+  const hasProof =
+    !!tx.proofBody ||
+    !!tx.proofCommentUrl ||
+    (tx.proofAttachments?.length ?? 0) > 0;
   const { color, label } = statusCopy(TRANSACTION_STATUS, tx.status);
 
   // Billplz eligibility: MYR + DuitNow with Billplz-supported bank + bank details present + no active payout
@@ -452,19 +457,18 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                     {tx.proofReason.replaceAll("_", " ")}
                   </Text>
                 )}
-                {tx.proofCommentUrl && (
-                  <Button
-                    component="a"
-                    href={tx.proofCommentUrl}
-                    target="_blank"
-                    size="xs"
-                    variant="subtle"
-                    color="gray"
-                    mt="xs"
-                    px={0}
-                  >
-                    Open proof comment
-                  </Button>
+                {/* The wrapper carries the margin, so it has to share the
+                    panel's own "is there anything to show" test — otherwise a
+                    proofless row pads the box with empty space. */}
+                {hasProof && (
+                  <Box mt="xs">
+                    <ProofReviewPanel
+                      body={tx.proofBody ?? null}
+                      attachments={tx.proofAttachments ?? []}
+                      commentUrl={tx.proofCommentUrl ?? null}
+                      variant="compact"
+                    />
+                  </Box>
                 )}
               </Box>
             )}

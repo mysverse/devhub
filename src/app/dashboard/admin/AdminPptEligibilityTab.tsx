@@ -26,11 +26,13 @@ import {
 import EmptyState from "@/components/EmptyState";
 import StatusBadge from "@/components/StatusBadge";
 import { PPT_PAYOUT_STATUS, statusCopy } from "@/lib/status-copy";
+import ProofReviewPanel from "./ProofReviewPanel";
 import {
   clearPptProofOverrideAsAdmin,
   overridePptProofAsAdmin,
   retryPptEligibilityAsAdmin,
 } from "./ppt-eligibility-actions";
+import type { ProofAttachmentSummary } from "./types";
 
 export type AdminPptEligibilityState = {
   id: string;
@@ -46,6 +48,12 @@ export type AdminPptEligibilityState = {
   nextStep: string | null;
   completionEpisode: number;
   proofCommentUrl: string | null;
+  /**
+   * The proof comment itself, captured at evaluation time (capped at 1000
+   * chars). Developer-authored free text — admin surfaces only.
+   */
+  proofBody: string | null;
+  proofAttachments: ProofAttachmentSummary[];
   proofOverride: boolean;
   proofOverrideNote: string | null;
   proofOverrideByName: string | null;
@@ -249,18 +257,11 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
               </Alert>
             )}
 
-            {state.proofCommentUrl && (
-              <Button
-                component="a"
-                href={state.proofCommentUrl}
-                target="_blank"
-                variant="light"
-                size="xs"
-                color="green"
-              >
-                Open proof comment
-              </Button>
-            )}
+            <ProofReviewPanel
+              body={state.proofBody}
+              attachments={state.proofAttachments}
+              commentUrl={state.proofCommentUrl}
+            />
 
             {state.events.length > 0 && (
               <Timeline

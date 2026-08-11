@@ -16,6 +16,23 @@ export type PayoutPaymentDetails = {
   email: string | null;
 };
 
+/**
+ * A PROOF attachment an assignee posted alongside their #ppt-proof comment.
+ *
+ * Deliberately no `linearAssetUrl`: Linear's asset host needs a bearer token,
+ * so the only URL that renders in a browser is `/api/ppt-attachments/<id>`,
+ * which re-checks the viewer. Shipping the raw URL would tempt a future edit
+ * into an <img> that silently 401s.
+ */
+export type ProofAttachmentSummary = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  byteSize: number;
+  width: number | null;
+  height: number | null;
+};
+
 export type PayoutTransaction = {
   id: string;
   userId: string;
@@ -42,6 +59,13 @@ export type PayoutTransaction = {
   proofStatus?: string | null;
   proofReason?: string | null;
   proofCommentUrl?: string | null;
+  /**
+   * The proof comment itself, so an admin can judge it without leaving the
+   * board. Developer-authored free text — admin surfaces only; it must never
+   * be mapped into a DTO another developer can read.
+   */
+  proofBody?: string | null;
+  proofAttachments?: ProofAttachmentSummary[];
   bonusLineItems?: {
     id: string;
     identifier?: string | null;

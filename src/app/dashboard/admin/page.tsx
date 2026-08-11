@@ -53,7 +53,11 @@ import type { AdminPptEligibilityState } from "./AdminPptEligibilityTab";
 import { getBillplzCollectionId } from "./actions";
 import BillplzCollectionCard from "./BillplzCollectionCard";
 import type { PptRequestData } from "./PptRequestCard";
-import type { PayoutPaymentDetails, PayoutTransaction } from "./types";
+import type {
+  PayoutPaymentDetails,
+  PayoutTransaction,
+  ProofAttachmentSummary,
+} from "./types";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard/admin");
 
@@ -84,15 +88,34 @@ const BONUS_LINE_ITEM_SELECT = {
   approvedAmount: true,
 } as const satisfies Prisma.BonusCandidateSelect;
 
+/**
+ * The PPT proof fields the payout board reads. Named rather than inlined
+ * because the same tuple feeds three queries and two payload types, and a
+ * field added to only some of them is a type error at best and a silently
+ * missing proof body at worst.
+ *
+ * `proofCommentId` keys the PROOF attachments — NOT `linearIssueId`. A task
+ * can accumulate several proof attempts, and keying by issue would show a
+ * rejected attempt's screenshots next to the current verdict, on the surface
+ * where money is approved. `proofCommentBody` is the comment itself, and is
+ * admin-only.
+ */
+const PPT_PROOF_SELECT = {
+  linearIssueId: true,
+  status: true,
+  reason: true,
+  proofCommentId: true,
+  proofCommentUrl: true,
+  proofCommentBody: true,
+} as const satisfies Prisma.PptPayoutStateSelect;
+
 type PendingTransaction = Prisma.TransactionGetPayload<{
   include: {
     user: { select: typeof PENDING_USER_SELECT };
     payout: true;
     bonusCandidates: { select: typeof BONUS_LINE_ITEM_SELECT };
     incentiveAwards: true;
-    pptPayoutState: {
-      select: { status: true; reason: true; proofCommentUrl: true };
-    };
+    pptPayoutState: { select: typeof PPT_PROOF_SELECT };
   };
 }>;
 
@@ -102,9 +125,7 @@ type SettledTransaction = Prisma.TransactionGetPayload<{
     payout: true;
     bonusCandidates: { select: typeof BONUS_LINE_ITEM_SELECT };
     incentiveAwards: true;
-    pptPayoutState: {
-      select: { status: true; reason: true; proofCommentUrl: true };
-    };
+    pptPayoutState: { select: typeof PPT_PROOF_SELECT };
   };
 }>;
 
@@ -113,9 +134,11 @@ type TransactionWithUser = PendingTransaction | SettledTransaction;
 function buildPayoutTransaction(
   tx: TransactionWithUser,
   taskTitle: string,
+  proofAttachmentsByComment: Map<string, ProofAttachmentSummary[]>,
   creditLimitUsage?: { used: number; limit: number; remaining: number } | null,
 ): PayoutTransaction {
   const { user } = tx;
+  const proofCommentId = tx.pptPayoutState?.proofCommentId;
   // Only pending rows carry the rails; the settled queries do not select them.
   const paymentDetails: PayoutPaymentDetails | null =
     "bankAccountNumber" in user
@@ -151,6 +174,10 @@ function buildPayoutTransaction(
     proofStatus: tx.pptPayoutState?.status ?? null,
     proofReason: tx.pptPayoutState?.reason ?? null,
     proofCommentUrl: tx.pptPayoutState?.proofCommentUrl ?? null,
+    proofBody: tx.pptPayoutState?.proofCommentBody ?? null,
+    proofAttachments: proofCommentId
+      ? (proofAttachmentsByComment.get(proofCommentId) ?? [])
+      : [],
     bonusLineItems: tx.bonusCandidates.map((candidate) => ({
       id: candidate.id,
       identifier: candidate.linearIssueIdentifier,
@@ -302,13 +329,7 @@ async function AdminPageContent() {
         payout: true,
         bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
         incentiveAwards: true,
-        pptPayoutState: {
-          select: {
-            status: true,
-            reason: true,
-            proofCommentUrl: true,
-          },
-        },
+        pptPayoutState: { select: PPT_PROOF_SELECT },
       },
       orderBy: { createdAt: "asc" },
       take: 100,
@@ -320,13 +341,7 @@ async function AdminPageContent() {
         payout: true,
         bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
         incentiveAwards: true,
-        pptPayoutState: {
-          select: {
-            status: true,
-            reason: true,
-            proofCommentUrl: true,
-          },
-        },
+        pptPayoutState: { select: PPT_PROOF_SELECT },
       },
       orderBy: { paidAt: "desc" },
       take: 50,
@@ -338,13 +353,7 @@ async function AdminPageContent() {
         payout: true,
         bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
         incentiveAwards: true,
-        pptPayoutState: {
-          select: {
-            status: true,
-            reason: true,
-            proofCommentUrl: true,
-          },
-        },
+        pptPayoutState: { select: PPT_PROOF_SELECT },
       },
       orderBy: { rejectedAt: "desc" },
       take: 50,
@@ -464,6 +473,64 @@ async function AdminPageContent() {
       : "none";
   const callbackUrl = `${getBaseUrl()}/api/webhooks/billplz`;
 
+  // Proof attachments for everything the board renders — the payout cards and
+  // the eligibility tab both show them, so they are fetched once for the union
+  // of proof comment ids rather than per card.
+  //
+  // Keyed on `linearCommentId`, and `postedAt` must be set. Two states are
+  // deliberately excluded because neither is evidence for the proof being
+  // reviewed:
+  //   - UPLOADED: an upload that never made it into a comment at all.
+  //   - POSTED with a null postedAt: the claim succeeded but the invocation
+  //     died before `createComment` returned, so the release never ran. Showing
+  //     those would put screenshots from a comment that does not exist next to
+  //     the override button.
+  const proofCommentIds = [
+    ...new Set(
+      [...pendingTransactions, ...paidTransactions, ...rejectedTransactions]
+        .map((tx) => tx.pptPayoutState?.proofCommentId)
+        // The eligibility tab overlaps heavily with the payout tabs, so the
+        // dedupe has to span both sources, not just the transactions.
+        .concat(pptPayoutStates.map((state) => state.proofCommentId)),
+    ),
+  ].filter((commentId): commentId is string => Boolean(commentId));
+  const proofAttachmentRows =
+    proofCommentIds.length > 0
+      ? await prisma.pptCommentAttachment.findMany({
+          where: {
+            linearCommentId: { in: proofCommentIds },
+            kind: "PROOF",
+            status: "POSTED",
+            postedAt: { not: null },
+          },
+          select: {
+            id: true,
+            linearCommentId: true,
+            filename: true,
+            mimeType: true,
+            byteSize: true,
+            width: true,
+            height: true,
+          },
+          orderBy: [{ postedAt: "asc" }, { sortOrder: "asc" }],
+        })
+      : [];
+  const proofAttachmentsByComment = new Map<string, ProofAttachmentSummary[]>();
+  for (const row of proofAttachmentRows) {
+    if (!row.linearCommentId) continue;
+    const summary: ProofAttachmentSummary = {
+      id: row.id,
+      filename: row.filename,
+      mimeType: row.mimeType,
+      byteSize: row.byteSize,
+      width: row.width,
+      height: row.height,
+    };
+    const existing = proofAttachmentsByComment.get(row.linearCommentId);
+    if (existing) existing.push(summary);
+    else proofAttachmentsByComment.set(row.linearCommentId, [summary]);
+  }
+
   // Compute credit limit usage per unique userId+currency for pending transactions
   const creditUsageMap = await getWeeklyUsageForUsers(
     pendingTransactions
@@ -519,19 +586,32 @@ async function AdminPageContent() {
       }
 
       const creditUsage = creditUsageMap.get(`${tx.userId}:${tx.currency}`);
-      return buildPayoutTransaction(tx, taskTitle, creditUsage);
+      return buildPayoutTransaction(
+        tx,
+        taskTitle,
+        proofAttachmentsByComment,
+        creditUsage,
+      );
     }),
   );
 
   // For paid/rejected, use stored titles (no Linear API calls)
   const paid: PayoutTransaction[] = paidTransactions.map(
     (tx: TransactionWithUser) =>
-      buildPayoutTransaction(tx, getStoredTaskTitle(tx)),
+      buildPayoutTransaction(
+        tx,
+        getStoredTaskTitle(tx),
+        proofAttachmentsByComment,
+      ),
   );
 
   const rejected: PayoutTransaction[] = rejectedTransactions.map(
     (tx: TransactionWithUser) =>
-      buildPayoutTransaction(tx, getStoredTaskTitle(tx)),
+      buildPayoutTransaction(
+        tx,
+        getStoredTaskTitle(tx),
+        proofAttachmentsByComment,
+      ),
   );
 
   const bonusCandidates: BonusReviewCandidate[] = readyBonusCandidates
@@ -757,6 +837,10 @@ async function AdminPageContent() {
         nextStep: nextStep.action,
         completionEpisode: state.completionEpisode,
         proofCommentUrl: state.proofCommentUrl,
+        proofBody: state.proofCommentBody,
+        proofAttachments: state.proofCommentId
+          ? (proofAttachmentsByComment.get(state.proofCommentId) ?? [])
+          : [],
         proofOverride: state.proofOverride,
         proofOverrideNote: state.proofOverrideNote,
         proofOverrideByName: state.proofOverrideById

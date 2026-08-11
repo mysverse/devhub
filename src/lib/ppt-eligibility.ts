@@ -33,6 +33,11 @@ import {
 } from "@/lib/payout-campaign-server";
 import { PROOF_TAG } from "@/lib/payout-policy";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
+import {
+  claimAttachmentsForComment,
+  markAttachmentsPosted,
+  releaseAttachmentClaim,
+} from "@/lib/ppt-comment-attachments";
 import { shouldEvaluatePptWebhookHint } from "@/lib/ppt-eligibility-gate";
 import {
   checkProofBody,
@@ -2599,26 +2604,88 @@ export async function postPptProofComment({
   userId,
   issueId,
   body,
+  attachmentIds = [],
 }: {
   userId: string;
   issueId: string;
   body: string;
+  attachmentIds?: string[];
 }) {
   const trimmedBody = body.trim();
   // Same check the payout evaluator runs on the comment once it comes back off
   // Linear — rejecting here means the developer gets told, instead of posting
   // successfully and then never hearing why the payout didn't move.
-  const rejection = checkProofBody(trimmedBody);
+  //
+  // This runs against the developer's PROSE ONLY, before any attachment
+  // markdown is appended. The order matters: an embedded image renders as
+  // `![…](…)`, which is exactly what the evidence half of the rule looks for,
+  // so checking the assembled body would let one screenshot silently satisfy
+  // evidence for five words of text. Declaring the attachments through
+  // `hasAttachments` waives that half explicitly while PROOF_MIN_CHARS still
+  // applies to what the developer actually wrote.
+  const rejection = checkProofBody(trimmedBody, {
+    hasAttachments: attachmentIds.length > 0,
+  });
   if (rejection) {
     return { error: rejection.message };
   }
 
+  // Resolve the client BEFORE claiming. It can throw LinearReauthRequiredError
+  // on an expired token, and anything that throws between the claim and the
+  // release-on-throw window below strands the rows in POSTED with no comment —
+  // permanently unclaimable, since the compare-and-set only matches UPLOADED.
   const client = await getLinearClient(userId);
-  const normalizedBody = trimmedBody.toLowerCase().includes(PROOF_TAG)
-    ? trimmedBody
-    : `${PROOF_TAG}\n\n${trimmedBody}`;
 
-  await client.createComment({ issueId, body: normalizedBody });
+  // Resolves ids -> URLs server-side and flips the rows UPLOADED -> POSTED in
+  // one compare-and-set, so a double submit can't put the same file in two
+  // comments. Everything after this point owes the claim a release on failure.
+  const claim = await claimAttachmentsForComment({
+    userId,
+    linearIssueId: issueId,
+    kind: "PROOF",
+    attachmentIds,
+  });
+  if ("error" in claim) {
+    return { error: claim.error };
+  }
+
+  const bodyWithAttachments = claim.markdown
+    ? `${trimmedBody}\n\n${claim.markdown}`
+    : trimmedBody;
+  const normalizedBody = bodyWithAttachments.toLowerCase().includes(PROOF_TAG)
+    ? bodyWithAttachments
+    : `${PROOF_TAG}\n\n${bodyWithAttachments}`;
+
+  let commentId: string | null = null;
+  try {
+    const payload = await client.createComment({
+      issueId,
+      body: normalizedBody,
+    });
+    // `payload.commentId` is a synchronous getter over the mutation response.
+    // `payload.comment` is a *second* Linear round trip in production and is
+    // unimplemented in the dev mock, so awaiting it would throw here — after
+    // the comment already exists, which is the worst possible place to fail.
+    commentId = payload.commentId ?? null;
+  } catch (error) {
+    // The comment never landed, so hand the files back: the developer retries
+    // with the same attachments instead of re-uploading them.
+    await releaseAttachmentClaim(claim.ids);
+    throw error;
+  }
+
+  try {
+    await markAttachmentsPosted(claim.ids, commentId);
+  } catch (error) {
+    // Bookkeeping only — the comment is already on Linear. Surfacing this as
+    // "Failed to submit proof" would make the developer post it a second time,
+    // which is a far worse outcome than an unstamped linearCommentId.
+    console.error("Failed to stamp posted PPT proof attachments:", error);
+  }
+
+  // Deliberately outside the release-on-throw window above: by now the comment
+  // exists, so un-claiming would make already-posted attachments selectable
+  // again. A failing evaluation is retried by `retryPptPayoutCheck`.
   await evaluatePptIssueById(issueId, { userId, trigger: "proof_submission" });
   return { success: true };
 }

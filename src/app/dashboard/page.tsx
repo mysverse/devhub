@@ -27,6 +27,7 @@ import {
   TransactionsSkeleton,
 } from "./_components/Skeletons";
 import SuggestedPPTs from "./_components/SuggestedPPTs";
+import WeekInReview from "./_components/WeekInReview";
 
 export const metadata: Metadata = buildSocialMetadata("/dashboard");
 
@@ -184,6 +185,11 @@ async function ActiveTasksSection() {
   );
 }
 
+async function WeekInReviewSection() {
+  const { userId, userCurrency } = await getDashboardContext();
+  return <WeekInReview userId={userId} currency={userCurrency} />;
+}
+
 async function IncentiveProgressSection() {
   const { userId } = await getDashboardContext();
   return <IncentiveProgress userId={userId} />;
@@ -229,6 +235,10 @@ export default function DashboardPage() {
 
       <Suspense fallback={<ActiveTasksSkeleton />}>
         <ActiveTasksSection />
+      </Suspense>
+
+      <Suspense>
+        <WeekInReviewSection />
       </Suspense>
 
       <Suspense fallback={<IncentiveProgressSkeleton />}>

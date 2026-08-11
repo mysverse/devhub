@@ -18,8 +18,9 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { Bell, X } from "lucide-react";
 import { motion } from "motion/react";
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import {
   MODAL_TRANSITION,
   OVERLAY_PROPS,
@@ -153,6 +154,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   ] = useDisclosure(false);
   const [reason, setReason] = useState("");
   const [rejectReason, setRejectReason] = useState("");
+  const rejectRef = useRef<HTMLTextAreaElement>(null);
   const [sendingNotice, setSendingNotice] = useState(false);
 
   const isPending = tx.status === "PENDING";
@@ -749,15 +751,25 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
           </>
         }
         extra={
-          <Textarea
-            label="Reason (optional)"
-            placeholder="e.g. Duplicate task, issue not completed correctly"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.currentTarget.value)}
-            autosize
-            minRows={2}
-            maxRows={4}
-          />
+          <>
+            <Textarea
+              ref={rejectRef}
+              label="Reason (optional)"
+              placeholder="e.g. Duplicate task, issue not completed correctly"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.currentTarget.value)}
+              autosize
+              minRows={2}
+              maxRows={4}
+            />
+            <AiAssistField
+              fieldId="payout_reject_reason"
+              value={rejectReason}
+              onChange={setRejectReason}
+              textareaRef={rejectRef}
+              disabled={rejecting}
+            />
+          </>
         }
         confirmLabel="Reject payout"
         confirmIcon={<X size={14} />}

@@ -3,9 +3,10 @@
 import { Button, List, ListItem, Text, Textarea } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { Hand, UserCog } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { claimIssue } from "@/app/dashboard/actions";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { signIn } from "@/lib/auth-client";
 import {
   DEFAULT_UNASSIGN_HOURS,
@@ -41,6 +42,7 @@ export default function ClaimButton({
   const [claimed, setClaimed] = useState(false);
   const [opened, { open, close }] = useDisclosure(false);
   const [takeoverReason, setTakeoverReason] = useState("");
+  const takeoverRef = useRef<HTMLTextAreaElement>(null);
   const [reasonTouched, setReasonTouched] = useState(false);
 
   const warnHours = claimContext?.warnHours ?? DEFAULT_WARN_HOURS;
@@ -134,21 +136,33 @@ export default function ClaimButton({
             </Text>
           }
           extra={
-            <Textarea
-              label="Why are you taking this over?"
-              placeholder="e.g. Needed for the release and there's been no activity for days"
-              value={takeoverReason}
-              onChange={(event) => setTakeoverReason(event.currentTarget.value)}
-              onBlur={() => setReasonTouched(true)}
-              error={
-                reasonTouched && !reasonValid
-                  ? `At least ${MIN_TAKEOVER_REASON} characters — the previous assignee sees this.`
-                  : undefined
-              }
-              minRows={2}
-              autosize
-              required
-            />
+            <>
+              <Textarea
+                ref={takeoverRef}
+                label="Why are you taking this over?"
+                placeholder="e.g. Needed for the release and there's been no activity for days"
+                value={takeoverReason}
+                onChange={(event) =>
+                  setTakeoverReason(event.currentTarget.value)
+                }
+                onBlur={() => setReasonTouched(true)}
+                error={
+                  reasonTouched && !reasonValid
+                    ? `At least ${MIN_TAKEOVER_REASON} characters — the previous assignee sees this.`
+                    : undefined
+                }
+                minRows={2}
+                autosize
+                required
+              />
+              <AiAssistField
+                fieldId="claim_takeover_reason"
+                value={takeoverReason}
+                onChange={setTakeoverReason}
+                textareaRef={takeoverRef}
+                disabled={isPending}
+              />
+            </>
           }
           tone="warning"
           confirmLabel="Reassign to me"

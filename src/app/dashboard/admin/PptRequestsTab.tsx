@@ -18,10 +18,11 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { Check, ExternalLink, FileText, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
 import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -140,6 +141,7 @@ export default function PptRequestsTab({
   const [approving, setApproving] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [rejectReason, setRejectReason] = useState("");
+  const rejectRef = useRef<HTMLTextAreaElement>(null);
   const [
     rejectModalOpened,
     { open: openRejectModal, close: closeRejectModal },
@@ -498,15 +500,25 @@ export default function PptRequestsTab({
           </Text>
         }
         extra={
-          <Textarea
-            label="Reason"
-            placeholder="Why this request can't be approved right now"
-            value={rejectReason}
-            onChange={(event) => setRejectReason(event.currentTarget.value)}
-            autosize
-            minRows={2}
-            maxRows={4}
-          />
+          <>
+            <Textarea
+              ref={rejectRef}
+              label="Reason"
+              placeholder="Why this request can't be approved right now"
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.currentTarget.value)}
+              autosize
+              minRows={2}
+              maxRows={4}
+            />
+            <AiAssistField
+              fieldId="ppt_request_reject_reason"
+              value={rejectReason}
+              onChange={setRejectReason}
+              textareaRef={rejectRef}
+              disabled={rejecting}
+            />
+          </>
         }
         confirmLabel="Reject request"
         confirmIcon={<X size={14} />}

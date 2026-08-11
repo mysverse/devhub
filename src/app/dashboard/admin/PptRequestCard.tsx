@@ -14,8 +14,9 @@ import {
 import { useDisclosure } from "@mantine/hooks";
 import { Check, X } from "lucide-react";
 import { motion } from "motion/react";
-import { memo, useState } from "react";
+import { memo, useRef, useState } from "react";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { SPRING } from "@/components/animations";
 import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -79,6 +80,7 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
     { open: openRejectModal, close: closeRejectModal },
   ] = useDisclosure(false);
   const [rejectReason, setRejectReason] = useState("");
+  const rejectRef = useRef<HTMLTextAreaElement>(null);
   const [assignRequester, setAssignRequester] = useState(true);
 
   const estimatedMYR = projectPptPayout(
@@ -317,15 +319,25 @@ function PptRequestCard({ request }: { request: PptRequestData }) {
           </>
         }
         extra={
-          <Textarea
-            label="Reason (optional)"
-            placeholder="Why this request can't be approved right now"
-            value={rejectReason}
-            onChange={(e) => setRejectReason(e.currentTarget.value)}
-            autosize
-            minRows={2}
-            maxRows={4}
-          />
+          <>
+            <Textarea
+              ref={rejectRef}
+              label="Reason (optional)"
+              placeholder="Why this request can't be approved right now"
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.currentTarget.value)}
+              autosize
+              minRows={2}
+              maxRows={4}
+            />
+            <AiAssistField
+              fieldId="ppt_request_reject_reason"
+              value={rejectReason}
+              onChange={setRejectReason}
+              textareaRef={rejectRef}
+              disabled={rejecting}
+            />
+          </>
         }
         confirmLabel="Reject request"
         confirmIcon={<X size={14} />}

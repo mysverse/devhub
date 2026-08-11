@@ -4,9 +4,10 @@ import { Button, Select, Text, Textarea } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import type { PptSelfBlockReason } from "@prisma/client";
 import { OctagonPause, Play } from "lucide-react";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { markTaskBlocked, markTaskUnblocked } from "@/app/dashboard/actions";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { SELF_BLOCK_REASON_LABELS } from "@/lib/payout-policy";
 import ConfirmModal from "./ConfirmModal";
 
@@ -36,6 +37,7 @@ export default function BlockedTaskButton({
   const [opened, { open, close }] = useDisclosure(false);
   const [reason, setReason] = useState<PptSelfBlockReason>("WAITING_REVIEW");
   const [note, setNote] = useState("");
+  const noteRef = useRef<HTMLTextAreaElement>(null);
 
   function handleBlock() {
     startTransition(async () => {
@@ -118,12 +120,20 @@ export default function BlockedTaskButton({
               allowDeselect={false}
             />
             <Textarea
+              ref={noteRef}
               label="Details (optional)"
               placeholder="e.g. Waiting for the API team to merge #142"
               value={note}
               onChange={(event) => setNote(event.currentTarget.value)}
               minRows={2}
               autosize
+            />
+            <AiAssistField
+              fieldId="blocked_details"
+              value={note}
+              onChange={setNote}
+              textareaRef={noteRef}
+              disabled={isPending}
             />
           </>
         }

@@ -19,8 +19,9 @@ import {
 } from "@mantine/core";
 import { useDisclosure } from "@mantine/hooks";
 import { Check, RefreshCw, Save, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
@@ -135,6 +136,7 @@ export default function AdminBonusesTab({
   ] = useDisclosure(false);
   const [rejectingId, setRejectingId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState("");
+  const rejectRef = useRef<HTMLTextAreaElement>(null);
   const [rejecting, setRejecting] = useState(false);
 
   const visibleCandidates = useMemo(
@@ -446,14 +448,23 @@ export default function AdminBonusesTab({
         overlayProps={OVERLAY_PROPS}
       >
         <Stack>
-          <Textarea
-            label="Reason"
-            placeholder="Optional note for the review record"
-            value={rejectReason}
-            onChange={(event) => setRejectReason(event.currentTarget.value)}
-            autosize
-            minRows={3}
-          />
+          <div>
+            <Textarea
+              ref={rejectRef}
+              label="Reason"
+              placeholder="Optional note for the review record"
+              value={rejectReason}
+              onChange={(event) => setRejectReason(event.currentTarget.value)}
+              autosize
+              minRows={3}
+            />
+            <AiAssistField
+              fieldId="bonus_reject_reason"
+              value={rejectReason}
+              onChange={setRejectReason}
+              textareaRef={rejectRef}
+            />
+          </div>
           <Group justify="flex-end">
             <Button variant="light" onClick={closeRejectModal}>
               Cancel

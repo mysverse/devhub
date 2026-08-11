@@ -1,19 +1,30 @@
 import type { LinearClient } from "@linear/sdk";
 import sharp from "sharp";
+import {
+  ATTACHMENT_SNIFF_BYTES,
+  cleanFilename,
+  sniffAttachmentMimeType,
+} from "@/lib/attachment-magic";
 import { getLinearToken } from "@/lib/linear";
+import {
+  ATTACHMENT_MAX_FILES,
+  type AttachmentMimeType,
+  categoryForMimeType,
+  isAttachmentImage,
+  maxBytesFor,
+  maxTotalBytesForSurface,
+  mimeTypesForSurface,
+} from "@/lib/ppt-attachment-policy";
 
-export const PPT_ATTACHMENT_MAX_FILES = 8;
-export const PPT_ATTACHMENT_MAX_FILE_SIZE = 10 * 1024 * 1024;
-export const PPT_ATTACHMENT_MAX_TOTAL_SIZE = 30 * 1024 * 1024;
+// This module pulls in `sharp`, so a client component can never import it.
+// The limits and the sniffer therefore live in client-safe modules and are
+// re-exported here for the server-side callers that already reference them.
+export const PPT_ATTACHMENT_MAX_FILES = ATTACHMENT_MAX_FILES;
+export const PPT_ATTACHMENT_MAX_TOTAL_SIZE =
+  maxTotalBytesForSurface("ppt-request");
+export const PPT_ATTACHMENT_MIME_TYPES = mimeTypesForSurface("ppt-request");
 
-export const PPT_ATTACHMENT_MIME_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/webp",
-  "application/pdf",
-] as const;
-
-export type PptAttachmentMimeType = (typeof PPT_ATTACHMENT_MIME_TYPES)[number];
+export type PptAttachmentMimeType = AttachmentMimeType;
 
 export type UploadedPptAttachment = {
   filename: string;
@@ -41,64 +52,42 @@ type LinearUploadPayload = {
 };
 
 export function isPptAttachmentImage(mimeType: string) {
-  return mimeType.startsWith("image/");
+  return isAttachmentImage(mimeType);
 }
 
 export function isPptAttachmentPdf(mimeType: string) {
   return mimeType === "application/pdf";
 }
 
-function detectPptAttachmentMimeType(
-  buffer: Buffer,
-): PptAttachmentMimeType | null {
-  if (
-    buffer.length >= 3 &&
-    buffer[0] === 0xff &&
-    buffer[1] === 0xd8 &&
-    buffer[2] === 0xff
-  ) {
-    return "image/jpeg";
-  }
-  if (
-    buffer.length >= 4 &&
-    buffer[0] === 0x89 &&
-    buffer[1] === 0x50 &&
-    buffer[2] === 0x4e &&
-    buffer[3] === 0x47
-  ) {
-    return "image/png";
-  }
-  if (
-    buffer.length >= 12 &&
-    buffer.toString("ascii", 0, 4) === "RIFF" &&
-    buffer.toString("ascii", 8, 12) === "WEBP"
-  ) {
-    return "image/webp";
-  }
-  if (buffer.length >= 4 && buffer.toString("ascii", 0, 4) === "%PDF") {
-    return "application/pdf";
-  }
-  return null;
-}
-
-function cleanFilename(name: string) {
-  const cleaned = name
-    .trim()
-    .replace(/[^\w .()-]/g, "_")
-    .replace(/\s+/g, " ")
-    .slice(0, 120);
-  return cleaned || "attachment";
-}
-
-async function normalizeAttachmentFile(file: File) {
+/**
+ * Normalizes an uploaded file for storage, refusing anything whose real bytes
+ * disagree with what it claims to be. `file.type` is never consulted — it is
+ * set by the browser from a filename extension and is trivially spoofed.
+ *
+ * `allowedMimeTypes` scopes a caller to its own surface: the PPT request form
+ * has no reason to accept video even though the sniffer recognises it.
+ */
+async function normalizeAttachmentFile(
+  file: File,
+  allowedMimeTypes: readonly string[],
+) {
   const original = Buffer.from(await file.arrayBuffer());
-  const mimeType = detectPptAttachmentMimeType(original);
-  if (!mimeType) {
-    throw new Error("Only JPEG, PNG, WebP, and PDF files are accepted");
+  const head = new Uint8Array(
+    original.buffer,
+    original.byteOffset,
+    Math.min(original.length, ATTACHMENT_SNIFF_BYTES),
+  );
+  const mimeType = sniffAttachmentMimeType(head);
+  if (!mimeType || !allowedMimeTypes.includes(mimeType)) {
+    throw new Error("That file type isn't supported");
   }
 
-  if (original.length > PPT_ATTACHMENT_MAX_FILE_SIZE) {
-    throw new Error("Each attachment must be under 10 MB");
+  const limit = maxBytesFor(mimeType);
+  if (original.length > limit) {
+    const label = categoryForMimeType(mimeType) ?? "file";
+    throw new Error(
+      `Each ${label} must be under ${Math.round(limit / (1024 * 1024))} MB`,
+    );
   }
 
   if (!isPptAttachmentImage(mimeType)) {
@@ -141,8 +130,9 @@ function headersForLinearUpload(
 export async function uploadPptAttachmentToLinear(
   linearClient: LinearClient,
   file: File,
+  allowedMimeTypes: readonly string[] = PPT_ATTACHMENT_MIME_TYPES,
 ): Promise<UploadedPptAttachment> {
-  const normalized = await normalizeAttachmentFile(file);
+  const normalized = await normalizeAttachmentFile(file, allowedMimeTypes);
   const payload = (await linearClient.fileUpload(
     normalized.mimeType,
     normalized.filename,
@@ -173,13 +163,26 @@ export async function uploadPptAttachmentToLinear(
   };
 }
 
-export async function fetchLinearAsset(assetUrl: string, userId: string) {
+/**
+ * Fetches a Linear-hosted asset with whatever credentials are available.
+ *
+ * `init` is merged over the authorization header so callers can add a `Range` —
+ * the post-upload verifier reads the first 32 bytes of a file to confirm its
+ * magic bytes, and pulling a 25 MB video into a serverless function to look at
+ * four of them is not an option.
+ */
+export async function fetchLinearAsset(
+  assetUrl: string,
+  userId: string,
+  init?: RequestInit,
+) {
   const token =
     process.env.LINEAR_SERVICE_API_KEY ?? (await getLinearToken(userId));
-  const headers = new Headers();
+  const headers = new Headers(init?.headers);
   if (token) headers.set("Authorization", `Bearer ${token}`);
 
   return fetch(assetUrl, {
+    ...init,
     headers,
     cache: "no-store",
   });

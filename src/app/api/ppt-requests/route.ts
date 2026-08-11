@@ -14,12 +14,9 @@ import {
   notifyWithPreferences,
 } from "@/lib/notifications";
 import { getCampaignBadgeFor } from "@/lib/payout-campaign-server";
+import { checkAttachmentSelection } from "@/lib/ppt-attachment-policy";
 import { projectPptPayout } from "@/lib/ppt-payout-presentation";
-import {
-  PPT_ATTACHMENT_MAX_FILES,
-  PPT_ATTACHMENT_MAX_TOTAL_SIZE,
-  uploadPptAttachmentToLinear,
-} from "@/lib/ppt-request-attachments";
+import { uploadPptAttachmentToLinear } from "@/lib/ppt-request-attachments";
 import prisma from "@/lib/prisma";
 import { USER_IDENTITY_SELECT } from "@/lib/prisma-select";
 
@@ -99,13 +96,11 @@ export async function POST(req: Request) {
   const files = formData
     .getAll("attachments")
     .filter((file): file is File => file instanceof File && file.size > 0);
-  if (files.length > PPT_ATTACHMENT_MAX_FILES) {
-    return jsonError(`You can upload up to ${PPT_ATTACHMENT_MAX_FILES} files`);
-  }
-  const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
-  if (totalBytes > PPT_ATTACHMENT_MAX_TOTAL_SIZE) {
-    return jsonError("Attachments must be 30 MB or less in total");
-  }
+  // Cheap pre-check on the declared type and the real size, so an oversized
+  // selection is refused before we start uploading. `uploadPptAttachmentToLinear`
+  // re-derives the type from the actual bytes and is the authority.
+  const selectionError = checkAttachmentSelection(files, "ppt-request");
+  if (selectionError) return jsonError(selectionError.error);
 
   try {
     const uploadedAttachments = await withLinearFallback(

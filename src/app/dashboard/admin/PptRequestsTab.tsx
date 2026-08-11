@@ -26,6 +26,7 @@ import { StaggerContainer, StaggerItem } from "@/components/animations";
 import CampaignBadge from "@/components/CampaignBadge";
 import ConfirmModal from "@/components/ConfirmModal";
 import EmptyState from "@/components/EmptyState";
+import { formatFileSize } from "@/lib/ppt-attachment-policy";
 import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import type { PptRequestData } from "./PptRequestCard";
 import classes from "./PptRequestsTab.module.css";
@@ -49,11 +50,6 @@ function formatDate(dateStr: string) {
     day: "numeric",
     year: "numeric",
   });
-}
-
-function fileSize(size: number) {
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
 function defaultAssigneeChoice(request: PptRequestData): AssigneeChoice {
@@ -89,7 +85,7 @@ function AttachmentPreview({
             {attachment.filename}
           </Text>
           <Text size="xs" c="dimmed">
-            {fileSize(attachment.byteSize)}
+            {formatFileSize(attachment.byteSize)}
           </Text>
         </Group>
       </Box>
@@ -113,7 +109,7 @@ function AttachmentPreview({
             {attachment.filename}
           </Anchor>
           <Text size="xs" c="dimmed">
-            PDF · {fileSize(attachment.byteSize)}
+            PDF · {formatFileSize(attachment.byteSize)}
           </Text>
         </Box>
       </Group>

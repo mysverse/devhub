@@ -4,6 +4,10 @@ import { revalidatePath, updateTag } from "next/cache";
 import { createElement } from "react";
 import PptRequestApproved from "@/emails/PptRequestApproved";
 import PptRequestRejected from "@/emails/PptRequestRejected";
+import {
+  attachmentMarkdown,
+  type MarkdownAttachment,
+} from "@/lib/attachment-markdown";
 import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
 import { complexityLevelToLinearEstimate, formatAmount } from "@/lib/currency";
@@ -28,25 +32,10 @@ export type PptApprovalAssigneeTarget =
   | { type: "open" }
   | { type: "keep_existing" };
 
-function attachmentMarkdown(
-  attachments: { filename: string; mimeType: string; linearAssetUrl: string }[],
-) {
-  if (attachments.length === 0) return "";
-  const lines = ["## Attachments", ""];
-  for (const attachment of attachments) {
-    if (attachment.mimeType.startsWith("image/")) {
-      lines.push(`![${attachment.filename}](${attachment.linearAssetUrl})`);
-    } else {
-      lines.push(`- [${attachment.filename}](${attachment.linearAssetUrl})`);
-    }
-  }
-  return lines.join("\n");
-}
-
 function approvedIssueDescription(request: {
   description: string | null;
   note: string | null;
-  attachments: { filename: string; mimeType: string; linearAssetUrl: string }[];
+  attachments: MarkdownAttachment[];
 }) {
   const parts = [
     request.description?.trim(),
@@ -67,7 +56,7 @@ function approvalComment(request: {
   projectedDueDate: Date;
   description: string | null;
   note: string | null;
-  attachments: { filename: string; mimeType: string; linearAssetUrl: string }[];
+  attachments: MarkdownAttachment[];
 }) {
   const parts = [
     "DevHub PPT request approved",

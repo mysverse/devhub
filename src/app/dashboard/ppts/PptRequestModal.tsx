@@ -56,6 +56,12 @@ import {
   type CampaignBadgeInfo,
   formatMultiplier,
 } from "@/lib/payout-campaign";
+import {
+  acceptForSurface,
+  checkAttachmentSelection,
+  describeAttachmentLimits,
+  formatFileSize,
+} from "@/lib/ppt-attachment-policy";
 import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import type { PptRequestPrefill } from "@/lib/task-idea";
 import {
@@ -89,10 +95,6 @@ type LinearIssue = {
 
 type AssigneeIntent = "SELF" | "TEAM_MEMBER" | "OPEN";
 
-const MAX_FILES = 8;
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const MAX_TOTAL_SIZE = 30 * 1024 * 1024;
-
 /**
  * Complexity options priced at what the task would pay today.
  *
@@ -107,11 +109,6 @@ function estimateOptions(campaign: CampaignBadgeInfo | null) {
     const payout = projectPptPayout(n, "MYR", campaign);
     return { value: String(n), label: `${n} · ${payout.finalLabel}` };
   });
-}
-
-function fileSize(size: number) {
-  if (size >= 1024 * 1024) return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  return `${Math.max(1, Math.round(size / 1024))} KB`;
 }
 
 function FileList({ files }: { files: File[] }) {
@@ -134,7 +131,7 @@ function FileList({ files }: { files: File[] }) {
               {file.name}
             </Text>
             <Text size="xs" c="dimmed">
-              {fileSize(file.size)}
+              {formatFileSize(file.size)}
             </Text>
           </Group>
         );
@@ -391,17 +388,9 @@ export default function PptRequestModal({
   }
 
   function validateFiles(nextFiles: File[]) {
-    if (nextFiles.length > MAX_FILES) {
-      toast.error(`Upload up to ${MAX_FILES} files`);
-      return false;
-    }
-    if (nextFiles.some((file) => file.size > MAX_FILE_SIZE)) {
-      toast.error("Each attachment must be under 10 MB");
-      return false;
-    }
-    const total = nextFiles.reduce((sum, file) => sum + file.size, 0);
-    if (total > MAX_TOTAL_SIZE) {
-      toast.error("Attachments must be 30 MB or less in total");
+    const rejection = checkAttachmentSelection(nextFiles, "ppt-request");
+    if (rejection) {
+      toast.error(rejection.error);
       return false;
     }
     return true;
@@ -749,7 +738,7 @@ export default function PptRequestModal({
               <FileInput
                 label="Attachments"
                 placeholder="Upload images or PDFs"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
+                accept={acceptForSurface("ppt-request")}
                 multiple
                 value={files}
                 onChange={(nextFiles) => {
@@ -757,7 +746,7 @@ export default function PptRequestModal({
                   if (validateFiles(value)) setFiles(value);
                 }}
                 leftSection={<FileImage size={14} />}
-                description="Up to 8 files, 10 MB each, 30 MB total."
+                description={describeAttachmentLimits("ppt-request")}
               />
               <FileList files={files} />
 
@@ -969,7 +958,7 @@ export default function PptRequestModal({
               <Group justify="space-between">
                 <Text size="sm" c="dimmed">
                   {files.length} attachment{files.length === 1 ? "" : "s"} ·{" "}
-                  {fileSize(totalFileSize)}
+                  {formatFileSize(totalFileSize)}
                 </Text>
                 <Group gap={6} wrap="nowrap">
                   {campaign && <CampaignBadge campaign={campaign} />}

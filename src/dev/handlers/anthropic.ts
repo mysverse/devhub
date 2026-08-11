@@ -240,6 +240,11 @@ function field(prompt: string, label: string) {
   return new RegExp(`^${label}: (.*)$`, "m").exec(prompt)?.[1]?.trim() ?? "";
 }
 
+/** The draft the writing-assist prompts fence off, or "" when there is none. */
+function fenced(prompt: string) {
+  return /<<<DRAFT\n([\s\S]*?)\nDRAFT>>>/.exec(prompt)?.[1] ?? "";
+}
+
 /** Which canned response fits, based on the schema the caller asked for. */
 export function buildReply(body: MessageRequest) {
   const prompt = promptText(body);
@@ -320,6 +325,47 @@ export function buildReply(body: MessageRequest) {
       reason:
         "Lines up with what you've been working on (dev-mode canned reply).",
     };
+  }
+
+  if ("rewrite" in properties) {
+    // Echoes the draft back rather than returning a fixed string. A canned
+    // sentence passes while Accept, Undo, selection replacement and
+    // clampAssistOutput are all wired to nothing; echoing exercises them.
+    const draft = fenced(prompt);
+    const expanding = /What to do: Fill in what a reader/.test(prompt);
+    return {
+      rewrite: expanding
+        ? // Deliberately over-long so the clamp is a real code path in dev.
+          `${draft}\n\n${"Dev-mode padding to exercise the output clamp. ".repeat(400)}`
+        : `${draft}\n\n(dev-mode canned rewrite — no model was called.)`,
+      changeNote: "Tightened the wording (dev-mode canned reply).",
+    };
+  }
+
+  if ("readiness" in properties) {
+    return {
+      readiness: "thin",
+      concerns: [
+        {
+          what: "No link or screenshot (dev-mode canned reply).",
+          fix: "Add the evidence you already have.",
+        },
+        {
+          what: "Doesn't say where a reviewer can see it.",
+          fix: "Name the place or environment to open.",
+        },
+      ],
+    };
+  }
+
+  if (!("title" in properties)) {
+    // Falling through to the PPT-draft shape would fail the caller's schema
+    // parse, surface as `invalid_output`, burn the provider fallback and leave
+    // the feature reading as "unavailable" with no error anywhere. A missing
+    // branch has to be loud.
+    throw new Error(
+      `[dev-mode] Mock Anthropic: no canned reply for a schema with keys [${Object.keys(properties).join(", ")}]. Add a branch in src/dev/handlers/anthropic.ts.`,
+    );
   }
 
   const title = field(prompt, "title");

@@ -57,6 +57,11 @@ const ERROR_MARKERS = [
   "Application error: a server-side exception",
   "Could not load assigned tasks",
   "Internal Server Error",
+  // src/app/dashboard/error.tsx. A route with its own error boundary still
+  // returns 200 and renders no Next.js marker, so without this a page that
+  // threw in every Suspense subtree read as a clean pass. `pnpm visual` does
+  // not catch it either — the boundary lays out perfectly.
+  "We hit a problem loading this page",
 ];
 
 async function loginAs(persona: string): Promise<string> {

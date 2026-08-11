@@ -73,6 +73,99 @@ describe("checkProofBody", () => {
   });
 });
 
+describe("evidence must be a thing, not a word about a thing", () => {
+  const LONG = "Rebuilt the toll plaza lighting rig and checked every lamp. ";
+
+  it("rejects a bare claim of having evidence", () => {
+    // These all passed before: the rule accepted the *words* "screenshot",
+    // "tested", "verified" and "implemented" as if they were the evidence.
+    for (const claim of [
+      "I took a screenshot of it.",
+      "Tested it thoroughly.",
+      "Verified in Studio.",
+      "Implemented and working.",
+    ]) {
+      assert.equal(
+        checkProofBody(LONG + claim)?.reason,
+        "no-evidence",
+        `expected "${claim}" to be rejected`,
+      );
+    }
+  });
+
+  it("rejects prose that merely contains 'pr' inside another word", () => {
+    // The old pattern had an unanchored, case-insensitive `pr` alternative, so
+    // "approved", "sprint", "improve" and "press" all counted as evidence.
+    for (const word of ["approved", "sprint", "improved", "pressed"]) {
+      assert.equal(
+        checkProofBody(`${LONG}The change was ${word} today.`)?.reason,
+        "no-evidence",
+        `expected "${word}" not to count as evidence`,
+      );
+    }
+  });
+
+  it("accepts a link", () => {
+    assert.equal(checkProofBody(`${LONG}https://example.com/clip`), null);
+  });
+
+  it("accepts an embedded image, which is what an attachment posts as", () => {
+    assert.equal(
+      checkProofBody(`${LONG}![shot](https://uploads.linear.app/a.png)`),
+      null,
+    );
+  });
+
+  it("accepts a commit SHA but not an all-letter lookalike word", () => {
+    assert.equal(checkProofBody(`${LONG}Commit 4f9a2b1.`), null);
+    // "defaced" is seven letters drawn entirely from a-f; requiring a digit is
+    // what stops it reading as a SHA.
+    assert.equal(
+      checkProofBody(`${LONG}Nothing was defaced.`)?.reason,
+      "no-evidence",
+    );
+  });
+
+  it("accepts an issue reference but not prose that looks like one", () => {
+    assert.equal(checkProofBody(`${LONG}Closes MYS-201.`), null);
+    assert.equal(checkProofBody(`${LONG}See #142.`), null);
+    // Case-sensitivity is what keeps "step-1" and "phase-2" out.
+    for (const phrase of ["step-1", "phase-2", "part-3"]) {
+      assert.equal(
+        checkProofBody(`${LONG}Finished ${phrase} of the work.`)?.reason,
+        "no-evidence",
+        `expected "${phrase}" not to count as a reference`,
+      );
+    }
+  });
+});
+
+describe("attachments as evidence", () => {
+  const PROSE =
+    "Rebuilt the toll plaza lighting rig; every lamp now uses the shared emitter.";
+
+  it("lets an attachment satisfy the evidence half of the rule", () => {
+    assert.equal(checkProofBody(PROSE)?.reason, "no-evidence");
+    assert.equal(checkProofBody(PROSE, { hasAttachments: true }), null);
+    assert.equal(isMeaningfulProofBody(PROSE, { hasAttachments: true }), true);
+  });
+
+  it("still enforces the length minimum — a bare screenshot is not proof", () => {
+    assert.equal(
+      checkProofBody("done", { hasAttachments: true })?.reason,
+      "too-short",
+    );
+  });
+
+  it("reaches the same verdict once the markdown is in the body", () => {
+    // The composer knows about the upload early; the evaluator re-reads the
+    // posted comment later with no context at all. Both must agree.
+    const posted = `${PROSE}\n\n![shot](https://uploads.linear.app/a.png)`;
+    assert.equal(checkProofBody(PROSE, { hasAttachments: true }), null);
+    assert.equal(checkProofBody(posted), null);
+  });
+});
+
 describe("rejected proof is reported as its own reason", () => {
   it("does not tell a developer to post proof they already posted", () => {
     const missing = formatReason("MISSING_PROOF");
@@ -85,7 +178,10 @@ describe("rejected proof is reported as its own reason", () => {
   it("spells out both halves of the rule in the next step", () => {
     const action = getActionForReason("PROOF_NOT_QUALIFYING");
     assert.match(action, new RegExp(`${PROOF_MIN_CHARS}`));
-    assert.match(action, /link, screenshot, commit/i);
+    // Names something the developer can actually produce, not a vague "add
+    // evidence" — and leads with attaching, now that it's possible.
+    assert.match(action, /attach/i);
+    assert.match(action, /link|commit|reference/i);
   });
 
   it("keeps the rejected proof waiting on the developer, not an admin", () => {

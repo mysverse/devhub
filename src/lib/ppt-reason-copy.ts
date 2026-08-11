@@ -135,10 +135,10 @@ export function getActionForReason(
   const stabilityMinutes =
     options?.stabilityMinutes ?? DEFAULT_STABILITY_MINUTES;
   if (reason === "PROOF_NOT_QUALIFYING") {
-    return `Post a fresh ${PROOF_TAG} comment with at least ${PROOF_MIN_CHARS} characters describing what changed, and include something checkable — a link, screenshot, commit, or where it is live.`;
+    return `Post a fresh ${PROOF_TAG} comment with at least ${PROOF_MIN_CHARS} characters describing what changed, and attach a screenshot or clip — or paste a link, commit SHA, or issue reference.`;
   }
   if (reason === "MISSING_PROOF" || reason === "PROOF_RESET_BY_QUESTION") {
-    return `Reply in Linear or use DevHub with ${PROOF_TAG}, what changed, proof links/screenshots, where it is implemented, and verification notes.`;
+    return `Reply in Linear or use DevHub with ${PROOF_TAG}, what changed, where it is implemented, and how it was verified — with a screenshot, clip, or link attached.`;
   }
   if (reason === "WAITING_STABILITY") {
     return `Keep the issue in Done for ${stabilityMinutes} minutes. DevHub will check again automatically.`;

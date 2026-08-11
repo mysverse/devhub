@@ -176,13 +176,19 @@ const BALA = BACKGROUND_USERS[0].linearId;
 const MEI = BACKGROUND_USERS[1].linearId;
 const RAVI = BACKGROUND_USERS[2].linearId;
 
-/** Long enough + "screenshot" + URL so isMeaningfulProof passes. */
+/**
+ * Long enough, and carries a real embedded attachment, so it satisfies both
+ * halves of the proof rule. The image points at `uploads.linear.app` so dev
+ * mode exercises the same path production does: the mock serves the bytes,
+ * `/api/image-proxy` fetches them, and the composer/admin surfaces render an
+ * inline screenshot rather than a broken image.
+ */
 export function proofCommentBody(identifier: string): string {
   return (
-    `#ppt-proof Completed and verified in a private test session — ` +
-    `screenshot of the final result attached: ` +
-    `https://files.devhub.mock/proof/${identifier}.png. ` +
-    `All acceptance criteria from the issue description are met.`
+    `#ppt-proof Completed and verified in a private test session. ` +
+    `All acceptance criteria from the issue description are met.\n\n` +
+    `## Attachments\n\n` +
+    `![${identifier}-result.png](https://uploads.linear.app/devhub/proof-${identifier}/${identifier}-result.png)`
   );
 }
 

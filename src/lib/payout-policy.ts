@@ -89,7 +89,7 @@ export function describeWatchPolicy(
 }
 
 export function describeProofRequirement(): string {
-  return `Before payout, post a ${PROOF_TAG} comment on the Linear issue covering what changed, proof links or screenshots, where it is implemented, and how it was verified.`;
+  return `Before payout, post a ${PROOF_TAG} comment covering what changed, where it is implemented, and how it was verified — and attach a screenshot or clip, or link the commit or issue. Saying you tested it is not evidence on its own.`;
 }
 
 /** Human labels for the self-block reasons (PptSelfBlockReason enum). */

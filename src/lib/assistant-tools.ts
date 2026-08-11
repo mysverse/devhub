@@ -9,7 +9,7 @@ import type {
   AssistantPreview,
 } from "@/lib/assistant-types";
 import { hasAdminAccess } from "@/lib/authz";
-import { getCurrencyForPaymentMethod } from "@/lib/currency";
+import { formatAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
@@ -20,6 +20,7 @@ import {
   toSelectableCampaign,
 } from "@/lib/payout-campaign-server";
 import prisma from "@/lib/prisma";
+import { explainTransaction } from "@/lib/transaction-explain";
 import { getWikiArticleBySlug, searchWikiArticles } from "@/lib/wiki-search";
 
 export type AssistantToolContext = {
@@ -351,6 +352,43 @@ async function executeReadTool(
         rejectionReason: true,
         createdAt: true,
       },
+    });
+  }
+  if (name === "explain_my_transactions") {
+    /**
+     * DevHub narrates its own money, the model narrates DevHub.
+     *
+     * explainTransaction() is the single derivation the transactions page and
+     * the overview list already share, so routing the assistant through it is
+     * what stops a third version of the story existing. The model receives
+     * finished sentences and pre-formatted amounts — it never re-derives a
+     * rate, a multiplier or a status.
+     */
+    const rows = await prisma.transaction.findMany({
+      where: { userId: context.userId },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      include: { payout: true, pptPayoutState: true },
+    });
+
+    return rows.map((row) => {
+      const explanation = explainTransaction(row);
+      return {
+        identifier: row.linearIssueIdentifier,
+        task: row.linearIssueTitle,
+        source: row.source,
+        status: row.status,
+        amount: formatAmount(
+          row.amount,
+          row.currency === "ROBUX" ? "ROBUX" : "MYR",
+        ),
+        raisedOn: row.createdAt,
+        paidOn: row.paidAt,
+        why: explanation.headline,
+        detail: explanation.detail,
+        waitingOn: explanation.owner,
+        campaignBreakdown: explanation.campaignBreakdown,
+      };
     });
   }
   if (name === "get_task") {

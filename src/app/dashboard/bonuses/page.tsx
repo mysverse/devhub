@@ -16,6 +16,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { StaggerContainer, StaggerItem } from "@/components/animations";
+import AskAssistantButton from "@/components/assistant/AskAssistantButton";
 import EmptyState from "@/components/EmptyState";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
@@ -360,11 +361,18 @@ async function BonusesContent() {
             </AccordionControl>
             <AccordionPanel>
               <Stack gap="xs">
-                <Text fz="xs" c="dimmed">
-                  These assigned tasks don&apos;t currently qualify for a bonus.
-                  Fixing the listed reason (for example, adding an estimate)
-                  makes a task eligible on the next refresh.
-                </Text>
+                <Group justify="space-between" align="flex-start" wrap="nowrap">
+                  <Text fz="xs" c="dimmed">
+                    These assigned tasks don&apos;t currently qualify for a
+                    bonus. Fixing the listed reason (for example, adding an
+                    estimate) makes a task eligible on the next refresh.
+                  </Text>
+                  <AskAssistantButton
+                    entryPoint="BONUS_INELIGIBLE"
+                    label="Ask about these"
+                    prompt="Some of my tasks aren't eligible for a bonus this month. Can you look at my bonuses and explain what's going on and what I should do?"
+                  />
+                </Group>
                 {ineligible.map((candidate) => (
                   <Group
                     key={candidate.id}

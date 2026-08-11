@@ -165,6 +165,17 @@ export const ASSISTANT_TOOLS: AssistantToolDefinition[] = [
     },
   },
   {
+    name: "explain_my_transactions",
+    description:
+      "Explain the signed-in user's own recent payouts: the amount, the status, why it is in that state, and who it is waiting on. Use whenever they ask about money they are owed or have been paid.",
+    schema: EmptySchema,
+    mutation: false,
+    activity: {
+      running: "Reading your payouts",
+      complete: "Payouts ready",
+    },
+  },
+  {
     name: "list_teams",
     description:
       "List Linear teams available to the signed-in user. Use before preparing a new issue when no exact team ID is known.",

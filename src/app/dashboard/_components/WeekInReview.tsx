@@ -1,4 +1,5 @@
 import { Card, Group, SimpleGrid, Stack, Text } from "@mantine/core";
+import AskAssistantButton from "@/components/assistant/AskAssistantButton";
 import LinkAnchor from "@/components/LinkAnchor";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
@@ -111,9 +112,16 @@ export default async function WeekInReview({
         <Text fw={700} fz="lg">
           Your week
         </Text>
-        <LinkAnchor href="/dashboard/transactions" fz="sm">
-          All transactions
-        </LinkAnchor>
+        <Group gap="xs" wrap="nowrap">
+          <AskAssistantButton
+            entryPoint="WEEK_IN_REVIEW"
+            label="Explain my week"
+            prompt="Walk me through my payouts and open tasks — what got paid, what's still pending, and what's waiting on me?"
+          />
+          <LinkAnchor href="/dashboard/transactions" fz="sm">
+            All transactions
+          </LinkAnchor>
+        </Group>
       </Group>
 
       <SimpleGrid cols={{ base: 2, sm: 2, lg: 4 }} spacing="sm">

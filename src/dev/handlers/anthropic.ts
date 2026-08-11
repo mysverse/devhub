@@ -138,6 +138,12 @@ function assistantToolRequest(
 ): AssistantToolRequest | null {
   const text = promptText(body).toLowerCase();
   const latest = latestUserText(body).trim().toLowerCase();
+  if (
+    toolResultCount(body) === 0 &&
+    /payout|paid|owed|pending|my week|transactions?/.test(text)
+  ) {
+    return { name: "explain_my_transactions", input: {} };
+  }
   const carIdea = /(?:proton x90|civilian car|car for lebuhraya)/.test(text);
   const hasDueDate = /(?:2026-08-31|august 31|end of (?:this|the) month)/.test(
     text,

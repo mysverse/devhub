@@ -179,6 +179,9 @@ function toolRequest(body: ResponsesRequest) {
     return null;
   }
   if (resultCount > 0) return null;
+  if (/payout|paid|owed|pending|my week|transactions?/.test(text)) {
+    return { name: "explain_my_transactions", arguments: {} };
+  }
   if (/\bmys-201\b|find (?:a )?task|search tasks?/.test(text)) {
     return { name: "search_tasks", arguments: { query: "MYS-201" } };
   }

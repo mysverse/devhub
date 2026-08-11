@@ -28,6 +28,7 @@ import { forwardRef, useEffect, useState } from "react";
  * - Conditional content        → AnimatedCollapse (no layout pop)
  * - Client list add/remove     → <AnimatePresence mode="popLayout" initial={false}>
  *                                + AnimatedListItem
+ * - Rejected action            → Shake (always pair with an aria-live message)
  */
 export const EASE = {
   /** Material-ish exit-to-rest. Good default for transform-only motion. */
@@ -321,6 +322,35 @@ export function AnimatedListItem({
       animate={{ opacity: 1, scale: 1 }}
       exit={{ opacity: 0, scale: 0.97 }}
       transition={SPRING.snappy}
+      className={className}
+    >
+      {children}
+    </motion.div>
+  );
+}
+
+/**
+ * One-shot horizontal shake for a rejected action — a blocked submit, a step
+ * that failed validation. Bump `trigger` to replay it.
+ *
+ * MUST be paired with a VisuallyHidden aria-live message saying what went
+ * wrong: MotionConfig runs with reducedMotion="user", so for anyone who has
+ * asked for reduced motion this component renders no feedback at all.
+ */
+export function Shake({
+  trigger,
+  children,
+  className,
+}: {
+  trigger: number;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <motion.div
+      key={trigger}
+      animate={trigger > 0 ? { x: [0, -5, 5, -3, 3, 0] } : { x: 0 }}
+      transition={{ duration: 0.35, ease: "easeOut" }}
       className={className}
     >
       {children}

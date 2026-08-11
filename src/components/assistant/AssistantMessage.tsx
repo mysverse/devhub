@@ -51,6 +51,7 @@ import type {
   AssistantMessageDto,
   AssistantReferenceDto,
 } from "@/lib/assistant-types";
+import { proxiedImageUrl } from "@/lib/linear-assets";
 import classes from "./AssistantExperience.module.css";
 import { assistantReplySuggestions } from "./assistant-suggestions";
 
@@ -691,7 +692,7 @@ function LinearIssueCard({
   reference: AssistantLinearIssueReference;
 }) {
   const imageUrl = reference.imageUrl
-    ? `/api/image-proxy?url=${encodeURIComponent(reference.imageUrl)}`
+    ? proxiedImageUrl(reference.imageUrl)
     : null;
   return (
     <Anchor

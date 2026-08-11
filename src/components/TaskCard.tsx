@@ -21,6 +21,7 @@ import CampaignBadge, {
   type CampaignBadgeInfo,
 } from "@/components/CampaignBadge";
 import type { CurrencyCode } from "@/lib/currency";
+import { firstProxiedImage } from "@/lib/linear-assets";
 import { projectPptPayout } from "@/lib/ppt-payout-presentation";
 import { PPT_OWNER_COPY, type PptNextStepOwner } from "@/lib/ppt-reason-copy";
 import {
@@ -35,13 +36,6 @@ import PptProgressButton from "./PptProgressButton";
 import PptProofButton from "./PptProofButton";
 import ReleaseTaskButton from "./ReleaseTaskButton";
 import StatusBadge from "./StatusBadge";
-
-function extractFirstImage(markdown: string | null | undefined): string | null {
-  if (!markdown) return null;
-  const match = markdown.match(/!\[.*?\]\((https?:\/\/.*?)\)/);
-  if (!match) return null;
-  return `/api/image-proxy?url=${encodeURIComponent(match[1])}`;
-}
 
 function DescriptionContent({
   text,
@@ -505,7 +499,7 @@ function TaskCard({
   }
 
   // variant === "full"
-  const imageUrl = extractFirstImage(description);
+  const imageUrl = firstProxiedImage(description);
 
   return (
     <HoverLift>

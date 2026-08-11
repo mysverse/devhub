@@ -28,6 +28,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import {
   AnimatedCollapse,
+  Shake,
   SPRING,
   StepTransition,
 } from "@/components/animations";
@@ -403,11 +404,7 @@ export default function OrderForm({
         >
           Back
         </Button>
-        <motion.div
-          key={shakeKey}
-          animate={shakeKey > 0 ? { x: [0, -5, 5, -3, 3, 0] } : { x: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-        >
+        <Shake trigger={shakeKey}>
           {step < 3 ? (
             <Button onClick={nextStep} rightSection={<Check size={16} />}>
               Next
@@ -423,7 +420,7 @@ export default function OrderForm({
               Submit order
             </Button>
           )}
-        </motion.div>
+        </Shake>
       </Group>
 
       <SizeChartModal

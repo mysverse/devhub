@@ -11,6 +11,7 @@ import type {
 import { hasAdminAccess } from "@/lib/authz";
 import type { AssistantHistoryMessage } from "@/lib/llm-agent";
 import prisma from "@/lib/prisma";
+import { createExactRedactor } from "@/lib/redaction";
 
 const MAX_MESSAGE_CHARS = 8_000;
 const MAX_CONTEXT_MESSAGES = 24;
@@ -298,16 +299,11 @@ function titleFrom(message: string) {
   return firstLine.length <= 60 ? firstLine : `${firstLine.slice(0, 57)}…`;
 }
 
-function redactPatterns(text: string) {
-  return text
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted email]")
-    .replace(/(?:\+?\d[\s().-]?){8,}\d/g, "[redacted number]")
-    .replace(
-      /\b(?:sk|api|token|secret|password)[-_ ]?[A-Za-z0-9_-]{12,}\b/gi,
-      "[redacted secret]",
-    );
-}
-
+/**
+ * The chat redactor: shape-based patterns plus this user's own known values.
+ * The pure half lives in `@/lib/redaction` so the writing-assist surfaces can
+ * reach it without importing the assistant.
+ */
 export async function createAssistantRedactor(userId: string) {
   const profile = await prisma.userProfile.findUnique({
     where: { id: userId },
@@ -323,7 +319,7 @@ export async function createAssistantRedactor(userId: string) {
       user: { select: { name: true, email: true } },
     },
   });
-  const exact = [
+  return createExactRedactor([
     profile?.legalName,
     profile?.shippingAddress,
     profile?.linearEmail,
@@ -333,17 +329,7 @@ export async function createAssistantRedactor(userId: string) {
     profile?.bankAccountName,
     profile?.user.name,
     profile?.user.email,
-  ]
-    .filter((value): value is string => Boolean(value?.trim()))
-    .sort((left, right) => right.length - left.length);
-
-  return (text: string) => {
-    let redacted = redactPatterns(text);
-    for (const value of exact) {
-      redacted = redacted.replaceAll(value, "[redacted personal data]");
-    }
-    return redacted;
-  };
+  ]);
 }
 
 export async function prepareAssistantTurn(

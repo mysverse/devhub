@@ -346,6 +346,25 @@ function projectNode(id?: string): Json {
   };
 }
 
+/**
+ * Comment author. The SDK only needs `{ id }` (it re-fetches the user
+ * lazily), but a comment-thread panel renders the author chip straight from
+ * the comment node — with an id alone it shows a blank name and no avatar.
+ * Unknown ids fall back rather than throwing: losing an author's name is a
+ * cosmetic gap, losing the whole thread to a 500 is not.
+ */
+function commentUserNode(userId: string): Json {
+  const user = LINEAR_USERS.find((candidate) => candidate.id === userId);
+  return {
+    __typename: "User",
+    id: userId,
+    name: user?.name ?? userId,
+    displayName: user?.displayName ?? userId,
+    email: user?.email ?? null,
+    avatarUrl: user?.avatarUrl ?? null,
+  };
+}
+
 function commentNodes(issue: MockLinearIssue): Json[] {
   return issue.comments.map((comment) => ({
     __typename: "Comment",
@@ -356,7 +375,7 @@ function commentNodes(issue: MockLinearIssue): Json[] {
     updatedAt: iso(comment.createdAt),
     editedAt: null,
     archivedAt: null,
-    user: { id: comment.userId },
+    user: commentUserNode(comment.userId),
     userId: comment.userId,
     issueId: issue.id,
     parentId: null,
@@ -523,6 +542,27 @@ function requireIssue(id: unknown): MockLinearIssue {
 // ── Mutations ─────────────────────────────────────────────────────────────────
 
 let lastSyncId = 1000;
+
+/**
+ * Who a newly created comment is attributed to. This used to be hardcoded to
+ * the admin persona, so every thread in dev mode looked like the admin had
+ * written it — a developer's own proof/progress comment (posted with their
+ * OAuth token) was indistinguishable from a service-account warning.
+ *
+ * Linear attributes a comment to the token that created it, so that is what
+ * we resolve first. The assignee fallback matches /api/dev/linear, which has
+ * no token to work from.
+ */
+function commentAuthorFor(
+  authorization: string | null,
+  issue: MockLinearIssue,
+): string {
+  try {
+    return viewerLinearIdForToken(authorization);
+  } catch {
+    return issue.assigneeId ?? (PERSONAS.developer.linearId as string);
+  }
+}
 
 function applyIssueInput(
   issue: MockLinearIssue,
@@ -850,7 +890,7 @@ function executeOperation(
       const comment = {
         id: `comment-dev-${state.nextCommentNumber++}`,
         body: String(input.body ?? ""),
-        userId: PERSONAS.admin.linearId as string,
+        userId: commentAuthorFor(authorization, issue),
         createdAt: new Date(),
       };
       issue.comments.push(comment);
@@ -954,6 +994,68 @@ function inlineFilterFor(
   }
 }
 
+// ── Asset serving ─────────────────────────────────────────────────────────────
+
+/**
+ * Serve stored asset bytes, honouring a single-range request.
+ *
+ * `<video>` seeking and any resumed download send `Range: bytes=a-b`, and the
+ * attachment route forwards that header straight through to the Linear asset
+ * host. Without 206 support here, the 206 branch of that route is only ever
+ * exercised in production — dev mode would always take the whole-file path.
+ *
+ * `Buffer<ArrayBuffer>` rather than plain `Buffer`: bare `Buffer` also covers
+ * buffers over a SharedArrayBuffer, which is not a valid Response body.
+ */
+function assetResponse(
+  req: Request,
+  bytes: Buffer<ArrayBuffer>,
+  contentType: string,
+): Response {
+  const total = bytes.byteLength;
+  const range = req.headers.get("range");
+  const match = range ? /^bytes=(\d*)-(\d*)$/.exec(range.trim()) : null;
+  if (!match) {
+    return new Response(bytes, {
+      headers: {
+        "content-type": contentType,
+        "content-length": String(total),
+        // Advertised even on a full response: clients decide whether seeking
+        // is possible from this header alone.
+        "accept-ranges": "bytes",
+      },
+    });
+  }
+
+  const [, rawStart, rawEnd] = match;
+  // "bytes=-500" is the trailing 500 bytes; "bytes=500-" runs to EOF.
+  const suffix = rawStart === "";
+  const start = suffix ? total - Number(rawEnd) : Number(rawStart);
+  const end = suffix || rawEnd === "" ? total - 1 : Number(rawEnd);
+  const from = Math.max(0, start);
+  const to = Math.min(end, total - 1);
+  if (Number.isNaN(from) || Number.isNaN(to) || from > to || from >= total) {
+    return new Response(null, {
+      status: 416,
+      headers: {
+        "content-range": `bytes */${total}`,
+        "accept-ranges": "bytes",
+      },
+    });
+  }
+
+  const slice = bytes.subarray(from, to + 1);
+  return new Response(slice, {
+    status: 206,
+    headers: {
+      "content-type": contentType,
+      "content-length": String(slice.byteLength),
+      "content-range": `bytes ${from}-${to}/${total}`,
+      "accept-ranges": "bytes",
+    },
+  });
+}
+
 // ── HTTP entrypoint ───────────────────────────────────────────────────────────
 
 export const handleLinear: DevHandler = async (req, url) => {
@@ -972,16 +1074,14 @@ export const handleLinear: DevHandler = async (req, url) => {
     if (req.method === "GET") {
       const blob = state.blobs.get(key);
       if (!blob) {
+        // Seed and fixture data reference asset URLs that nothing ever PUT
+        // here, so serve a placeholder for anything that looks like an image.
         if (/\.(png|jpe?g|webp|gif)$/i.test(key)) {
-          return new Response(PLACEHOLDER_PNG, {
-            headers: { "content-type": "image/png" },
-          });
+          return assetResponse(req, PLACEHOLDER_PNG, "image/png");
         }
         return new Response("Not found", { status: 404 });
       }
-      return new Response(Buffer.from(blob.bytes), {
-        headers: { "content-type": blob.contentType },
-      });
+      return assetResponse(req, Buffer.from(blob.bytes), blob.contentType);
     }
   }
 

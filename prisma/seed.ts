@@ -968,6 +968,94 @@ export async function seed() {
     });
   }
 
+  // ── PPT comment attachments ────────────────────────────────────────────────
+  // The DB half of the proof screenshots the fixture comments already embed.
+  // Review surfaces read this table rather than re-parsing comment markdown
+  // (PptPayoutState.proofCommentBody is truncated), so without these rows the
+  // inline proof gallery is empty in dev mode even though the comment shows an
+  // image. The asset URL template mirrors proofCommentBody() in
+  // src/dev/fixtures/linear.ts — the mock Linear handler serves a placeholder
+  // PNG for that path, so the image proxy resolves instead of 404-ing.
+  function proofAttachmentSeed(
+    identifier: string,
+    file: string,
+    sortOrder = 0,
+  ) {
+    const fixtureIssue = issue(identifier);
+    const proofComment = fixtureIssue.comments?.[0];
+    if (!proofComment) {
+      throw new Error(
+        `${identifier} must have a proof comment for attachment seed data.`,
+      );
+    }
+    const uploadedById = userIdByLinearId.get(proofComment.userId);
+    if (!uploadedById) {
+      throw new Error(
+        `${identifier}'s proof author needs a seeded profile to own attachments.`,
+      );
+    }
+    // Posted with the comment, so the row is terminal from the start — an
+    // UPLOADED row here would be swept by the data-retention cron.
+    const postedAt = daysAgo(proofComment.createdDaysAgo);
+    return {
+      id: `seed-ppt-attachment-${identifier.toLowerCase()}-${file}`,
+      linearIssueId: fixtureIssue.id,
+      uploadedById,
+      kind: "PROOF" as const,
+      status: "POSTED" as const,
+      filename: `${identifier}-${file}.png`,
+      mimeType: "image/png",
+      byteSize: 512,
+      // The mock Linear handler serves a 1×1 placeholder for these URLs, so
+      // the recorded dimensions match the bytes a dev-mode client gets back.
+      width: 1,
+      height: 1,
+      linearAssetUrl: `https://uploads.linear.app/devhub/proof-${identifier}/${identifier}-${file}.png`,
+      transport: "dev",
+      sortOrder,
+      linearCommentId: proofComment.id,
+      postedAt,
+      createdAt: postedAt,
+    };
+  }
+
+  await prisma.pptCommentAttachment.createMany({
+    data: [
+      // MYS-221 (READY_FOR_PAYOUT) and MYS-228 (WAITING_STABILITY) are the
+      // two an admin actually reviews; MYS-223 is a background developer's, so
+      // the surface is exercised with an uploader who isn't the dev persona.
+      proofAttachmentSeed("MYS-221", "result"),
+      // Second file on the same comment: proofCommentBody() embeds only the
+      // first, which is precisely why the comment body cannot be the source of
+      // truth for what was attached.
+      proofAttachmentSeed("MYS-221", "inspector", 1),
+      proofAttachmentSeed("MYS-228", "result"),
+      proofAttachmentSeed("MYS-223", "result"),
+      {
+        // An upload the developer made in the progress composer but never
+        // posted. Deliberately 2h old: young enough that the data-retention
+        // sweep (24h) keeps it, old enough that it sits outside the rolling
+        // hour the upload rate limiter counts.
+        id: "seed-ppt-attachment-mys-201-wip",
+        linearIssueId: issue("MYS-201").id,
+        uploadedById: devId,
+        kind: "PROGRESS",
+        status: "UPLOADED",
+        filename: "MYS-201-wip.png",
+        mimeType: "image/png",
+        byteSize: 512,
+        width: 1,
+        height: 1,
+        linearAssetUrl:
+          "https://uploads.linear.app/devhub/progress-MYS-201/MYS-201-wip.png",
+        transport: "dev",
+        sortOrder: 0,
+        createdAt: hoursAgo(2),
+      },
+    ],
+    skipDuplicates: true,
+  });
+
   // ── Bonus candidates ───────────────────────────────────────────────────────
   const candidate203 = await prisma.bonusCandidate.create({
     data: {

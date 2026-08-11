@@ -51,6 +51,8 @@ export type PayoutTransaction = {
    */
   paymentDetails: PayoutPaymentDetails | null;
   linearIssueIdentifier?: string | null;
+  /** Keys the on-demand proof summary; the server re-reads everything else. */
+  linearIssueId?: string | null;
   linearIssueUrl?: string | null;
   paidAt?: string | null;
   rejectedAt?: string | null;

@@ -1,15 +1,20 @@
 import { generateStructured } from "@/lib/llm";
 import {
   buildPptDraftPrompt,
+  buildProofReviewPrompt,
   buildTaskIdeaPrompt,
   buildTaskReasonPrompt,
   PPT_DRAFT_SCHEMA,
   PPT_DRAFT_SYSTEM,
   type PptDraft,
+  PROOF_REVIEW_SCHEMA,
+  PROOF_REVIEW_SYSTEM,
   type PromptDeveloper,
   type PromptDeveloperContext,
   type PromptIssue,
+  type PromptProof,
   type PromptScope,
+  type ProofReviewResult,
   TASK_IDEA_SCHEMA,
   TASK_IDEA_SYSTEM,
   TASK_REASON_SCHEMA,
@@ -98,5 +103,29 @@ export async function proposeTaskIdeas(input: {
     // Several ideas, each with criteria — the largest shape here, and the
     // reason max_tokens became per-surface.
     maxTokens: 4_000,
+  });
+}
+
+/**
+ * Read one proof comment back to the admin judging it: what is claimed, what
+ * they could open to check it, and what it leaves unanswered.
+ *
+ * Never a verdict — `checkProofBody()` is the only thing in DevHub that says
+ * whether proof qualifies, and the schema has no field to disagree with it.
+ * Null here simply means the panel shows its deterministic evidence inventory
+ * and nothing else, which is how it renders today.
+ */
+export async function reviewProofForAdmin(
+  proof: PromptProof,
+  userId: string | null,
+): Promise<ProofReviewResult | null> {
+  return generateStructured({
+    surface: "proof_review",
+    userId,
+    system: PROOF_REVIEW_SYSTEM,
+    prompt: buildProofReviewPrompt(proof),
+    schema: PROOF_REVIEW_SCHEMA,
+    // A summary, a handful of claims and a few questions. Never a draft.
+    maxTokens: 800,
   });
 }

@@ -263,6 +263,7 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
               body={state.proofBody}
               attachments={state.proofAttachments}
               commentUrl={state.proofCommentUrl}
+              linearIssueId={state.linearIssueId}
             />
 
             {state.events.length > 0 && (

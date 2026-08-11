@@ -342,6 +342,22 @@ export function buildReply(body: MessageRequest) {
     };
   }
 
+  if ("summary" in properties) {
+    return {
+      summary:
+        "The developer says they rewrote the spawner and checked it in-game (dev-mode canned reply).",
+      claims: [
+        "The spawner was rewritten to reuse a pooled model.",
+        "Twenty spawns were observed without drift.",
+      ],
+      verificationSteps: [
+        "Open the linked place and watch a few spawns.",
+        "Compare against the referenced issue.",
+      ],
+      openQuestions: ["Which server was this checked on?"],
+    };
+  }
+
   if ("readiness" in properties) {
     return {
       readiness: "thin",

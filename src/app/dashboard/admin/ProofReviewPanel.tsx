@@ -14,17 +14,22 @@ import {
   ExternalLink,
   FileText,
   Film,
+  Sparkles,
 } from "lucide-react";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { toast } from "sonner";
+import { useAiAssistAvailable } from "@/components/ai-assist/AiAssistAvailability";
 import { AnimatedCollapse } from "@/components/animations";
 import ImageLightbox, { type LightboxImage } from "@/components/ImageLightbox";
 import LinearMarkdown from "@/components/LinearMarkdown";
+import type { ProofReviewResult } from "@/lib/llm-prompts";
 import {
   formatFileSize,
   isAttachmentImage,
   isAttachmentVideo,
 } from "@/lib/ppt-attachment-policy";
 import { summarizeProofEvidence } from "@/lib/ppt-proof";
+import { summarizeProofForAdmin } from "./proof-review-actions";
 import type { ProofAttachmentSummary } from "./types";
 
 /**
@@ -110,6 +115,57 @@ function describeEvidenceInventory(
   return parts.join(" · ");
 }
 
+/**
+ * The model's read of the proof, labelled as what it is.
+ *
+ * "Summary — not a verdict" is load-bearing copy, not hedging. DevHub decides
+ * whether proof qualifies with checkProofBody(), and an admin who reads this
+ * block as a recommendation is the failure mode the schema was shaped to make
+ * impossible: it carries no verdict field at all.
+ */
+function ProofSummary({ review }: { review: ProofReviewResult }) {
+  return (
+    <Stack
+      gap={6}
+      style={{
+        borderLeft: "3px solid var(--mantine-color-blue-6)",
+        paddingLeft: "var(--mantine-spacing-sm)",
+      }}
+    >
+      <Text size="xs" fw={700} tt="uppercase" c="dimmed" lts={1}>
+        Summary — not a verdict
+      </Text>
+      <Text size="sm">{review.summary}</Text>
+
+      {review.verificationSteps.length > 0 && (
+        <>
+          <Text size="xs" fw={600} c="dimmed">
+            To check it
+          </Text>
+          {review.verificationSteps.map((step) => (
+            <Text key={step} size="xs" c="dimmed">
+              · {step}
+            </Text>
+          ))}
+        </>
+      )}
+
+      {review.openQuestions.length > 0 && (
+        <>
+          <Text size="xs" fw={600} c="dimmed">
+            Left unanswered
+          </Text>
+          {review.openQuestions.map((question) => (
+            <Text key={question} size="xs" c="dimmed">
+              · {question}
+            </Text>
+          ))}
+        </>
+      )}
+    </Stack>
+  );
+}
+
 function AttachmentChip({
   attachment,
   compact,
@@ -191,17 +247,23 @@ export default function ProofReviewPanel({
   body,
   attachments,
   commentUrl,
+  linearIssueId,
   variant = "inline",
 }: {
   body: string | null;
   attachments: ProofAttachmentSummary[];
   commentUrl: string | null;
+  /** Enables the on-demand summary. Omitted where the row has no id to send. */
+  linearIssueId?: string | null;
   variant?: "inline" | "compact";
 }) {
   const [expanded, setExpanded] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<LightboxImage | null>(
     null,
   );
+  const [review, setReview] = useState<ProofReviewResult | null>(null);
+  const [summarizing, startSummarize] = useTransition();
+  const assistAvailable = useAiAssistAvailable();
 
   // Nothing captured and nothing to link to — render no chrome at all rather
   // than an empty labelled box that reads as a loading failure.
@@ -214,6 +276,8 @@ export default function ProofReviewPanel({
     : { head: "", tail: "" };
   const truncated = (body?.length ?? 0) >= PROOF_BODY_CAP;
   const evidenceSummary = describeEvidenceInventory(body, attachments.length);
+  const canSummarize =
+    Boolean(linearIssueId) && assistAvailable && Boolean(body);
 
   return (
     <>
@@ -305,6 +369,36 @@ export default function ProofReviewPanel({
               {evidenceSummary}
             </Text>
           )}
+
+          {canSummarize && (
+            <Group gap="xs" wrap="nowrap">
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                color="gray"
+                leftSection={<Sparkles size={12} />}
+                loading={summarizing}
+                onClick={() =>
+                  startSummarize(async () => {
+                    const outcome = await summarizeProofForAdmin(
+                      linearIssueId as string,
+                    );
+                    if (!outcome.available || !outcome.review) {
+                      toast.info(
+                        "No summary this time — read the proof above.",
+                      );
+                      return;
+                    }
+                    setReview(outcome.review);
+                  })
+                }
+              >
+                Summarise proof
+              </Button>
+            </Group>
+          )}
+
+          {review && <ProofSummary review={review} />}
 
           {attachments.length > 0 && (
             <Group gap="xs" wrap="wrap">

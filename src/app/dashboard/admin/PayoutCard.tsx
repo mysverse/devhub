@@ -468,6 +468,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                       body={tx.proofBody ?? null}
                       attachments={tx.proofAttachments ?? []}
                       commentUrl={tx.proofCommentUrl ?? null}
+                      linearIssueId={tx.linearIssueId ?? null}
                       variant="compact"
                     />
                   </Box>

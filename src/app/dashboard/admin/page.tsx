@@ -166,6 +166,7 @@ function buildPayoutTransaction(
     paymentMethod: user.paymentMethod,
     paymentDetails,
     linearIssueIdentifier: tx.linearIssueIdentifier,
+    linearIssueId: tx.linearIssueId,
     linearIssueUrl: tx.linearIssueUrl,
     paidAt: tx.paidAt?.toISOString() ?? null,
     rejectedAt: tx.rejectedAt?.toISOString() ?? null,

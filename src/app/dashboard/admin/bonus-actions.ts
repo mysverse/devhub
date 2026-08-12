@@ -11,6 +11,9 @@ import {
 import { TAGS } from "@/lib/cache-tags";
 import type { CurrencyCode } from "@/lib/currency";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
+import { isLlmConfigured } from "@/lib/llm";
+import type { BonusMonthSummary } from "@/lib/llm-prompts";
+import { summarizeBonusMonth } from "@/lib/llm-suggestions";
 import {
   recordCampaignApplication,
   revertCampaignApplications,
@@ -338,4 +341,67 @@ export async function rejectBonusCandidate(
 export async function getCurrentBonusConfig() {
   await requireAdmin();
   return getBonusConfig();
+}
+
+/**
+ * Themes and questions over one developer-month of bonus candidates.
+ *
+ * Advisory only, and structurally incapable of proposing money: the prompt
+ * type has no amount field, so there is nothing to prefill even by mistake.
+ * approveMonthlyBonus and its in-transaction PPT check are untouched — that
+ * check is the last point where double payment is catchable.
+ */
+export async function summarizeBonusMonthForAdmin(input: {
+  userId: string;
+  currency: string;
+  period: string;
+}): Promise<
+  { available: false } | { available: true; summary: BonusMonthSummary | null }
+> {
+  const adminUserId = await requireAdmin();
+  if (!isLlmConfigured()) return { available: false };
+
+  const candidates = await prisma.bonusCandidate.findMany({
+    where: {
+      userId: input.userId,
+      currency: input.currency,
+      period: input.period,
+      status: "READY_FOR_REVIEW",
+    },
+    select: {
+      linearIssueIdentifier: true,
+      linearIssueTitle: true,
+      labels: true,
+      estimate: true,
+    },
+  });
+  if (candidates.length === 0) return { available: true, summary: null };
+
+  const items = candidates.map((candidate) => ({
+    identifier: candidate.linearIssueIdentifier ?? "(unknown)",
+    title: candidate.linearIssueTitle ?? "(untitled)",
+    labelNames: candidate.labels,
+    estimate: candidate.estimate,
+  }));
+
+  const summary = await summarizeBonusMonth(
+    { period: input.period, items },
+    adminUserId,
+  );
+  if (!summary) return { available: true, summary: null };
+
+  // The model is never trusted with a reference. Anything it returns that was
+  // not in what we sent is dropped, and a theme left with nothing in it goes
+  // with it.
+  const sent = new Set(items.map((item) => item.identifier));
+  const themes = summary.themes
+    .map((theme) => ({
+      label: theme.label,
+      identifiers: theme.identifiers.filter((identifier) =>
+        sent.has(identifier),
+      ),
+    }))
+    .filter((theme) => theme.identifiers.length > 0);
+
+  return { available: true, summary: { ...summary, themes } };
 }

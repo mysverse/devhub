@@ -1,5 +1,9 @@
 import { generateStructured } from "@/lib/llm";
 import {
+  BONUS_MONTH_SCHEMA,
+  BONUS_MONTH_SYSTEM,
+  type BonusMonthSummary,
+  buildBonusMonthPrompt,
   buildPptDraftPrompt,
   buildProofReviewPrompt,
   buildTaskIdeaPrompt,
@@ -10,6 +14,7 @@ import {
   type PptDraft,
   PROOF_REVIEW_SCHEMA,
   PROOF_REVIEW_SYSTEM,
+  type PromptBonusMonth,
   type PromptDeveloper,
   type PromptDeveloperContext,
   type PromptIssue,
@@ -151,5 +156,26 @@ export async function summarizeMyWeek(
     schema: WEEK_SUMMARY_SCHEMA,
     // A headline and one next step. Nothing here is a draft.
     maxTokens: 500,
+  });
+}
+
+/**
+ * Themes and questions over one developer-month of bonus candidates.
+ *
+ * Returns identifiers the caller must re-anchor against exactly what it sent:
+ * the model is never trusted with a reference, and an unknown one is dropped
+ * rather than believed.
+ */
+export async function summarizeBonusMonth(
+  month: PromptBonusMonth,
+  userId: string,
+): Promise<BonusMonthSummary | null> {
+  return generateStructured({
+    surface: "bonus_month_summary",
+    userId,
+    system: BONUS_MONTH_SYSTEM,
+    prompt: buildBonusMonthPrompt(month),
+    schema: BONUS_MONTH_SCHEMA,
+    maxTokens: 900,
   });
 }

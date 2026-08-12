@@ -25,6 +25,7 @@ import AiAssistField from "@/components/ai-assist/AiAssistField";
 import { MODAL_TRANSITION, OVERLAY_PROPS } from "@/components/animations";
 import EmptyState from "@/components/EmptyState";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
+import BonusMonthSummaryButton from "./BonusMonthSummaryButton";
 import {
   approveMonthlyBonus,
   refreshBonusCandidatesFromLinear,
@@ -331,9 +332,12 @@ export default function AdminBonusesTab({
                           </Text>
                         )}
                       </div>
-                      <Text fw={700} c="green">
-                        {formatAmount(total, currency as CurrencyCode)}
-                      </Text>
+                      <Group gap="sm" wrap="nowrap" align="center">
+                        <BonusMonthSummaryButton group={group} />
+                        <Text fw={700} c="green">
+                          {formatAmount(total, currency as CurrencyCode)}
+                        </Text>
+                      </Group>
                     </Group>
 
                     <Stack gap="sm">

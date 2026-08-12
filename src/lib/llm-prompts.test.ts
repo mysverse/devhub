@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  BONUS_MONTH_SCHEMA,
+  BONUS_MONTH_SYSTEM,
+  buildBonusMonthPrompt,
   buildPptDraftPrompt,
   buildProofReviewPrompt,
   buildTaskIdeaPrompt,
@@ -9,6 +12,7 @@ import {
   buildWritingReviewPrompt,
   PROOF_REVIEW_SCHEMA,
   PROOF_REVIEW_SYSTEM,
+  type PromptBonusMonth,
   type PromptDeveloper,
   type PromptDraft,
   type PromptIssue,
@@ -315,5 +319,53 @@ describe("admin proof review", () => {
 
   it("says what an empty proof body is rather than sending nothing", () => {
     assert.match(buildProofReviewPrompt({ ...PROOF, body: "" }), /\(empty\)/);
+  });
+});
+
+const MONTH: PromptBonusMonth = {
+  period: "2026-08",
+  items: [
+    {
+      identifier: "MYS-227",
+      title: "Repaint ambulance fleet",
+      labelNames: ["Enhancement"],
+      estimate: 2,
+    },
+  ],
+};
+
+describe("bonus month summary", () => {
+  it("has no field for money, a name, or an email", () => {
+    // BonusReviewCandidate carries maxAmount, developerName and
+    // developerEmail. None of them are threaded through, which is what makes
+    // "suggest an amount" impossible rather than merely discouraged.
+    assert.deepEqual(Object.keys(MONTH).sort(), ["items", "period"]);
+    assert.deepEqual(Object.keys(MONTH.items[0]).sort(), [
+      "estimate",
+      "identifier",
+      "labelNames",
+      "title",
+    ]);
+  });
+
+  it("tells the model not to value the work", () => {
+    assert.match(
+      BONUS_MONTH_SYSTEM,
+      /Never mention, suggest or imply an amount/,
+    );
+    assert.match(BONUS_MONTH_SYSTEM, /Never invent one/);
+  });
+
+  it("returns no field an amount could be read out of", () => {
+    assert.deepEqual(Object.keys(BONUS_MONTH_SCHEMA.shape).sort(), [
+      "notes",
+      "questions",
+      "themes",
+    ]);
+  });
+
+  it("sends the identifiers the server will re-anchor against", () => {
+    assert.match(buildBonusMonthPrompt(MONTH), /identifier: MYS-227/);
+    assertNoPii(buildBonusMonthPrompt(MONTH));
   });
 });

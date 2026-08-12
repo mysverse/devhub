@@ -348,6 +348,24 @@ export function buildReply(body: MessageRequest) {
     };
   }
 
+  if ("themes" in properties) {
+    const identifiers = [...prompt.matchAll(/^identifier: (.+)$/gm)]
+      .map((match) => match[1].trim())
+      .slice(0, 3);
+    return {
+      themes: [
+        {
+          label: "Vehicle and livery work (dev-mode canned reply)",
+          // Includes a hallucinated identifier so the caller's re-anchoring is
+          // exercised rather than trivially passing.
+          identifiers: [...identifiers, "MYS-DOES-NOT-EXIST"],
+        },
+      ],
+      notes: ["Most of the month sits in one area."],
+      questions: ["Is the repaint task one piece of work or several?"],
+    };
+  }
+
   if ("headline" in properties) {
     return {
       headline: "Steady week — a couple of things are still waiting on you.",

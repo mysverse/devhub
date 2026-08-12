@@ -331,6 +331,74 @@ export function buildProofReviewPrompt(proof: PromptProof) {
   ].join("\n");
 }
 
+// ── Bonus month summary ────────────────────────────────────────────────────
+
+/**
+ * One developer-month of bonus candidates, as issues and nothing else.
+ *
+ * `maxAmount`, the developer's name and their email are all on
+ * `BonusReviewCandidate` and none of them are threaded through. Leaving money
+ * out of the type is what makes "suggest an amount" structurally impossible
+ * rather than merely discouraged — the amount is already a deterministic
+ * function of estimate and rate capped by maxAmount, and putting a model one
+ * click from a payout buys nothing.
+ */
+export type PromptBonusMonth = {
+  period: string;
+  items: {
+    identifier: string;
+    title: string;
+    labelNames: string[];
+    estimate: number | null;
+  }[];
+};
+
+export const BONUS_MONTH_SCHEMA = z.object({
+  themes: z
+    .array(
+      z.object({
+        label: z.string().describe("What this group of work has in common."),
+        identifiers: z
+          .array(z.string())
+          .describe("The issue identifiers in this theme, exactly as given."),
+      }),
+    )
+    .max(5),
+  notes: z
+    .array(z.string())
+    .max(3)
+    .describe("What stands out about the month as a whole."),
+  questions: z
+    .array(z.string())
+    .max(3)
+    .describe("What an admin might want to ask before approving."),
+});
+
+export type BonusMonthSummary = z.infer<typeof BONUS_MONTH_SCHEMA>;
+
+export const BONUS_MONTH_SYSTEM = `You group one month of finished work for an admin who is about to review it, at a small internal Roblox game studio.
+
+Say what the work has in common and what stands out. Note anything worth asking about — an issue that looks like two issues, work that duplicates something else in the list, a title too vague to tell what was delivered.
+
+Never mention, suggest or imply an amount, a rate or a value. You are not being asked what this work is worth, and DevHub decides that from the estimates.
+
+Use the identifiers exactly as given. Never invent one.`;
+
+export function buildBonusMonthPrompt(month: PromptBonusMonth) {
+  return [
+    `Group this developer's ${month.period} bonus candidates.`,
+    "",
+    ...month.items.map((item) =>
+      [
+        `identifier: ${item.identifier}`,
+        `title: ${item.title}`,
+        `labels: ${item.labelNames.join(", ") || "(none)"}`,
+        `estimate: ${item.estimate ?? "(unset)"}`,
+      ].join("\n"),
+    ),
+  ].join("\n---\n");
+}
+
 // ── Week summary ───────────────────────────────────────────────────────────
 
 /**

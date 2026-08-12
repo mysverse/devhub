@@ -17,6 +17,7 @@ import GettingStartedChecklist, {
 import Hero from "./_components/Hero";
 import IncentiveProgress from "./_components/IncentiveProgress";
 import Leaderboard from "./_components/Leaderboard";
+import ProofNeededTasks from "./_components/ProofNeededTasks";
 import RecentTransactions from "./_components/RecentTransactions";
 import {
   ActiveTasksSkeleton,
@@ -185,6 +186,11 @@ async function ActiveTasksSection() {
   );
 }
 
+async function ProofNeededSection() {
+  const { userId, userCurrency } = await getDashboardContext();
+  return <ProofNeededTasks userId={userId} currency={userCurrency} />;
+}
+
 async function WeekInReviewSection() {
   const { userId, userCurrency } = await getDashboardContext();
   return <WeekInReview userId={userId} currency={userCurrency} />;
@@ -235,6 +241,10 @@ export default function DashboardPage() {
 
       <Suspense fallback={<ActiveTasksSkeleton />}>
         <ActiveTasksSection />
+      </Suspense>
+
+      <Suspense>
+        <ProofNeededSection />
       </Suspense>
 
       <Suspense>

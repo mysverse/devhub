@@ -50,6 +50,7 @@ import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { ensureUserProfile } from "@/lib/user-profile";
 import ActiveTasks from "../_components/ActiveTasks";
+import ProofNeededTasks from "../_components/ProofNeededTasks";
 import MyPptRequests from "./MyPptRequests";
 import PptBoardHelpDrawer from "./PptBoardHelpDrawer";
 import PptRequestButton from "./PptRequestButton";
@@ -775,6 +776,10 @@ async function PPTsPageContent({
           />
         </Suspense>
       )}
+
+      <Suspense>
+        <ProofNeededTasks userId={userId} currency={userCurrency} />
+      </Suspense>
 
       <Suspense fallback={<PPTSkeleton />}>
         <PPTList

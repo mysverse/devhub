@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { transientErrorCode } from "@/lib/prisma-retry";
 
 /**
@@ -25,9 +26,34 @@ export async function loadSection<T>(
   try {
     return { ok: true, data: await load() };
   } catch (error) {
+    // Next signals control flow by throwing: redirect(), notFound(),
+    // forbidden(), and — with cacheComponents on — the dynamic-access bailouts
+    // and PPR postpone. Catching those turns a redirect into a rendered page
+    // and silently breaks prerendering. Harmless while the only caller ran
+    // requireAdminPage() first; a live bug the moment a section wraps
+    // something that redirects, which the dashboard layout does.
+    //
+    // Next exports the exact predicate, so use it rather than duck-typing
+    // digest strings — those are framework internals that change between
+    // releases, and a hand-written list would silently stop matching.
+    unstable_rethrow(error);
     console.error(`[section] ${label} failed to load:`, error);
     return { ok: false, detail: transientErrorCode(error) };
   }
+}
+
+/**
+ * A section whose only sane response to failure is to render its fallback —
+ * a decorative banner, an optional badge. Three lines over `loadSection`, and
+ * no new concept: use it where nothing downstream needs the failure as a
+ * value, and `loadSection` where the UI must say that something is missing.
+ */
+export async function loadOptionalSection<T>(
+  label: string,
+  load: () => Promise<T>,
+  fallback: T,
+): Promise<T> {
+  return sectionData(await loadSection(label, load), fallback);
 }
 
 /** The loaded data, or `fallback` when the section failed. */

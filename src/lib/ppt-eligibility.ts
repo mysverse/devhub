@@ -18,6 +18,7 @@ import {
   resolveDisplayName,
   resolveDisplayNameOrNull,
 } from "@/lib/display-name";
+import { runBatch, runFollowUps } from "@/lib/fault-isolation";
 import {
   getLinearClient,
   getLinearServiceClient,
@@ -2674,19 +2675,28 @@ export async function postPptProofComment({
     throw error;
   }
 
-  try {
-    await markAttachmentsPosted(claim.ids, commentId);
-  } catch (error) {
-    // Bookkeeping only — the comment is already on Linear. Surfacing this as
-    // "Failed to submit proof" would make the developer post it a second time,
-    // which is a far worse outcome than an unstamped linearCommentId.
-    console.error("Failed to stamp posted PPT proof attachments:", error);
-  }
-
+  // Both steps run on a proof comment that is already on Linear. Surfacing
+  // either as "Failed to submit proof" would make the developer post it a
+  // second time — on the surface that gates their payout — which is far worse
+  // than an unstamped linearCommentId or a deferred evaluation.
+  //
   // Deliberately outside the release-on-throw window above: by now the comment
   // exists, so un-claiming would make already-posted attachments selectable
-  // again. A failing evaluation is retried by `retryPptPayoutCheck`.
-  await evaluatePptIssueById(issueId, { userId, trigger: "proof_submission" });
+  // again. A failed evaluation is recoverable by `retryPptPayoutCheck`, which
+  // the Proof button already offers — it just must not be reported as a failed
+  // submission, which is what the bare await here used to do.
+  await runFollowUps("ppt-proof-comment-posted", [
+    {
+      name: "attachments-posted",
+      run: () => markAttachmentsPosted(claim.ids, commentId),
+    },
+    {
+      name: "payout-evaluation",
+      run: () =>
+        evaluatePptIssueById(issueId, { userId, trigger: "proof_submission" }),
+    },
+  ]);
+
   return { success: true };
 }
 
@@ -2701,15 +2711,24 @@ export async function runPptStabilityChecks() {
     take: 50,
   });
 
-  let checked = 0;
-  for (const state of states) {
-    await evaluatePptIssueById(state.linearIssueId, {
-      userId: state.userId,
-      trigger: "stability_cron",
-    });
-    checked++;
-  }
-  return checked;
+  // One issue whose evaluation throws used to abort the run, leaving every
+  // issue after it unchecked — and this is the cron that releases PPT payouts
+  // once a completed task has been stable long enough, so a stuck run holds
+  // money up silently.
+  const batch = await runBatch({
+    label: "ppt-stability-checks",
+    items: states,
+    scanLimit: 50,
+    identify: (state) => state.linearIssueId,
+    run: async (state) => {
+      await evaluatePptIssueById(state.linearIssueId, {
+        userId: state.userId,
+        trigger: "stability_cron",
+      });
+    },
+  });
+
+  return batch.succeeded;
 }
 
 export async function sendPptAdminDigest() {

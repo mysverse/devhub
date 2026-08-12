@@ -7,6 +7,7 @@ import type {
 import { ADMIN_ACCESS_WHERE } from "@/lib/authz";
 import { linearEstimateToComplexityLevel } from "@/lib/currency";
 import { resolveDisplayName } from "@/lib/display-name";
+import { runBatch, runFollowUps } from "@/lib/fault-isolation";
 import { getLinearServiceClient } from "@/lib/linear";
 import { DEVHUB_PPT_ASSIGNMENT_WATCH_ISSUES_QUERY } from "@/lib/linear-documents";
 import {
@@ -753,49 +754,103 @@ async function unassignIfNeeded(
   staleHours: number,
 ) {
   if (watch.status === "UNASSIGNED") return false;
+
+  // The only irreversible step, and the only one whose failure means nothing
+  // happened. If it throws, the caller's per-issue guard logs it and the next
+  // run tries again — the developer keeps their task in the meantime.
   await client.updateIssue(issue.id, { assigneeId: null });
-  await commentIfPossible(client, watch, issue, "unassigned", staleHours);
-  await notifyAssigneeUnassigned(watch, issue);
-  await notifyAdminsUnassigned(watch, issue);
-  await prisma.pptAssignmentWatch.update({
-    where: { id: watch.id },
-    data: { status: "UNASSIGNED", unassignedAt: new Date() },
-  });
-  await appendWatchEvent({
-    watchId: watch.id,
-    linearIssueId: issue.id,
-    type: "AUTO_UNASSIGNED",
-    metadata: { staleHours: Math.floor(staleHours) },
-  });
-  await broadcastTaskAvailable({
-    issue: {
-      id: issue.id,
-      identifier: issue.identifier,
-      title: issue.title,
-      url: issue.url,
+
+  // Past here the developer has already lost the task in Linear. These were
+  // six bare awaits, so a transient failure on the FIRST of them — a courtesy
+  // comment — meant the developer was never notified, DevHub never recorded
+  // the unassignment, and the task was never offered to anyone else. Someone
+  // lost a paid task silently.
+  //
+  // Ordered by what costs the most to lose: telling the developer comes before
+  // the Linear comment, and recording the state comes before the broadcast.
+  await runFollowUps("ppt-auto-unassign", [
+    {
+      name: "notify-developer",
+      run: () => notifyAssigneeUnassigned(watch, issue),
     },
-    excludeUserId: watch.userId,
-    context: "auto_unassigned",
-  });
+    {
+      name: "watch-status",
+      run: () =>
+        prisma.pptAssignmentWatch.update({
+          where: { id: watch.id },
+          data: { status: "UNASSIGNED", unassignedAt: new Date() },
+        }),
+    },
+    {
+      name: "watch-event",
+      run: () =>
+        appendWatchEvent({
+          watchId: watch.id,
+          linearIssueId: issue.id,
+          type: "AUTO_UNASSIGNED",
+          metadata: { staleHours: Math.floor(staleHours) },
+        }),
+    },
+    {
+      name: "notify-admins",
+      run: () => notifyAdminsUnassigned(watch, issue),
+    },
+    {
+      name: "linear-comment",
+      run: () =>
+        commentIfPossible(client, watch, issue, "unassigned", staleHours),
+    },
+    {
+      name: "broadcast-available",
+      run: () =>
+        broadcastTaskAvailable({
+          issue: {
+            id: issue.id,
+            identifier: issue.identifier,
+            title: issue.title,
+            url: issue.url,
+          },
+          excludeUserId: watch.userId,
+          context: "auto_unassigned",
+        }),
+    },
+  ]);
+
   return true;
 }
+
+/** Bounded so one very large workspace cannot make this query the next thing
+ *  that exceeds an Accelerate worker's limits. */
+const RESOLVE_SCAN_LIMIT = 500;
 
 async function resolveInactiveWatches(activeKeys: Set<string>) {
   const open = await prisma.pptAssignmentWatch.findMany({
     where: { status: { in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED"] } },
     select: { id: true, linearIssueId: true, assigneeLinearId: true },
+    orderBy: { updatedAt: "asc" },
+    take: RESOLVE_SCAN_LIMIT,
   });
-  let resolved = 0;
-  for (const watch of open) {
-    const key = `${watch.linearIssueId}:${watch.assigneeLinearId}`;
-    if (activeKeys.has(key)) continue;
-    await prisma.pptAssignmentWatch.update({
-      where: { id: watch.id },
-      data: { status: "RESOLVED" },
-    });
-    resolved++;
-  }
-  return resolved;
+
+  const stale = open.filter(
+    (watch) =>
+      !activeKeys.has(`${watch.linearIssueId}:${watch.assigneeLinearId}`),
+  );
+
+  const batch = await runBatch({
+    label: "ppt-watch-resolve-inactive",
+    items: stale,
+    scanLimit:
+      open.length >= RESOLVE_SCAN_LIMIT ? RESOLVE_SCAN_LIMIT : undefined,
+    identify: (watch) => watch.id,
+    run: async (watch) => {
+      await prisma.pptAssignmentWatch.update({
+        where: { id: watch.id },
+        data: { status: "RESOLVED" },
+      });
+    },
+  });
+
+  return batch.succeeded;
 }
 
 export async function runPptAssignmentWatch() {
@@ -817,102 +872,120 @@ export async function runPptAssignmentWatch() {
   let unassigned = 0;
   let nudged = 0;
   let blockExpired = 0;
+  let failed = 0;
 
   for (const issue of issues) {
+    // Recorded before anything that can fail. resolveInactiveWatches() marks
+    // every watch NOT in this set as RESOLVED, so an issue whose processing
+    // throws must still count as seen — otherwise one transient failure
+    // silently closes a live assignment.
     const key = `${issue.id}:${issue.assignee.id}`;
     activeKeys.add(key);
-    const watch = await upsertWatch(issue);
-    checked++;
 
-    const timing = getAssignmentWatchTiming({
-      lastActivityAt: watch.lastActivityAt,
-      status: watch.status,
-      snoozedUntil: watch.snoozedUntil,
-      selfBlockExpiresAt: watch.selfBlockExpiresAt,
-      now,
-      warningHours,
-      unassignHours,
-    });
-    if (timing.isSnoozed || timing.isBlocked) continue;
+    // Per-issue isolation, mirroring the shape data-retention already uses:
+    // this cron unassigns developers from paid tasks, and one bad row used to
+    // abort the entire run — leaving every issue after it unchecked, with no
+    // record that they were skipped.
+    try {
+      const watch = await upsertWatch(issue);
+      checked++;
 
-    if (watch.status === "BLOCKED") {
-      // Self-block expired without new activity: restart the clock generously
-      // rather than punishing the developer for the elapsed time.
-      await prisma.pptAssignmentWatch.update({
-        where: { id: watch.id },
-        data: {
-          status: "ACTIVE",
-          lastActivityAt: now,
-          selfBlockedAt: null,
-          selfBlockReason: null,
-          selfBlockNote: null,
-          selfBlockExpiresAt: null,
-        },
+      const timing = getAssignmentWatchTiming({
+        lastActivityAt: watch.lastActivityAt,
+        status: watch.status,
+        snoozedUntil: watch.snoozedUntil,
+        selfBlockExpiresAt: watch.selfBlockExpiresAt,
+        now,
+        warningHours,
+        unassignHours,
       });
-      await appendWatchEvent({
-        watchId: watch.id,
-        linearIssueId: issue.id,
-        type: "BLOCK_EXPIRED",
-      });
-      if (watch.userId) {
+      if (timing.isSnoozed || timing.isBlocked) continue;
+
+      if (watch.status === "BLOCKED") {
+        // Self-block expired without new activity: restart the clock generously
+        // rather than punishing the developer for the elapsed time.
+        await prisma.pptAssignmentWatch.update({
+          where: { id: watch.id },
+          data: {
+            status: "ACTIVE",
+            lastActivityAt: now,
+            selfBlockedAt: null,
+            selfBlockReason: null,
+            selfBlockNote: null,
+            selfBlockExpiresAt: null,
+          },
+        });
+        await appendWatchEvent({
+          watchId: watch.id,
+          linearIssueId: issue.id,
+          type: "BLOCK_EXPIRED",
+        });
+        if (watch.userId) {
+          await notifyWithPreferences({
+            userId: watch.userId,
+            domain: "ppt_task",
+            type: "BLOCK_EXPIRED",
+            title: `Blocked window ended: ${issue.identifier ?? issue.title ?? "task"}`,
+            message: `The blocked pause on this task ended, so its activity timer restarted fresh. Still blocked? Mark it blocked again — repeated blocks are flagged to admins so they can help unblock you.`,
+            href: `/dashboard/ppts#task-${issue.id}`,
+            entityType: "linear_issue",
+            entityId: issue.id,
+            payload: { issueId: issue.id, issueUrl: issue.url },
+            dedupeKey: `ppt-task:block-expired:${watch.id}:${now.toISOString().slice(0, 13)}`,
+            channels: [IN_APP_CHANNEL],
+          });
+        }
+        blockExpired++;
+        continue;
+      }
+
+      const staleHours = timing.staleHours;
+      if (staleHours >= unassignHours) {
+        if (await unassignIfNeeded(client, watch, issue, staleHours)) {
+          unassigned++;
+        }
+        continue;
+      }
+      if (staleHours >= warningHours) {
+        if (await warnIfNeeded(client, watch, issue, staleHours)) warned++;
+        continue;
+      }
+      if (
+        staleHours >= policy.idleNudgeHours &&
+        watch.userId &&
+        (!watch.idleNudgedAt || watch.idleNudgedAt < watch.lastActivityAt)
+      ) {
+        // Gentle in-app-only heads-up well before the formal warning.
         await notifyWithPreferences({
           userId: watch.userId,
           domain: "ppt_task",
-          type: "BLOCK_EXPIRED",
-          title: `Blocked window ended: ${issue.identifier ?? issue.title ?? "task"}`,
-          message: `The blocked pause on this task ended, so its activity timer restarted fresh. Still blocked? Mark it blocked again — repeated blocks are flagged to admins so they can help unblock you.`,
+          type: "IDLE_NUDGE",
+          title: `Still on ${issue.identifier ?? issue.title ?? "your PPT"}?`,
+          message: `A quick progress note keeps it yours — the reminder lands at ${warningHours}h without activity. Waiting on someone? Mark it blocked instead, no filler comment needed.`,
           href: `/dashboard/ppts#task-${issue.id}`,
           entityType: "linear_issue",
           entityId: issue.id,
           payload: { issueId: issue.id, issueUrl: issue.url },
-          dedupeKey: `ppt-task:block-expired:${watch.id}:${now.toISOString().slice(0, 13)}`,
+          dedupeKey: `ppt-task:idle-nudge:${watch.id}:${watch.lastActivityAt.toISOString()}`,
           channels: [IN_APP_CHANNEL],
         });
+        await prisma.pptAssignmentWatch.update({
+          where: { id: watch.id },
+          data: { idleNudgedAt: now },
+        });
+        await appendWatchEvent({
+          watchId: watch.id,
+          linearIssueId: issue.id,
+          type: "IDLE_NUDGE",
+        });
+        nudged++;
       }
-      blockExpired++;
-      continue;
-    }
-
-    const staleHours = timing.staleHours;
-    if (staleHours >= unassignHours) {
-      if (await unassignIfNeeded(client, watch, issue, staleHours)) {
-        unassigned++;
-      }
-      continue;
-    }
-    if (staleHours >= warningHours) {
-      if (await warnIfNeeded(client, watch, issue, staleHours)) warned++;
-      continue;
-    }
-    if (
-      staleHours >= policy.idleNudgeHours &&
-      watch.userId &&
-      (!watch.idleNudgedAt || watch.idleNudgedAt < watch.lastActivityAt)
-    ) {
-      // Gentle in-app-only heads-up well before the formal warning.
-      await notifyWithPreferences({
-        userId: watch.userId,
-        domain: "ppt_task",
-        type: "IDLE_NUDGE",
-        title: `Still on ${issue.identifier ?? issue.title ?? "your PPT"}?`,
-        message: `A quick progress note keeps it yours — the reminder lands at ${warningHours}h without activity. Waiting on someone? Mark it blocked instead, no filler comment needed.`,
-        href: `/dashboard/ppts#task-${issue.id}`,
-        entityType: "linear_issue",
-        entityId: issue.id,
-        payload: { issueId: issue.id, issueUrl: issue.url },
-        dedupeKey: `ppt-task:idle-nudge:${watch.id}:${watch.lastActivityAt.toISOString()}`,
-        channels: [IN_APP_CHANNEL],
-      });
-      await prisma.pptAssignmentWatch.update({
-        where: { id: watch.id },
-        data: { idleNudgedAt: now },
-      });
-      await appendWatchEvent({
-        watchId: watch.id,
-        linearIssueId: issue.id,
-        type: "IDLE_NUDGE",
-      });
-      nudged++;
+    } catch (error) {
+      failed++;
+      console.error(
+        `[ppt-assignment-watch] ${issue.identifier ?? issue.id} failed:`,
+        error,
+      );
     }
   }
 
@@ -923,6 +996,7 @@ export async function runPptAssignmentWatch() {
     unassigned,
     nudged,
     blockExpired,
+    failed,
     resolved,
     discord: { sent: 0, skipped: true },
   };

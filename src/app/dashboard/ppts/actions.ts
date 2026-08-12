@@ -5,6 +5,7 @@ import { getSession } from "@/lib/auth-utils";
 import { hasAdminAccess } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
 import { resolveDisplayName } from "@/lib/display-name";
+import { runFollowUps } from "@/lib/fault-isolation";
 import { LinearReauthRequiredError, withLinearFallback } from "@/lib/linear";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
 import { isLlmConfigured } from "@/lib/llm";
@@ -220,19 +221,32 @@ export async function submitPptProof(
     // never reached Linear, so nothing cached is stale and the extra profile
     // read would be wasted.
     if ("success" in result) {
+      // The proof comment is already live on Linear at this point, so a
+      // transient failure reading the profile must not surface as "Failed to
+      // submit proof" — the developer would post the proof a second time, on
+      // the surface that gates their payout. Stale cache tags are the lesser
+      // harm and the next write busts them anyway.
+      //
       // These two tags were missing here while `submitPptProgress` below has
       // always revalidated them, so posting proof left the "use cache" issue
       // lists serving pre-proof state until something else invalidated them.
       // revalidatePath does not reach tag-keyed cache entries, which is why the
       // paths alone were never enough.
-      const profile = await prisma.userProfile.findUnique({
-        where: { id: userId },
-        select: { linearId: true },
-      });
-      if (profile?.linearId) {
-        revalidateTag(TAGS.userIssues(profile.linearId), { expire: 0 });
-      }
-      revalidateTag(TAGS.workspacePpts, { expire: 0 });
+      await runFollowUps("ppt-proof-posted", [
+        {
+          name: "revalidate-issue-tags",
+          run: async () => {
+            const profile = await prisma.userProfile.findUnique({
+              where: { id: userId },
+              select: { linearId: true },
+            });
+            if (profile?.linearId) {
+              revalidateTag(TAGS.userIssues(profile.linearId), { expire: 0 });
+            }
+            revalidateTag(TAGS.workspacePpts, { expire: 0 });
+          },
+        },
+      ]);
     }
 
     revalidatePath("/dashboard");
@@ -339,28 +353,37 @@ export async function submitPptProgress(
       throw e;
     }
 
-    try {
-      await markAttachmentsPosted(claim.ids, commentId);
-    } catch (error) {
-      // Bookkeeping only. The comment exists; reporting this as a failed post
-      // would make the developer post a duplicate, which is strictly worse than
-      // an attachment row with no linearCommentId stamped on it.
-      console.error("Failed to stamp posted PPT progress attachments:", error);
-    }
-
-    // Past this point the comment is live, so a throw must NOT release the
-    // claim: un-claiming would make already-posted attachments selectable for a
+    // The comment is live from here on, so nothing below may report a failed
+    // post: the developer would post a duplicate, which is strictly worse than
+    // any bookkeeping gap. A throw must also NOT release the claim —
+    // un-claiming would make already-posted attachments selectable for a
     // second comment.
-    await prisma.pptAssignmentWatch.update({
-      where: { id: watch.id },
-      data: {
-        status: "ACTIVE",
-        lastActivityAt: new Date(),
-        warnedAt: null,
-        snoozedUntil: null,
-        snoozeReason: null,
+    //
+    // The attachment stamp was already guarded with exactly this reasoning;
+    // the watch update next to it was not, and its failure both reported a
+    // false error AND left lastActivityAt unbumped, so the assignment-watch
+    // cron could go on to auto-unassign a developer off a task they had just
+    // posted progress on.
+    await runFollowUps("ppt-progress-posted", [
+      {
+        name: "attachments-posted",
+        run: () => markAttachmentsPosted(claim.ids, commentId),
       },
-    });
+      {
+        name: "watch-activity",
+        run: () =>
+          prisma.pptAssignmentWatch.update({
+            where: { id: watch.id },
+            data: {
+              status: "ACTIVE",
+              lastActivityAt: new Date(),
+              warnedAt: null,
+              snoozedUntil: null,
+              snoozeReason: null,
+            },
+          }),
+      },
+    ]);
 
     revalidateTag(TAGS.userIssues(profile.linearId), { expire: 0 });
     revalidateTag(TAGS.workspacePpts, { expire: 0 });

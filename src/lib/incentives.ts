@@ -23,7 +23,7 @@ import {
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
 import { resolveDisplayName } from "@/lib/display-name";
-import { runFollowUps } from "@/lib/fault-isolation";
+import { runBatch, runFollowUps } from "@/lib/fault-isolation";
 import {
   buildIncentiveEarningPotential,
   buildIncentiveNextTargets,
@@ -1248,105 +1248,120 @@ export async function evaluateWeeklyIncentives(
   let created = 0;
   let held = 0;
 
+  // Per-user isolation. This cron runs once a week and never revisits a
+  // weekKey, so a single failure used to cost every user after it their
+  // weekly incentive — with no record that they were skipped.
+  let failed = 0;
   for (const row of users) {
     if (!row.userId) continue;
-    const [user, issues] = await Promise.all([
-      prisma.userProfile.findUnique({ where: { id: row.userId } }),
-      getQualifyingIssuesForWeek(
-        row.userId,
-        weekKey,
-        config,
-        config.activatedAt,
-      ),
-    ]);
-    if (!user || issues.length < config.weeklyThreshold) continue;
-
-    const currency = getCurrencyForPaymentMethod(user.paymentMethod);
-    const issueIds = issues.map((issue) => issue.id);
-    leaderboard.push({
-      userId: row.userId,
-      currency,
-      count: issues.length,
-      issueIds,
-      rank: user.developerRank,
-    });
-
-    if (config.weeklyEnabled) {
-      const tier = parseWeeklyTiers(config)
-        .filter((item) => issues.length >= item.threshold)
-        .at(-1);
-      if (tier) {
-        const activeDays = await getDistinctActiveDaysForWeek(
+    try {
+      const [user, issues] = await Promise.all([
+        prisma.userProfile.findUnique({ where: { id: row.userId } }),
+        getQualifyingIssuesForWeek(
           row.userId,
           weekKey,
-        );
-        const kicker =
-          config.activeDayKickerEnabled &&
-          activeDays >= config.activeDayThreshold
-            ? currency === "ROBUX"
-              ? config.activeDayKickerRobux
-              : config.activeDayKickerMyr
-            : 0;
-        const award = await createIncentiveAward({
-          userId: row.userId,
-          type: "WEEKLY_THROUGHPUT",
-          period: weekKey,
-          thresholdMet: issues.length,
-          detail: {
-            tierThreshold: tier.threshold,
-            activeDays,
-            activeDayKicker: kicker,
-          },
-          currency,
-          amount: currencyAmount(tier, currency) + kicker,
-          issueIds,
           config,
-          activatedAt: config.activatedAt,
-          rank: user.developerRank,
-        });
-        if (award) {
-          created++;
-          if (award.status === "HELD") held++;
-          await prisma.issueCompletion.updateMany({
-            where: { id: { in: issueIds }, countedInWeek: null },
-            data: { countedInWeek: weekKey },
-          });
-        }
-      }
-    }
+          config.activatedAt,
+        ),
+      ]);
+      if (!user || issues.length < config.weeklyThreshold) continue;
 
-    if (config.streakEnabled && config.streakThresholdWeeks > 0) {
-      const streakWeeks = await getCurrentStreakWeeks(
-        row.userId,
-        weekKey,
-        config,
-        config.activatedAt,
-      );
-      if (streakWeeks >= 4) {
-        await awardAchievement(row.userId, "STREAK_4", { streakWeeks });
-      }
-      if (streakWeeks > 0 && streakWeeks % config.streakThresholdWeeks === 0) {
-        const award = await createIncentiveAward({
-          userId: row.userId,
-          type: "STREAK",
-          period: weekKey,
-          thresholdMet: streakWeeks,
-          detail: { streakWeeks },
-          currency,
-          amount:
-            currency === "ROBUX"
-              ? config.streakRobuxAmount
-              : config.streakMyrAmount,
-          issueIds,
-          config,
-          activatedAt: config.activatedAt,
-          rank: user.developerRank,
-        });
-        if (award) {
-          created++;
-          if (award.status === "HELD") held++;
+      const currency = getCurrencyForPaymentMethod(user.paymentMethod);
+      const issueIds = issues.map((issue) => issue.id);
+      leaderboard.push({
+        userId: row.userId,
+        currency,
+        count: issues.length,
+        issueIds,
+        rank: user.developerRank,
+      });
+
+      if (config.weeklyEnabled) {
+        const tier = parseWeeklyTiers(config)
+          .filter((item) => issues.length >= item.threshold)
+          .at(-1);
+        if (tier) {
+          const activeDays = await getDistinctActiveDaysForWeek(
+            row.userId,
+            weekKey,
+          );
+          const kicker =
+            config.activeDayKickerEnabled &&
+            activeDays >= config.activeDayThreshold
+              ? currency === "ROBUX"
+                ? config.activeDayKickerRobux
+                : config.activeDayKickerMyr
+              : 0;
+          const award = await createIncentiveAward({
+            userId: row.userId,
+            type: "WEEKLY_THROUGHPUT",
+            period: weekKey,
+            thresholdMet: issues.length,
+            detail: {
+              tierThreshold: tier.threshold,
+              activeDays,
+              activeDayKicker: kicker,
+            },
+            currency,
+            amount: currencyAmount(tier, currency) + kicker,
+            issueIds,
+            config,
+            activatedAt: config.activatedAt,
+            rank: user.developerRank,
+          });
+          if (award) {
+            created++;
+            if (award.status === "HELD") held++;
+            await prisma.issueCompletion.updateMany({
+              where: { id: { in: issueIds }, countedInWeek: null },
+              data: { countedInWeek: weekKey },
+            });
+          }
         }
       }
+
+      if (config.streakEnabled && config.streakThresholdWeeks > 0) {
+        const streakWeeks = await getCurrentStreakWeeks(
+          row.userId,
+          weekKey,
+          config,
+          config.activatedAt,
+        );
+        if (streakWeeks >= 4) {
+          await awardAchievement(row.userId, "STREAK_4", { streakWeeks });
+        }
+        if (
+          streakWeeks > 0 &&
+          streakWeeks % config.streakThresholdWeeks === 0
+        ) {
+          const award = await createIncentiveAward({
+            userId: row.userId,
+            type: "STREAK",
+            period: weekKey,
+            thresholdMet: streakWeeks,
+            detail: { streakWeeks },
+            currency,
+            amount:
+              currency === "ROBUX"
+                ? config.streakRobuxAmount
+                : config.streakMyrAmount,
+            issueIds,
+            config,
+            activatedAt: config.activatedAt,
+            rank: user.developerRank,
+          });
+          if (award) {
+            created++;
+            if (award.status === "HELD") held++;
+          }
+        }
+      }
+    } catch (error) {
+      failed++;
+      console.error(
+        `[incentives] weekly evaluation failed for user ${row.userId}:`,
+        error,
+      );
     }
   }
 
@@ -1386,7 +1401,7 @@ export async function evaluateWeeklyIncentives(
     metadata: { created, held },
   });
 
-  return { created, held, weekKey, skipped: false };
+  return { created, held, failed, weekKey, skipped: false };
 }
 
 function awardIssuesInvalid(
@@ -1767,12 +1782,21 @@ export async function releaseDueIncentives() {
 
   let released = 0;
   let skipped = 0;
-  for (const group of groups.values()) {
-    const result = await releaseAwardGroup(group, config);
-    released += result.released;
-    if (result.skipped) skipped++;
-  }
-  return { released, skipped };
+  // Per-group isolation: one developer's release failing must not stop every
+  // other developer from being paid. Without this a single bad group held the
+  // whole hourly release, and nothing recorded that the rest were skipped.
+  const batch = await runBatch({
+    label: "incentive-release",
+    items: [...groups.values()],
+    identify: (group) => `${group[0]?.userId}:${group[0]?.currency}`,
+    run: async (group) => {
+      const result = await releaseAwardGroup(group, config);
+      released += result.released;
+      if (result.skipped) skipped++;
+    },
+  });
+
+  return { released, skipped, failed: batch.failed };
 }
 
 export async function recordUserActivityDay(userId: string) {

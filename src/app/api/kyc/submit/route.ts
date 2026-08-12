@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { getSession } from "@/lib/auth-utils";
-import { uploadKycDocument } from "@/lib/blob-storage";
+import { deleteKycDocuments, uploadKycDocument } from "@/lib/blob-storage";
+import { runFollowUps } from "@/lib/fault-isolation";
 import {
   createKycAuditEntry,
   detectImageMimeType,
@@ -133,6 +134,12 @@ export async function POST(req: Request) {
     },
   });
 
+  // Tracked so the rollback below can destroy anything that did reach blob
+  // storage. kyc-cleanup only ever finds blobs through their kycVerification
+  // row, and blob-storage.ts has no list()-based sweep, so a row deleted while
+  // its uploads survive leaves a government ID and a selfie there permanently.
+  const uploaded: string[] = [];
+
   try {
     // Strip EXIF metadata using sharp
     const [strippedId, strippedSelfie] = await Promise.all([
@@ -145,6 +152,7 @@ export async function POST(req: Request) {
       uploadKycDocument(verification.id, "id-document", strippedId, idMime),
       uploadKycDocument(verification.id, "selfie", strippedSelfie, selfieMime),
     ]);
+    uploaded.push(idBlobUrl, selfieBlobUrl);
 
     // Update record with blob URLs
     await prisma.kycVerification.update({
@@ -157,11 +165,26 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    // Clean up the verification record if upload fails
-    await prisma.kycVerification.delete({
-      where: { id: verification.id },
-    });
     console.error("[kyc] Upload failed:", error);
+
+    // Documents first, then the row that points at them — the reverse order
+    // orphans them. Each step is isolated so a failure to delete the blobs
+    // does not also skip deleting the row, and neither turns a handled 500
+    // into an unhandled one: the delete used to be a bare await in a catch.
+    await runFollowUps("kyc-submit-rollback", [
+      {
+        name: "documents",
+        run: async () => {
+          if (uploaded.length > 0) await deleteKycDocuments(uploaded);
+        },
+      },
+      {
+        name: "verification-row",
+        run: () =>
+          prisma.kycVerification.delete({ where: { id: verification.id } }),
+      },
+    ]);
+
     return NextResponse.json(
       { error: "Failed to upload documents. Please try again." },
       { status: 500 },

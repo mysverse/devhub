@@ -171,6 +171,7 @@ const CRON_ROUTES = [
   "ppt-assignment-watch",
   "data-retention",
   "campaign-lifecycle",
+  "payout-confirmations",
 ];
 
 async function simulateCron(name: string | undefined) {

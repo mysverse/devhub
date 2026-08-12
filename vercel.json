@@ -44,6 +44,10 @@
     {
       "path": "/api/cron/campaign-lifecycle",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron/payout-confirmations",
+      "schedule": "15 * * * *"
     }
   ]
 }

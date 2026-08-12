@@ -6,6 +6,7 @@ import {
   buildBonusMonthPrompt,
   buildPptDraftPrompt,
   buildProofReviewPrompt,
+  buildSearchIntentPrompt,
   buildTaskIdeaPrompt,
   buildTaskReasonPrompt,
   buildWeekSummaryPrompt,
@@ -22,6 +23,9 @@ import {
   type PromptScope,
   type PromptWeek,
   type ProofReviewResult,
+  SEARCH_INTENT_SCHEMA,
+  SEARCH_INTENT_SYSTEM,
+  type SearchIntent,
   TASK_IDEA_SCHEMA,
   TASK_IDEA_SYSTEM,
   TASK_REASON_SCHEMA,
@@ -177,5 +181,27 @@ export async function summarizeBonusMonth(
     prompt: buildBonusMonthPrompt(month),
     schema: BONUS_MONTH_SCHEMA,
     maxTokens: 900,
+  });
+}
+
+/**
+ * Expand a search phrase into keywords the deterministic scorer understands.
+ *
+ * Null is the normal, fully-supported outcome: the caller searches the raw
+ * phrase, which is exactly what it did before this existed.
+ */
+export async function understandSearchQuery(
+  query: string,
+  userId: string | null,
+): Promise<SearchIntent | null> {
+  if (query.trim().length < 8) return null;
+  return generateStructured({
+    surface: "search_intent",
+    userId,
+    system: SEARCH_INTENT_SYSTEM,
+    prompt: buildSearchIntentPrompt(query),
+    schema: SEARCH_INTENT_SCHEMA,
+    // A handful of words. The smallest surface here by a distance.
+    maxTokens: 300,
   });
 }

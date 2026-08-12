@@ -13,6 +13,7 @@ import { formatAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
 import { withLinearFallback } from "@/lib/linear";
 import { getSuggestedPptsForUser } from "@/lib/linear-data";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { understandSearchQuery } from "@/lib/llm-suggestions";
 import { selectCampaignBadge } from "@/lib/payout-campaign";
 import {
   getCampaignBadgeFor,
@@ -491,7 +492,24 @@ async function executeReadTool(
   if (name === "search_game_wiki") {
     const query = String(payload.query || "");
     const game = payload.game ? String(payload.game) : null;
-    const results = await searchWikiArticles(query, { game, limit: 5 });
+
+    /**
+     * Widen the phrase before the deterministic scorer sees it.
+     *
+     * The scorer is bag-of-words, so "the thing buses drive on" scores nothing
+     * against an article about roads. Understanding the phrase costs one small
+     * call and changes only the terms; retrieval, ranking and snippets are
+     * unchanged. Null — unconfigured, capped, refused — searches the raw
+     * phrase, which is exactly what happened before this existed.
+     */
+    const intent = await understandSearchQuery(query, context.userId);
+    const searchText = intent ? [query, ...intent.keywords].join(" ") : query;
+    const results = await searchWikiArticles(searchText, {
+      game,
+      // Already an enum on the way out of the schema, so nothing to re-anchor.
+      specialties: intent?.specialties,
+      limit: 5,
+    });
     return {
       query,
       game,

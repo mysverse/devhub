@@ -348,6 +348,16 @@ export function buildReply(body: MessageRequest) {
     };
   }
 
+  if ("keywords" in properties) {
+    const phrase = fenced(prompt);
+    return {
+      // Echoes the phrase back with one canned expansion, so the caller's
+      // "did the terms widen" path is genuinely exercised.
+      keywords: [...phrase.toLowerCase().split(/\s+/).slice(0, 5), "roads"],
+      specialties: ["BUILDING"],
+    };
+  }
+
   if ("themes" in properties) {
     const identifiers = [...prompt.matchAll(/^identifier: (.+)$/gm)]
       .map((match) => match[1].trim())

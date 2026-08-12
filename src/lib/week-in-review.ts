@@ -7,6 +7,10 @@
  * prose would eventually describe a different week from the numbers beside it.
  */
 
+import {
+  PROOF_ACTIONABLE_REASONS,
+  PROOF_ACTIONABLE_STATUSES,
+} from "@/lib/ppt-reason-copy";
 import prisma from "@/lib/prisma";
 
 export const WEEK_WINDOW_DAYS = 7;
@@ -40,10 +44,15 @@ export async function loadWeekInReview(
       where: { userId, proofProvidedAt: { gte: since } },
     }),
     prisma.pptPayoutState.findMany({
+      // The shared definition of "waiting on the developer for proof", not a
+      // local copy: this list previously omitted ON_HOLD and
+      // PROOF_RESET_BY_QUESTION, so a task held after a reviewer's follow-up
+      // question counted as nothing outstanding while the same dashboard was
+      // telling the developer to post proof for it.
       where: {
         userId,
-        status: { in: ["BLOCKED", "NEEDS_PROOF"] },
-        reason: { in: ["MISSING_PROOF", "PROOF_NOT_QUALIFYING"] },
+        status: { in: [...PROOF_ACTIONABLE_STATUSES] },
+        reason: { in: [...PROOF_ACTIONABLE_REASONS] },
       },
       select: { linearIssueTitle: true },
       take: 10,

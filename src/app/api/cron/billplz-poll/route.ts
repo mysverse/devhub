@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPaymentOrder } from "@/lib/billplz";
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { handlePayoutCompletion, handlePayoutFailure } from "@/lib/payout";
 import prisma from "@/lib/prisma";
 
@@ -9,10 +10,7 @@ import prisma from "@/lib/prisma";
  * Protected by CRON_SECRET to prevent unauthorized access.
  */
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

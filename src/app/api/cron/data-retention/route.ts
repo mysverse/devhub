@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import prisma from "@/lib/prisma";
 import {
   daysAgo,
@@ -26,10 +27,7 @@ import { redactOrderEventMetadata } from "@/lib/welcome-pack-events";
  * Runs daily via Vercel Cron. Protected by CRON_SECRET.
  */
 export async function GET(req: Request) {
-  const authHeader = req.headers.get("authorization");
-  const cronSecret = process.env.CRON_SECRET;
-
-  if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+  if (!isAuthorizedCronRequest(req)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

@@ -296,6 +296,45 @@ Both directions used to resolve silently in favour of destroying one side.
 `llm-suggestions.ts` (the original drafting surfaces). Provider selection and
 model request shape live at these boundaries, never at call sites.
 
+Writing assist adds `ai-assist-config.ts` (the pure field table),
+`ai-assist-server.ts` (IO), `src/app/dashboard/ai-assist-actions.ts` (the two
+endpoints) and `src/components/ai-assist/` (the client primitive). Free-text
+redaction is `src/lib/redaction.ts`.
+
+- **Writing assist proposes, it never replaces.** `AI_ASSIST_FIELDS` is the
+  entire surface — a field absent from the table has no affordance, which is
+  how KYC notes, COI disclosures, every welcome-pack field and the
+  payment-issue email stay excluded. The rewrite renders beside the draft and
+  a person accepts it; `checkProofBody()` and every server validator then run
+  on the accepted text exactly as if it had been typed. Each `maxChars` is
+  asserted against the thing that really enforces it, or an accepted rewrite is
+  silently truncated afterwards.
+- **The advisory review is a sibling of the checklist, never a row inside it.**
+  `RequirementChecklist` means "this is what gates the payout" and is the only
+  thing on that screen that means it. Model opinion never feeds
+  `unmetRequired()` and never blocks a submit. `WRITING_REVIEW_SCHEMA` has no
+  `rewrite` field and `PROOF_REVIEW_SCHEMA` has no verdict field — both
+  absences are asserted, because a returnable sentence or a boolean is the
+  field a later edit branches on.
+- **Three disjoint per-user ledgers.** `write_*`/`review_*` count against
+  `LLM_MAX_WRITING_CALLS_PER_USER_PER_HOUR`; `assistant_chat` is gated by turns
+  and counts against neither; everything else uses
+  `LLM_MAX_CALLS_PER_USER_PER_HOUR`. The global cap still covers all of it. A
+  new writing surface opts in by being *named* `write_*` — that is the whole
+  mechanism, and `ai-assist-config.test.ts` asserts it.
+- **No comprehension surface runs at render time.** Proof summaries, the week
+  summary and the bonus month summary are all on buttons. The payout board
+  shows up to a hundred rows and the dashboard is reloaded constantly;
+  summarising on render would exhaust an hourly cap on first paint, and a cap
+  must never surface as a broken feature.
+- **Money is never in a prompt.** `PromptWeek` carries counts,
+  `PromptBonusMonth` carries no amount field at all. DevHub renders every
+  figure through `formatAmount()`/`projectPptPayout()`, and a model-authored
+  number beside a real one is worse than no sentence.
+- **Free text is redacted both ways.** In before the prompt is built, and again
+  over the model's reply — a rewrite echoes its input, so the accepted text
+  must be no leakier than the sent text.
+
 - **The adapter is always optional.** Provider order comes from `LLM_PROVIDER`
   and `LLM_FALLBACK_PROVIDER`, filtered to providers with keys.
   `generateStructured()` returns null for every terminal failure — no key,
@@ -352,7 +391,12 @@ model request shape live at these boundaries, never at call sites.
   and an unknown identifier is demoted, never believed.
 - **Dev mode intercepts both provider hosts.** `src/dev/handlers/openai.ts`
   returns Responses JSON/SSE and `anthropic.ts` returns Messages replies.
-  `pnpm dev:mock` must never make a real model call.
+  `pnpm dev:mock` must never make a real model call. `buildReply()` dispatches
+  on the requested schema's unique top-level property and **throws** on one it
+  does not recognise — it used to fall through to the PPT-draft shape, which
+  failed the caller's parse, burned the provider fallback and left the feature
+  reading as "unavailable" with nothing logged. Restart `pnpm dev:mock` after
+  touching `src/dev/**`; the interceptor installs once at boot.
 
 ## Route Structure
 

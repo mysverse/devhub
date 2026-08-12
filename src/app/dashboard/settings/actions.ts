@@ -11,6 +11,7 @@ import {
   paymentSuperRefine,
 } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
+import { withIdempotentWrite } from "@/lib/prisma-retry";
 
 // Derived from the catalog, never restated here: the settings UI renders a
 // toggle for every configurable entry, so anything this set doesn't cover is a
@@ -147,10 +148,26 @@ export async function updateAutoPayoutSetting(enabled: boolean) {
     }
   }
 
-  await prisma.userProfile.update({
-    where: { id: userId },
-    data: { autoPayoutEnabled: enabled },
-  });
+  // Sets an absolute value, so repeating it is repeating it once — and this
+  // switch routes real money, so leaving it visually ON while the column says
+  // false is the worst of the three outcomes.
+  try {
+    await withIdempotentWrite(
+      "absolute-value-update",
+      "updateAutoPayoutSetting",
+      () =>
+        prisma.userProfile.update({
+          where: { id: userId },
+          data: { autoPayoutEnabled: enabled },
+        }),
+    );
+  } catch (error) {
+    // Every sibling action in this module reports failure as { error }. This
+    // one threw, so the caller's `await` rejected and its handler never ran —
+    // leaving the Switch stuck ON and disabled against a false column.
+    console.error("[settings] Failed to update auto-payout setting:", error);
+    return { error: "Could not save that setting. Please try again." };
+  }
 
   revalidatePath("/dashboard/settings");
   return { success: true };

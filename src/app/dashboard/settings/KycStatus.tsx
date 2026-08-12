@@ -147,18 +147,27 @@ export default function KycStatus({
     setTogglingAutoPayout(true);
     setAutoPayout(checked);
 
-    const res = await updateAutoPayoutSetting(checked);
+    try {
+      const res = await updateAutoPayoutSetting(checked);
 
-    if (res?.error) {
-      toast.error(res.error);
-      setAutoPayout(!checked); // Revert
-    } else {
-      toast.success(
-        checked ? "Automatic payouts enabled" : "Automatic payouts disabled",
-      );
+      if (res?.error) {
+        toast.error(res.error);
+        setAutoPayout(!checked); // Revert
+      } else {
+        toast.success(
+          checked ? "Automatic payouts enabled" : "Automatic payouts disabled",
+        );
+      }
+    } catch (error) {
+      // A rejected action skipped both the revert and the reset below, leaving
+      // the Switch ON and permanently disabled while the column said false —
+      // a money-routing setting misreporting itself until a reload.
+      console.error("Failed to update auto-payout setting:", error);
+      toast.error("Could not save that setting. Please try again.");
+      setAutoPayout(!checked);
+    } finally {
+      setTogglingAutoPayout(false);
     }
-
-    setTogglingAutoPayout(false);
   }
 
   return (

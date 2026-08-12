@@ -410,6 +410,55 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     configurable: false,
     emailRetry: "sweep",
   },
+  // ── Admin alerts (always sent — these are how an admin learns something
+  //    broke). They were emitted without catalog entries, which meant the
+  //    settings page never listed them and, more importantly, the email retry
+  //    sweep treated them as unknown and skipped them: the alerts that say
+  //    something is wrong were the ones least likely to be re-sent. ─────────
+  {
+    domain: "ppt",
+    type: "ADMIN_ALERT",
+    audience: "admin",
+    title: "PPT payout needs an admin",
+    description:
+      "A PPT payout is blocked, flagged, or waiting on a decision only an admin can make.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
+  {
+    domain: "incentive",
+    type: "ADMIN_ALERT",
+    audience: "admin",
+    title: "Incentive run needs an admin",
+    description:
+      "An incentive award or release needs attention — a cap, an anomaly, or a failed run.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
+  {
+    domain: "admin_notice",
+    type: "PPT_AUTO_UNASSIGNED",
+    audience: "admin",
+    title: "Task auto-unassigned",
+    description:
+      "A stale assignment passed its deadline and DevHub unassigned it in Linear.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
+  {
+    domain: "admin_notice",
+    type: "LINEAR_SERVICE_KEY_FAILED",
+    audience: "admin",
+    title: "Linear service key failed",
+    description:
+      "The shared Linear credential stopped working — background syncs are degraded until it is replaced.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
   // ── Payout campaigns (always sent — this is money on the table) ──────────
   {
     domain: "campaign",

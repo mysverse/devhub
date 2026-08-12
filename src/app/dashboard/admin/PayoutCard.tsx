@@ -46,6 +46,7 @@ import {
   payViaRoblox,
   payViaXendit,
   rejectTransaction,
+  resendPaymentConfirmation,
 } from "./actions";
 import { sendPaymentInfoNotice } from "./email-actions";
 import ProofReviewPanel from "./ProofReviewPanel";
@@ -156,6 +157,7 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const [rejectReason, setRejectReason] = useState("");
   const rejectRef = useRef<HTMLTextAreaElement>(null);
   const [sendingNotice, setSendingNotice] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const isPending = tx.status === "PENDING";
   const isPaid = tx.status === "PAID";
@@ -223,8 +225,31 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     const res = await markTransactionAsPaid(tx.id);
     if (res?.error) {
       setError(res.error);
+    } else if (res?.confirmation === "failed") {
+      // The payment went through; only the email did not. Say both, because
+      // the developer has been paid and does not know it.
+      toast.warning(
+        `Marked as paid, but the confirmation email failed${
+          res.confirmationDetail ? ` (${res.confirmationDetail})` : ""
+        }. Use "Resend confirmation" on this payout.`,
+        { duration: 10_000 },
+      );
+    } else {
+      toast.success("Marked as paid");
     }
     setLoading(false);
+  }
+
+  async function handleResendConfirmation() {
+    setResending(true);
+    setError("");
+    const res = await resendPaymentConfirmation(tx.id);
+    if (res?.error) {
+      setError(res.error);
+    } else {
+      toast.success("Confirmation email sent");
+    }
+    setResending(false);
   }
 
   async function handlePayViaBillplz() {
@@ -679,6 +704,22 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                   Notify: Payment Issue
                 </Button>
               </>
+            )}
+            {isPaid && (
+              // The recovery path for a confirmation that never went out —
+              // the payment is settled, so "Mark as Paid" can no longer be
+              // pressed to trigger it. Dedupe upstream makes a redundant
+              // press harmless.
+              <Button
+                fullWidth
+                onClick={handleResendConfirmation}
+                loading={resending}
+                variant="light"
+                color="gray"
+                mt="xs"
+              >
+                Resend confirmation
+              </Button>
             )}
             {(isPending || isPaid) && (
               <Button

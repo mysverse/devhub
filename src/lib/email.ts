@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import type { EmailDeliveryStatus } from "@prisma/client";
 import type React from "react";
 import { Resend } from "resend";
+import { isDeliverySettled } from "@/lib/delivery-staleness";
 import prisma from "@/lib/prisma";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -12,7 +13,6 @@ const DEFAULT_DEDUPE_WINDOW_MINUTES = 60;
 const DEFAULT_MAX_SENDS_PER_HOUR = 250;
 const DEFAULT_MAX_SENDS_PER_RECIPIENT_PER_HOUR = 25;
 const DEFAULT_MAX_SENDS_PER_CATEGORY_PER_HOUR = 100;
-const STALE_PENDING_MS = 10 * 60 * 1000;
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 
 type SendEmailStatus = "sent" | "skipped";
@@ -85,17 +85,6 @@ function providerIdFromData(data: unknown) {
   return null;
 }
 
-function shouldSkipExistingDelivery(delivery: {
-  status: string;
-  updatedAt: Date;
-}) {
-  if (delivery.status === "SENT") return true;
-  return (
-    delivery.status === "PENDING" &&
-    Date.now() - delivery.updatedAt.getTime() < STALE_PENDING_MS
-  );
-}
-
 async function reserveEmailDelivery({
   to,
   subject,
@@ -135,7 +124,7 @@ async function reserveEmailDelivery({
       select: { status: true, updatedAt: true },
     });
 
-    if (recentDelivery && shouldSkipExistingDelivery(recentDelivery)) {
+    if (recentDelivery && isDeliverySettled(recentDelivery)) {
       return { status: "skipped", reason: "deduped" };
     }
   }
@@ -146,7 +135,7 @@ async function reserveEmailDelivery({
   });
 
   if (existingDelivery) {
-    if (shouldSkipExistingDelivery(existingDelivery)) {
+    if (isDeliverySettled(existingDelivery)) {
       return { status: "skipped", reason: "deduped" };
     }
 

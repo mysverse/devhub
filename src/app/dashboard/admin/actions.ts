@@ -26,6 +26,7 @@ import {
   classifyPayoutRoute,
 } from "@/lib/payout-routing";
 import prisma from "@/lib/prisma";
+import { transientErrorCode } from "@/lib/prisma-retry";
 import { PROFILE_PAYOUT_SELECT } from "@/lib/prisma-select";
 import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
 import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
@@ -121,17 +122,58 @@ export async function markTransactionAsPaid(transactionId: string) {
       metadata: { source: transaction.source, manual: true },
     });
 
-    // Send payment confirmation email with PDF slip
+    // Send payment confirmation email with PDF slip.
+    //
+    // Reported back rather than only logged. The money is already out and the
+    // status is no longer PENDING, so pressing the button again answers "not
+    // in PENDING status" — the failure is unrecoverable from this action and
+    // used to be invisible outside the server logs. The caller shows it and
+    // offers resendPaymentConfirmation().
     try {
       await sendPaymentConfirmation(transactionId);
     } catch (err) {
       console.error("Failed to send payment confirmation email:", err);
+      return {
+        success: true,
+        confirmation: "failed" as const,
+        confirmationDetail: transientErrorCode(err),
+      };
     }
 
-    return { success: true };
+    return { success: true, confirmation: "sent" as const };
   } catch (error) {
     const err = error as Error;
     return { error: err.message || "Failed to update transaction" };
+  }
+}
+
+/**
+ * Re-send the confirmation email and slip for a transaction that is already
+ * PAID — the recovery path when the send failed at payment time.
+ *
+ * Safe to press repeatedly: notify() dedupes on `transaction:paid:<id>` and
+ * reserveEmailDelivery() skips a delivery that already reached SENT, so this
+ * fills a gap and never doubles up on a developer who was already told.
+ */
+export async function resendPaymentConfirmation(transactionId: string) {
+  await requireAdmin();
+
+  try {
+    const transaction = await prisma.transaction.findUnique({
+      where: { id: transactionId },
+      select: { status: true },
+    });
+    if (!transaction) return { error: "Transaction not found" };
+    if (transaction.status !== "PAID") {
+      return { error: "Only a paid transaction has a confirmation to send" };
+    }
+
+    await sendPaymentConfirmation(transactionId);
+    revalidatePath("/dashboard/admin");
+    return { success: true };
+  } catch (error) {
+    const err = error as Error;
+    return { error: err.message || "Failed to send payment confirmation" };
   }
 }
 

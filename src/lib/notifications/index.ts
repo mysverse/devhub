@@ -2,6 +2,7 @@ import type { Prisma } from "@prisma/client";
 import type React from "react";
 import { createElement } from "react";
 import NotificationEmail from "@/emails/NotificationEmail";
+import { isDeliverySettled } from "@/lib/delivery-staleness";
 import { sendDirectMessage } from "@/lib/discord";
 import { sendEmail } from "@/lib/email";
 import { catalogChannelDefaults } from "@/lib/notifications/catalog";
@@ -263,7 +264,7 @@ async function ensureEmailDelivery(
   options?: EmailOptions,
 ) {
   const existing = deliveryFor(record, EMAIL_CHANNEL);
-  if (existing?.status === "SENT" || existing?.status === "PENDING") {
+  if (existing && isDeliverySettled(existing)) {
     return;
   }
 
@@ -353,7 +354,7 @@ async function ensureEmailDelivery(
  */
 async function ensureDiscordDelivery(record: NotificationRecord) {
   const existing = deliveryFor(record, DISCORD_CHANNEL);
-  if (existing?.status === "SENT" || existing?.status === "PENDING") return;
+  if (existing && isDeliverySettled(existing)) return;
 
   const delivery = await prisma.notificationDelivery.upsert({
     where: {

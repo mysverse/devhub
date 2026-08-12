@@ -1,16 +1,16 @@
 "use client";
 
-import { Button, Card, Center, Group, Stack, Text, Title } from "@mantine/core";
-import { useEffect } from "react";
+import LinkButton from "@/components/LinkButton";
+import RouteError from "@/components/RouteError";
 
 /**
- * Last-resort error boundary for the dashboard segment. Catches anything that
- * slips past a call site (including errors thrown inside Suspense) so a user
- * never sees the raw Next.js "Server Components render" box.
+ * Dashboard segment boundary.
  *
- * It is intentionally generic: in production the underlying message is masked,
- * so auth-specific routing stays at the call sites (which see the un-masked
- * error). Here we just offer recovery actions.
+ * It previously told every user to reconnect their Linear account. That is
+ * wrong for the failure this box actually sees most: a transient database
+ * fault, which no amount of re-authorising fixes — and it sent people to
+ * re-authorise an integration that was working. Reconnecting is still offered,
+ * but as one option rather than the diagnosis.
  */
 export default function DashboardError({
   error,
@@ -19,34 +19,24 @@ export default function DashboardError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
-  useEffect(() => {
-    console.error("Dashboard render error:", error.digest ?? error);
-  }, [error]);
-
   return (
-    <Center mih="60vh" p="md">
-      <Card withBorder radius="md" padding="xl" ta="center" maw={460}>
-        <Stack align="center" gap="md">
-          <Title order={2}>Something went wrong</Title>
-          <Text c="dimmed">
-            We hit a problem loading this page. Try again — if it keeps
-            happening, reconnecting your Linear account usually fixes it.
-          </Text>
-          <Group justify="center" gap="sm" mt="xs">
-            <Button onClick={reset}>Try again</Button>
-            <Button
-              component="a"
-              href="/auth/reauth-linear?returnTo=/dashboard"
-              variant="light"
-            >
-              Reconnect Linear
-            </Button>
-            <Button component="a" href="/dashboard" variant="subtle">
-              Back to overview
-            </Button>
-          </Group>
-        </Stack>
-      </Card>
-    </Center>
+    <RouteError
+      error={error}
+      reset={reset}
+      description="We couldn't load this page. It is usually temporary, so try again first."
+      actions={
+        <>
+          <LinkButton href="/dashboard" variant="light">
+            Back to overview
+          </LinkButton>
+          <LinkButton
+            href="/auth/reauth-linear?returnTo=/dashboard"
+            variant="subtle"
+          >
+            Reconnect Linear
+          </LinkButton>
+        </>
+      }
+    />
   );
 }

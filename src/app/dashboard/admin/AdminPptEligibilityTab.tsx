@@ -87,6 +87,22 @@ const proofOverrideReasons = new Set([
   "ASSIGNEE_CHANGED_AFTER_PAYOUT_CHECK",
 ]);
 
+/**
+ * Statuses an override can still act on.
+ *
+ * ON_HOLD belongs here and was missing: whenever an unpaid transaction already
+ * exists, `blockPayout` holds that transaction and files the state as ON_HOLD
+ * rather than NEEDS_PROOF, and the reopened/reassigned paths land on ON_HOLD
+ * by construction. So the exact cases the override list was written for —
+ * proof reset by a follow-up question, a reopen before payout — were the ones
+ * that never offered the button. Overriding from here is safe end to end:
+ * `handleEligiblePayout` resumes an ON_HOLD transaction to PENDING.
+ *
+ * FLAGGED stays out. It means paid, or a provider payout already in flight,
+ * and the server action refuses those anyway.
+ */
+const overridableStatuses = new Set(["NEEDS_PROOF", "BLOCKED", "ON_HOLD"]);
+
 const activeOrCompletedPayoutStatuses = new Set([
   "PENDING",
   "PROCESSING",
@@ -106,7 +122,7 @@ function EligibilityCard({ state }: { state: AdminPptEligibilityState }) {
   const owner = ownerLabels[state.owner];
   const canOverrideProof =
     !state.proofOverride &&
-    ["NEEDS_PROOF", "BLOCKED"].includes(state.status) &&
+    overridableStatuses.has(state.status) &&
     proofOverrideReasons.has(state.reason ?? "") &&
     state.transactionStatus !== "PAID" &&
     !activeOrCompletedPayoutStatuses.has(state.payoutStatus ?? "");

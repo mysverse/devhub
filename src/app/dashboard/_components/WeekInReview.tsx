@@ -86,11 +86,13 @@ export default async function WeekInReview({
 
   return (
     <Stack gap="sm">
-      <Group justify="space-between" align="baseline" wrap="nowrap">
+      {/* Wraps on purpose: the heading plus three controls is wider than a
+          390px viewport, and nowrap here overflowed the page by 94px. */}
+      <Group justify="space-between" align="baseline" wrap="wrap" gap="xs">
         <Text fw={700} fz="lg">
           Your week
         </Text>
-        <Group gap="xs" wrap="nowrap">
+        <Group gap="xs" wrap="wrap">
           <WeekSummaryButton />
           <AskAssistantButton
             entryPoint="WEEK_IN_REVIEW"

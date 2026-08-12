@@ -3,7 +3,7 @@ import { recordActivationEvent } from "@/lib/activation-events";
 import { createPaymentOrder } from "@/lib/billplz";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { ADMIN_ACCESS_WHERE } from "@/lib/developer-access";
-import { runBatch } from "@/lib/fault-isolation";
+import { runBatch, runFollowUps } from "@/lib/fault-isolation";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { sendPaymentConfirmation } from "@/lib/payment-confirmation";
@@ -199,8 +199,16 @@ export async function initiateBillplzPayout(transactionId: string) {
   console.log(
     `[payout] Calling Billplz API for payout ${payout.id} (tx: ${transactionId})`,
   );
+  // Only the API call belongs in this try. The write below records the
+  // provider's id for a payment order Billplz has already accepted; if it
+  // threw, the catch stamped the payout FAILED with providerPayoutId still
+  // NULL — and billplz-poll filters on providerPayoutId: { not: null }, so
+  // that row became invisible to every automated path forever while the admin
+  // was invited to pay again. billplz.ts sends no idempotency key, so that
+  // second attempt is real money a second time.
+  let result: Awaited<ReturnType<typeof createPaymentOrder>>;
   try {
-    const result = await createPaymentOrder({
+    result = await createPaymentOrder({
       bankCode: user.bankName,
       bankAccountNumber: user.bankAccountNumber,
       name: user.bankAccountName,
@@ -210,19 +218,6 @@ export async function initiateBillplzPayout(transactionId: string) {
       reference1: transactionId,
       reference2: transaction.linearIssueUrl || undefined,
     });
-    console.log(
-      `[payout] Billplz API returned id=${result.id} status=${result.status}`,
-    );
-
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        providerPayoutId: result.id,
-        status: "PROCESSING",
-      },
-    });
-
-    return payout;
   } catch (apiError) {
     const errorMsg =
       apiError instanceof Error ? apiError.message : String(apiError);
@@ -246,6 +241,34 @@ export async function initiateBillplzPayout(transactionId: string) {
     }
     throw new Error(`Billplz payout failed: ${errorMsg}`);
   }
+
+  console.log(
+    `[payout] Billplz API returned id=${result.id} status=${result.status}`,
+  );
+
+  // Billplz has accepted the order. Recording its id is what makes the payout
+  // visible to billplz-poll, so it is attempted on its own and a failure here
+  // leaves the payout PENDING (in-flight, pay button disabled) rather than
+  // FAILED. sweepUnreconciledPayouts raises it for an admin after six hours.
+  const settle = await runFollowUps("billplz-payout-settle", [
+    {
+      name: "provider-id",
+      run: () =>
+        prisma.payout.update({
+          where: { id: payout.id },
+          data: { providerPayoutId: result.id, status: "PROCESSING" },
+        }),
+    },
+  ]);
+
+  if (!settle.ok) {
+    console.error(
+      `[payout] Billplz accepted order ${result.id} for payout ${payout.id} but recording it failed ` +
+        `(${settle.detail}) — left non-terminal on purpose; sweepUnreconciledPayouts will flag it`,
+    );
+  }
+
+  return payout;
 }
 
 /**
@@ -408,8 +431,20 @@ export async function initiateRobloxPayout(transactionId: string) {
   console.log(
     `[payout] Sending FinSys payout ${payout.id} (tx: ${transactionId}, ${transaction.amount} Robux to ${user.robuxUsername})`,
   );
+  // The FinSys call is the ONLY statement here whose failure means the money
+  // did not move, so it is the only one inside this try. Everything after it
+  // is bookkeeping on Robux that has already left the group.
+  //
+  // It used to all be one try: a transient failure on the update or the
+  // completion ran handlePayoutFailure, which stamps the payout FAILED. That
+  // re-enables the admin's pay button (classifyPayoutRoute only treats
+  // PENDING/PROCESSING as in-flight), and a second press deletes this payout
+  // row and creates a new one — sending the same Robux again. FinSys exposes
+  // no read endpoint and accepts no idempotency key, so nothing in DevHub can
+  // detect or undo that.
+  let result: Awaited<ReturnType<typeof createFinSysPayout>>;
   try {
-    const result = await createFinSysPayout({
+    result = await createFinSysPayout({
       robloxUserId: Number(user.robloxId),
       amount: transaction.amount,
       reason:
@@ -419,47 +454,11 @@ export async function initiateRobloxPayout(transactionId: string) {
             ? `DevHub incentive: tx ${transactionId}`
             : `DevHub payout: tx ${transactionId}`,
     });
-
-    console.log(
-      `[payout] FinSys response for payout ${payout.id}:`,
-      JSON.stringify(result),
-    );
-
-    if (!result.success) {
-      const errorMsg = result.message || "FinSys payout failed";
-      await handlePayoutFailure(payout.id, errorMsg);
-      throw new Error(`Roblox payout failed: ${errorMsg}`);
-    }
-
-    // Store full FinSys response in provider data
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        providerPayoutId: result.id ? String(result.id) : undefined,
-        providerData: {
-          robloxUserId: user.robloxId,
-          robuxUsername: user.robuxUsername,
-          amount: transaction.amount,
-          finSysResponse: { ...result },
-        },
-      },
-    });
-
-    // Synchronous success — go directly to COMPLETED
-    console.log(
-      `[payout] FinSys reported success for payout ${payout.id}, marking as COMPLETED`,
-    );
-    await handlePayoutCompletion(payout.id, transactionId);
-    return payout;
   } catch (error) {
-    if (
-      error instanceof Error &&
-      error.message.startsWith("Roblox payout failed:")
-    ) {
-      throw error;
-    }
+    // The request itself failed, so nothing was disbursed. Safe to mark FAILED
+    // and let the admin retry.
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error(`[payout] FinSys payout failed for ${payout.id}:`, error);
+    console.error(`[payout] FinSys request failed for ${payout.id}:`, error);
     try {
       await handlePayoutFailure(payout.id, errorMsg);
     } catch (dbError) {
@@ -470,6 +469,54 @@ export async function initiateRobloxPayout(transactionId: string) {
     }
     throw new Error(`Roblox payout failed: ${errorMsg}`);
   }
+
+  console.log(
+    `[payout] FinSys response for payout ${payout.id}:`,
+    JSON.stringify(result),
+  );
+
+  if (!result.success) {
+    // FinSys answered and said no — also safe to mark FAILED.
+    const errorMsg = result.message || "FinSys payout failed";
+    await handlePayoutFailure(payout.id, errorMsg);
+    throw new Error(`Roblox payout failed: ${errorMsg}`);
+  }
+
+  // Past this line the Robux has left the group. A failure below leaves the
+  // payout PENDING, which reads as in-flight and keeps the pay button
+  // disabled; sweepUnreconciledPayouts flags it for an admin after six hours.
+  // Never FAILED, which would invite a second send.
+  const settle = await runFollowUps("roblox-payout-settle", [
+    {
+      name: "provider-response",
+      run: () =>
+        prisma.payout.update({
+          where: { id: payout.id },
+          data: {
+            providerPayoutId: result.id ? String(result.id) : undefined,
+            providerData: {
+              robloxUserId: user.robloxId,
+              robuxUsername: user.robuxUsername,
+              amount: transaction.amount,
+              finSysResponse: { ...result },
+            },
+          },
+        }),
+    },
+    {
+      name: "completion",
+      run: () => handlePayoutCompletion(payout.id, transactionId),
+    },
+  ]);
+
+  if (!settle.ok) {
+    console.error(
+      `[payout] Robux for payout ${payout.id} was SENT but settling failed (${settle.detail}) — ` +
+        "left non-terminal on purpose; sweepUnreconciledPayouts will flag it",
+    );
+  }
+
+  return payout;
 }
 
 /**

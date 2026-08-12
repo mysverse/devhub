@@ -217,6 +217,39 @@ export const PPT_EVENT_COPY: Record<string, string> = {
   PAID_ISSUE_REOPENED: "Task reopened after payment",
 };
 
+/**
+ * The reasons that mean "a fresh proof comment from the assignee is the only
+ * thing between this task and its payout".
+ *
+ * All three are reached exclusively from the completed-issue branch of the
+ * evaluator, which is what makes them worth naming: every query that feeds a
+ * developer's task lists filters completed Linear states out, so a task that
+ * lands on one of these reasons vanishes from the dashboard at the exact
+ * moment the developer is being asked to act on it. Anything rendering "here
+ * is what you still owe" has to select on this set directly.
+ */
+export const PROOF_ACTIONABLE_REASONS = [
+  "MISSING_PROOF",
+  "PROOF_NOT_QUALIFYING",
+  "PROOF_RESET_BY_QUESTION",
+] as const satisfies readonly PptReason[];
+
+/**
+ * Statuses those reasons can be parked under.
+ *
+ * `NEEDS_PROOF` is what the evaluator asks for; `blockPayout` rewrites it to
+ * `ON_HOLD` whenever an unpaid transaction already exists (it holds the
+ * transaction rather than leaving it payable), and `BLOCKED` covers the paths
+ * with no transaction at all. `FLAGGED` is deliberately absent: it means the
+ * task is paid or a provider payout is already live, and no new proof changes
+ * either of those — an admin has to unpick it.
+ */
+export const PROOF_ACTIONABLE_STATUSES = [
+  "NEEDS_PROOF",
+  "BLOCKED",
+  "ON_HOLD",
+] as const satisfies readonly PptStatus[];
+
 export type PptNextStepOwner = "developer" | "admin" | "automatic";
 
 /** Badge copy for the owner classification — "who is this waiting on". */

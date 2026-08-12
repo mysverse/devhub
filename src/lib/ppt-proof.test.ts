@@ -14,6 +14,8 @@ import {
   describePptNextStep,
   formatReason,
   getActionForReason,
+  PROOF_ACTIONABLE_REASONS,
+  PROOF_ACTIONABLE_STATUSES,
 } from "@/lib/ppt-reason-copy";
 
 const GOOD_PROOF =
@@ -287,6 +289,50 @@ describe("summarizeProofEvidence", () => {
         inventory.links + inventory.images + inventory.references.length > 0;
       const gated = checkProofBody(body)?.reason !== "no-evidence";
       assert.equal(counted, gated, body);
+    }
+  });
+});
+
+describe("the set of payouts waiting on developer proof", () => {
+  it("includes ON_HOLD, the status a held transaction forces", () => {
+    // The case this exists for: a reviewer asks a follow-up question, proof
+    // resets, and because an unpaid transaction already existed the state is
+    // filed as ON_HOLD rather than NEEDS_PROOF. Selecting on NEEDS_PROOF alone
+    // hides the Proof button from exactly the developer being asked for proof.
+    assert.ok(PROOF_ACTIONABLE_STATUSES.includes("ON_HOLD"));
+    assert.ok(PROOF_ACTIONABLE_REASONS.includes("PROOF_RESET_BY_QUESTION"));
+  });
+
+  it("leaves out the statuses no new proof can move", () => {
+    for (const status of [
+      "WAITING_STABILITY",
+      "READY_FOR_PAYOUT",
+      "TRANSACTION_PENDING",
+      "PAID",
+      // Paid, or a provider payout already in flight — an admin has to unpick
+      // it, and offering a Proof button would be a lie.
+      "FLAGGED",
+    ]) {
+      assert.ok(
+        !(PROOF_ACTIONABLE_STATUSES as readonly string[]).includes(status),
+        status,
+      );
+    }
+  });
+
+  it("only names reasons the developer is actually the owner of", () => {
+    // If a reason ever moves out of the developer bucket, the "Proof needed"
+    // section would start telling people to post proof for something only an
+    // admin can fix.
+    for (const reason of PROOF_ACTIONABLE_REASONS) {
+      for (const status of PROOF_ACTIONABLE_STATUSES) {
+        assert.equal(
+          describePptNextStep(status, reason).owner,
+          "developer",
+          `${status}/${reason}`,
+        );
+        assert.match(getActionForReason(reason), /ppt-proof/i);
+      }
     }
   });
 });

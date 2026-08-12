@@ -7,6 +7,7 @@ import {
 } from "@/lib/incentive-reconcile";
 import { sweepFailedNotificationEmails } from "@/lib/notifications/retry-sweep";
 import { sweepMissingPaymentConfirmations } from "@/lib/payment-confirmation";
+import { sweepUnreconciledPayouts } from "@/lib/payout";
 
 /**
  * Repairs work that was committed but whose follow-up never happened.
@@ -32,6 +33,7 @@ const RECONCILERS = [
   { name: "notification-emails", run: sweepFailedNotificationEmails },
   { name: "stranded-releases", run: sweepStrandedReleaseClaims },
   { name: "awards-of-paid-transactions", run: sweepAwardsOfPaidTransactions },
+  { name: "unreconciled-payouts", run: sweepUnreconciledPayouts },
 ] as const;
 
 export async function GET(req: Request) {

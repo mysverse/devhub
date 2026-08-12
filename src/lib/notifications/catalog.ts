@@ -410,6 +410,17 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     configurable: false,
     emailRetry: "sweep",
   },
+  {
+    domain: "payment",
+    type: "ADMIN_PAYOUT_UNRECONCILED",
+    audience: "admin",
+    title: "Payout needs manual reconciliation",
+    description:
+      "A payout has been in flight too long and no automated poll can resolve it — the provider has to be checked by hand before anyone re-sends.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
   // ── Admin alerts (always sent — these are how an admin learns something
   //    broke). They were emitted without catalog entries, which meant the
   //    settings page never listed them and, more importantly, the email retry

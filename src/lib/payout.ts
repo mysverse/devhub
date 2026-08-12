@@ -2,13 +2,21 @@ import { awardAchievement } from "@/lib/achievements";
 import { recordActivationEvent } from "@/lib/activation-events";
 import { createPaymentOrder } from "@/lib/billplz";
 import { formatBonusPeriod } from "@/lib/bonus";
+import { ADMIN_ACCESS_WHERE } from "@/lib/developer-access";
+import { runBatch } from "@/lib/fault-isolation";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
+import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { sendPaymentConfirmation } from "@/lib/payment-confirmation";
 import {
   getXenditBankCode,
   isBillplzSupported,
   isXenditSupported,
 } from "@/lib/payment-validation";
+import {
+  describePayoutReconcileReason,
+  PAYOUT_STALE_MS,
+  selectUnreconciledPayouts,
+} from "@/lib/payout-reconcile";
 import prisma from "@/lib/prisma";
 import { createFinSysPayout, verifyGroupMembership } from "@/lib/roblox";
 import { createDisbursement, isXenditEnabled } from "@/lib/xendit";
@@ -521,4 +529,84 @@ export async function initiateAutoPayout(transactionId: string) {
   }
 
   return null;
+}
+
+/**
+ * Raises an admin alert for payouts that no automated path can resolve.
+ *
+ * Alert-only by necessity, not by caution: no provider here exposes a way to
+ * ask "did this disbursement happen?" keyed on anything DevHub holds. See
+ * payout-reconcile.ts. Re-sending is never the repair.
+ *
+ * Deduped per payout per day, so a payout that stays stuck raises one alert a
+ * day rather than one an hour.
+ */
+export async function sweepUnreconciledPayouts() {
+  const now = Date.now();
+  const candidates = await prisma.payout.findMany({
+    where: {
+      status: { in: ["PENDING", "PROCESSING"] },
+      updatedAt: { lt: new Date(now - PAYOUT_STALE_MS) },
+    },
+    select: {
+      id: true,
+      transactionId: true,
+      provider: true,
+      status: true,
+      providerPayoutId: true,
+      updatedAt: true,
+    },
+    orderBy: { updatedAt: "asc" },
+    take: 100,
+  });
+
+  const flagged = selectUnreconciledPayouts(candidates, now);
+  if (flagged.length === 0) {
+    return { checked: candidates.length, flagged: 0, alerted: 0, failed: 0 };
+  }
+
+  const admins = await prisma.userProfile.findMany({
+    where: ADMIN_ACCESS_WHERE,
+    select: { id: true },
+  });
+  const day = new Date(now).toISOString().slice(0, 10);
+
+  const batch = await runBatch({
+    label: "payout-reconcile",
+    items: flagged,
+    identify: ({ payout }) => payout.id,
+    run: async ({ payout, reason }) => {
+      for (const admin of admins) {
+        await notify({
+          userId: admin.id,
+          domain: "payment",
+          type: "ADMIN_PAYOUT_UNRECONCILED",
+          title: `Payout needs manual reconciliation (${payout.provider})`,
+          message:
+            `A ${payout.provider} payout has been ${payout.status} since ` +
+            `${payout.updatedAt.toISOString()} and ` +
+            `${describePayoutReconcileReason(reason)}. ` +
+            "Check the provider before re-sending — DevHub cannot tell whether the money moved.",
+          href: "/dashboard/admin",
+          entityType: "payout",
+          entityId: payout.id,
+          payload: {
+            payoutId: payout.id,
+            transactionId: payout.transactionId,
+            provider: payout.provider,
+            reason,
+          },
+          dedupeKey: `payout-unreconciled:${payout.id}:${day}`,
+          channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+        });
+      }
+    },
+  });
+
+  return {
+    checked: candidates.length,
+    flagged: flagged.length,
+    alerted: batch.succeeded,
+    failed: batch.failed,
+  };
 }

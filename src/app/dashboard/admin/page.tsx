@@ -7,6 +7,7 @@ import LinkButton from "@/components/LinkButton";
 import PageContainer from "@/components/PageContainer";
 import PageHeader from "@/components/PageHeader";
 import PageSkeleton from "@/components/PageSkeleton";
+import SectionUnavailable from "@/components/SectionUnavailable";
 import {
   getCurrentUserProfileForAccess,
   hasAdminAccess,
@@ -39,6 +40,7 @@ import {
   PROFILE_PAYOUT_SELECT,
   USER_IDENTITY_SELECT,
 } from "@/lib/prisma-select";
+import { loadSection, sectionData, sectionDetail } from "@/lib/section-result";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { getBaseUrl } from "@/lib/url";
 import { isXenditEnabled } from "@/lib/xendit";
@@ -47,7 +49,7 @@ import type {
   AdminIncentiveAwardData,
   IncentiveConfigData,
 } from "./AdminIncentivesTab";
-import AdminPayoutTabs from "./AdminPayoutTabs";
+import AdminPayoutTabs, { type AdminSectionFailures } from "./AdminPayoutTabs";
 import type { AdminPptAssignmentWatchRow } from "./AdminPptAssignmentWatchTab";
 import type { AdminPptEligibilityState } from "./AdminPptEligibilityTab";
 import { getBillplzCollectionId } from "./actions";
@@ -512,102 +514,146 @@ async function AdminPageContent() {
   const recentWatchHistoryCutoff = new Date(
     Date.now() - 30 * 24 * 60 * 60 * 1000,
   );
-  // Resolved per requester below: an admin approving a request should see the
-  // amount that developer was quoted, not the base rate.
-  const liveCampaignRows = (await getLiveCampaignRows()).map(
-    toSelectableCampaign,
-  );
 
+  // Every slice of this board loads independently. It used to be one
+  // Promise.all, so a single transient Accelerate failure (P6000 — a
+  // Cloudflare worker killed at its resource limit) rejected the lot and the
+  // whole page fell through to the error boundary, blocking payout work that
+  // had nothing to do with the failed query. Anything that does fail is
+  // reported in its own tab; see SectionUnavailable for why an empty tab is
+  // not an acceptable way to render a fault on a money surface.
   const [
-    pendingTransactions,
-    paidTransactions,
-    rejectedTransactions,
-    pendingPptRequests,
-    bonusConfig,
-    incentiveConfig,
-    incentiveAwards,
-    readyBonusCandidates,
-    pptPayoutStates,
-    pptAssignmentWatches,
+    liveCampaignRowsResult,
+    pendingTransactionsResult,
+    paidTransactionsResult,
+    rejectedTransactionsResult,
+    pendingPptRequestsResult,
+    bonusConfigResult,
+    incentiveConfigResult,
+    incentiveAwardsResult,
+    readyBonusCandidatesResult,
+    pptPayoutStatesResult,
+    pptAssignmentWatchesResult,
+    billplzCollectionResult,
   ] = await Promise.all([
-    prisma.transaction.findMany({
-      where: { status: { in: ["PENDING", "ON_HOLD"] } },
-      select: PENDING_TRANSACTION_SELECT,
-      orderBy: { createdAt: "asc" },
-      take: 100,
-    }),
-    prisma.transaction.findMany({
-      where: { status: "PAID" },
-      select: SETTLED_TRANSACTION_SELECT,
-      orderBy: { paidAt: "desc" },
-      take: 50,
-    }),
-    prisma.transaction.findMany({
-      where: { status: "REJECTED" },
-      select: SETTLED_TRANSACTION_SELECT,
-      orderBy: { rejectedAt: "desc" },
-      take: 50,
-    }),
-    prisma.pptRequest.findMany({
-      where: { status: "PENDING" },
-      select: PPT_REQUEST_BOARD_SELECT,
-      orderBy: { createdAt: "asc" },
-      take: 100,
-    }),
-    getBonusConfig(),
-    getIncentiveConfig(),
-    prisma.incentiveAward.findMany({
-      select: INCENTIVE_AWARD_BOARD_SELECT,
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    }),
-    prisma.bonusCandidate.findMany({
-      where: { status: "READY_FOR_REVIEW" },
-      select: BONUS_CANDIDATE_BOARD_SELECT,
-      orderBy: [{ period: "asc" }, { completedAt: "asc" }],
-      take: 100,
-    }),
-    prisma.pptPayoutState.findMany({
-      where: {
-        OR: [
-          {
-            status: {
-              in: [
-                "BLOCKED",
-                "NEEDS_PROOF",
-                "WAITING_STABILITY",
-                "ON_HOLD",
-                "FLAGGED",
-              ],
+    // Resolved per requester below: an admin approving a request should see the
+    // amount that developer was quoted, not the base rate.
+    loadSection("admin campaigns", async () =>
+      (await getLiveCampaignRows()).map(toSelectableCampaign),
+    ),
+    loadSection("admin pending payouts", () =>
+      prisma.transaction.findMany({
+        where: { status: { in: ["PENDING", "ON_HOLD"] } },
+        select: PENDING_TRANSACTION_SELECT,
+        orderBy: { createdAt: "asc" },
+        take: 100,
+      }),
+    ),
+    loadSection("admin paid payouts", () =>
+      prisma.transaction.findMany({
+        where: { status: "PAID" },
+        select: SETTLED_TRANSACTION_SELECT,
+        orderBy: { paidAt: "desc" },
+        take: 50,
+      }),
+    ),
+    loadSection("admin rejected payouts", () =>
+      prisma.transaction.findMany({
+        where: { status: "REJECTED" },
+        select: SETTLED_TRANSACTION_SELECT,
+        orderBy: { rejectedAt: "desc" },
+        take: 50,
+      }),
+    ),
+    loadSection("admin ppt requests", () =>
+      prisma.pptRequest.findMany({
+        where: { status: "PENDING" },
+        select: PPT_REQUEST_BOARD_SELECT,
+        orderBy: { createdAt: "asc" },
+        take: 100,
+      }),
+    ),
+    loadSection("admin bonus config", () => getBonusConfig()),
+    loadSection("admin incentive config", () => getIncentiveConfig()),
+    loadSection("admin incentive awards", () =>
+      prisma.incentiveAward.findMany({
+        select: INCENTIVE_AWARD_BOARD_SELECT,
+        orderBy: { createdAt: "desc" },
+        take: 50,
+      }),
+    ),
+    loadSection("admin bonus candidates", () =>
+      prisma.bonusCandidate.findMany({
+        where: { status: "READY_FOR_REVIEW" },
+        select: BONUS_CANDIDATE_BOARD_SELECT,
+        orderBy: [{ period: "asc" }, { completedAt: "asc" }],
+        take: 100,
+      }),
+    ),
+    loadSection("admin ppt eligibility", () =>
+      prisma.pptPayoutState.findMany({
+        where: {
+          OR: [
+            {
+              status: {
+                in: [
+                  "BLOCKED",
+                  "NEEDS_PROOF",
+                  "WAITING_STABILITY",
+                  "ON_HOLD",
+                  "FLAGGED",
+                ],
+              },
             },
-          },
-          {
-            updatedAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-          },
-        ],
-      },
-      select: PPT_PAYOUT_STATE_BOARD_SELECT,
-      orderBy: { updatedAt: "desc" },
-      take: 50,
-    }),
-    prisma.pptAssignmentWatch.findMany({
-      where: {
-        OR: [
-          {
-            status: {
-              in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED", "UNASSIGNED"],
+            {
+              updatedAt: {
+                gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+              },
             },
-          },
-          { status: "RESOLVED", updatedAt: { gte: recentWatchHistoryCutoff } },
-        ],
-      },
-      select: PPT_ASSIGNMENT_WATCH_BOARD_SELECT,
-      orderBy: { updatedAt: "desc" },
-      take: 250,
-    }),
+          ],
+        },
+        select: PPT_PAYOUT_STATE_BOARD_SELECT,
+        orderBy: { updatedAt: "desc" },
+        take: 50,
+      }),
+    ),
+    loadSection("admin ppt assignment watches", () =>
+      prisma.pptAssignmentWatch.findMany({
+        where: {
+          OR: [
+            {
+              status: {
+                in: ["ACTIVE", "WARNED", "SNOOZED", "BLOCKED", "UNASSIGNED"],
+              },
+            },
+            {
+              status: "RESOLVED",
+              updatedAt: { gte: recentWatchHistoryCutoff },
+            },
+          ],
+        },
+        select: PPT_ASSIGNMENT_WATCH_BOARD_SELECT,
+        orderBy: { updatedAt: "desc" },
+        take: 250,
+      }),
+    ),
+    loadSection("admin billplz collection", () => getBillplzCollectionId()),
   ]);
 
-  const { redisId, envId } = await getBillplzCollectionId();
+  const liveCampaignRows = sectionData(liveCampaignRowsResult, []);
+  const pendingTransactions = sectionData(pendingTransactionsResult, []);
+  const paidTransactions = sectionData(paidTransactionsResult, []);
+  const rejectedTransactions = sectionData(rejectedTransactionsResult, []);
+  const pendingPptRequests = sectionData(pendingPptRequestsResult, []);
+  const incentiveAwards = sectionData(incentiveAwardsResult, []);
+  const readyBonusCandidates = sectionData(readyBonusCandidatesResult, []);
+  const pptPayoutStates = sectionData(pptPayoutStatesResult, []);
+  const pptAssignmentWatches = sectionData(pptAssignmentWatchesResult, []);
+
+  const { redisId, envId } = sectionData(billplzCollectionResult, {
+    redisId: null,
+    envId: null,
+  });
   const currentCollectionId = redisId || envId;
   const collectionSource: "redis" | "env" | "none" = redisId
     ? "redis"
@@ -637,27 +683,31 @@ async function AdminPageContent() {
         .concat(pptPayoutStates.map((state) => state.proofCommentId)),
     ),
   ].filter((commentId): commentId is string => Boolean(commentId));
-  const proofAttachmentRows =
-    proofCommentIds.length > 0
-      ? await prisma.pptCommentAttachment.findMany({
-          where: {
-            linearCommentId: { in: proofCommentIds },
-            kind: "PROOF",
-            status: "POSTED",
-            postedAt: { not: null },
-          },
-          select: {
-            id: true,
-            linearCommentId: true,
-            filename: true,
-            mimeType: true,
-            byteSize: true,
-            width: true,
-            height: true,
-          },
-          orderBy: [{ postedAt: "asc" }, { sortOrder: "asc" }],
-        })
-      : [];
+  const proofAttachmentsResult = await loadSection(
+    "admin proof attachments",
+    () =>
+      proofCommentIds.length > 0
+        ? prisma.pptCommentAttachment.findMany({
+            where: {
+              linearCommentId: { in: proofCommentIds },
+              kind: "PROOF",
+              status: "POSTED",
+              postedAt: { not: null },
+            },
+            select: {
+              id: true,
+              linearCommentId: true,
+              filename: true,
+              mimeType: true,
+              byteSize: true,
+              width: true,
+              height: true,
+            },
+            orderBy: [{ postedAt: "asc" }, { sortOrder: "asc" }],
+          })
+        : Promise.resolve([]),
+  );
+  const proofAttachmentRows = sectionData(proofAttachmentsResult, []);
   const proofAttachmentsByComment = new Map<string, ProofAttachmentSummary[]>();
   for (const row of proofAttachmentRows) {
     if (!row.linearCommentId) continue;
@@ -675,14 +725,17 @@ async function AdminPageContent() {
   }
 
   // Compute credit limit usage per unique userId+currency for pending transactions
-  const creditUsageMap = await getWeeklyUsageForUsers(
-    pendingTransactions
-      .filter((tx) => tx.source === "PPT")
-      .map((tx) => ({
-        userId: tx.userId,
-        currency: tx.currency === "ROBUX" ? "ROBUX" : "MYR",
-      })),
+  const creditUsageResult = await loadSection("admin credit usage", () =>
+    getWeeklyUsageForUsers(
+      pendingTransactions
+        .filter((tx) => tx.source === "PPT")
+        .map((tx) => ({
+          userId: tx.userId,
+          currency: tx.currency === "ROBUX" ? "ROBUX" : "MYR",
+        })),
+    ),
   );
+  const creditUsageMap = sectionData(creditUsageResult, new Map());
 
   const missingLinearTitleIssueIds = [
     ...new Set(
@@ -779,47 +832,55 @@ async function AdminPageContent() {
       completedAt: candidate.completedAt?.toISOString() ?? null,
     }));
 
-  const incentiveConfigData: IncentiveConfigData = {
-    enabled: incentiveConfig.enabled,
-    activatedAt: incentiveConfig.activatedAt?.toISOString() ?? null,
-    weeklyEnabled: incentiveConfig.weeklyEnabled,
-    weeklyThreshold: incentiveConfig.weeklyThreshold,
-    weeklyMyrAmount: incentiveConfig.weeklyMyrAmount,
-    weeklyRobuxAmount: incentiveConfig.weeklyRobuxAmount,
-    streakEnabled: incentiveConfig.streakEnabled,
-    streakThresholdWeeks: incentiveConfig.streakThresholdWeeks,
-    streakMyrAmount: incentiveConfig.streakMyrAmount,
-    streakRobuxAmount: incentiveConfig.streakRobuxAmount,
-    milestoneEnabled: incentiveConfig.milestoneEnabled,
-    milestonesText: incentiveConfig.milestones
-      ? JSON.stringify(incentiveConfig.milestones, null, 2)
-      : "",
-    leaderboardEnabled: incentiveConfig.leaderboardEnabled,
-    leaderboardTopN: incentiveConfig.leaderboardTopN,
-    leaderboardMyrAmount: incentiveConfig.leaderboardMyrAmount,
-    leaderboardRobuxAmount: incentiveConfig.leaderboardRobuxAmount,
-    activeDayKickerEnabled: incentiveConfig.activeDayKickerEnabled,
-    activeDayThreshold: incentiveConfig.activeDayThreshold,
-    activeDayKickerMyr: incentiveConfig.activeDayKickerMyr,
-    activeDayKickerRobux: incentiveConfig.activeDayKickerRobux,
-    minEstimateToCount: incentiveConfig.minEstimateToCount,
-    excludedLabels: incentiveConfig.excludedLabels,
-    stabilityMinutes: incentiveConfig.stabilityMinutes,
-    disputeWindowHours: incentiveConfig.disputeWindowHours,
-    autoPayout: incentiveConfig.autoPayout,
-    perUserWeeklyCapMyr: incentiveConfig.perUserWeeklyCapMyr,
-    perUserWeeklyCapRobux: incentiveConfig.perUserWeeklyCapRobux,
-    perUserMonthlyCapMyr: incentiveConfig.perUserMonthlyCapMyr,
-    perUserMonthlyCapRobux: incentiveConfig.perUserMonthlyCapRobux,
-    programWeeklyBudgetMyr: incentiveConfig.programWeeklyBudgetMyr,
-    programWeeklyBudgetRobux: incentiveConfig.programWeeklyBudgetRobux,
-    programMonthlyBudgetMyr: incentiveConfig.programMonthlyBudgetMyr,
-    programMonthlyBudgetRobux: incentiveConfig.programMonthlyBudgetRobux,
-    anomalyMultiplier: incentiveConfig.anomalyMultiplier,
-    anomalyMinBaselineWeeks: incentiveConfig.anomalyMinBaselineWeeks,
-    noEstimateRatioFlag: incentiveConfig.noEstimateRatioFlag,
-    clawbackMode: incentiveConfig.clawbackMode,
-  };
+  // Null rather than a synthetic default when the config could not be read:
+  // these forms are what an admin edits the live payout rates with, and
+  // showing an invented rate is worse than showing the fault.
+  const incentiveConfig = incentiveConfigResult.ok
+    ? incentiveConfigResult.data
+    : null;
+  const incentiveConfigData: IncentiveConfigData | null = !incentiveConfig
+    ? null
+    : {
+        enabled: incentiveConfig.enabled,
+        activatedAt: incentiveConfig.activatedAt?.toISOString() ?? null,
+        weeklyEnabled: incentiveConfig.weeklyEnabled,
+        weeklyThreshold: incentiveConfig.weeklyThreshold,
+        weeklyMyrAmount: incentiveConfig.weeklyMyrAmount,
+        weeklyRobuxAmount: incentiveConfig.weeklyRobuxAmount,
+        streakEnabled: incentiveConfig.streakEnabled,
+        streakThresholdWeeks: incentiveConfig.streakThresholdWeeks,
+        streakMyrAmount: incentiveConfig.streakMyrAmount,
+        streakRobuxAmount: incentiveConfig.streakRobuxAmount,
+        milestoneEnabled: incentiveConfig.milestoneEnabled,
+        milestonesText: incentiveConfig.milestones
+          ? JSON.stringify(incentiveConfig.milestones, null, 2)
+          : "",
+        leaderboardEnabled: incentiveConfig.leaderboardEnabled,
+        leaderboardTopN: incentiveConfig.leaderboardTopN,
+        leaderboardMyrAmount: incentiveConfig.leaderboardMyrAmount,
+        leaderboardRobuxAmount: incentiveConfig.leaderboardRobuxAmount,
+        activeDayKickerEnabled: incentiveConfig.activeDayKickerEnabled,
+        activeDayThreshold: incentiveConfig.activeDayThreshold,
+        activeDayKickerMyr: incentiveConfig.activeDayKickerMyr,
+        activeDayKickerRobux: incentiveConfig.activeDayKickerRobux,
+        minEstimateToCount: incentiveConfig.minEstimateToCount,
+        excludedLabels: incentiveConfig.excludedLabels,
+        stabilityMinutes: incentiveConfig.stabilityMinutes,
+        disputeWindowHours: incentiveConfig.disputeWindowHours,
+        autoPayout: incentiveConfig.autoPayout,
+        perUserWeeklyCapMyr: incentiveConfig.perUserWeeklyCapMyr,
+        perUserWeeklyCapRobux: incentiveConfig.perUserWeeklyCapRobux,
+        perUserMonthlyCapMyr: incentiveConfig.perUserMonthlyCapMyr,
+        perUserMonthlyCapRobux: incentiveConfig.perUserMonthlyCapRobux,
+        programWeeklyBudgetMyr: incentiveConfig.programWeeklyBudgetMyr,
+        programWeeklyBudgetRobux: incentiveConfig.programWeeklyBudgetRobux,
+        programMonthlyBudgetMyr: incentiveConfig.programMonthlyBudgetMyr,
+        programMonthlyBudgetRobux: incentiveConfig.programMonthlyBudgetRobux,
+        anomalyMultiplier: incentiveConfig.anomalyMultiplier,
+        anomalyMinBaselineWeeks: incentiveConfig.anomalyMinBaselineWeeks,
+        noEstimateRatioFlag: incentiveConfig.noEstimateRatioFlag,
+        clawbackMode: incentiveConfig.clawbackMode,
+      };
 
   const incentiveAwardRows: AdminIncentiveAwardData[] = incentiveAwards.map(
     (award) => ({
@@ -853,13 +914,20 @@ async function AdminPageContent() {
         .filter((id): id is string => Boolean(id)),
     ),
   ];
-  const proofOverrideProfiles =
-    proofOverrideByIds.length > 0
-      ? await prisma.userProfile.findMany({
-          where: { id: { in: proofOverrideByIds } },
-          select: { id: true, ...DISPLAY_NAME_SELECT },
-        })
-      : [];
+  // A name label only — both lookups fall back to the null path the mapping
+  // already handles ("Overridden by —"), so a failure here degrades a caption
+  // rather than the verdict it sits next to.
+  const proofOverrideProfiles = sectionData(
+    await loadSection("admin proof override names", () =>
+      proofOverrideByIds.length > 0
+        ? prisma.userProfile.findMany({
+            where: { id: { in: proofOverrideByIds } },
+            select: { id: true, ...DISPLAY_NAME_SELECT },
+          })
+        : Promise.resolve([]),
+    ),
+    [],
+  );
   const proofOverrideNameById = new Map(
     proofOverrideProfiles.map((profile) => [
       profile.id,
@@ -874,13 +942,17 @@ async function AdminPageContent() {
         .filter((id): id is string => Boolean(id)),
     ),
   ];
-  const assignmentWatchAdminProfiles =
-    assignmentWatchAdminIds.length > 0
-      ? await prisma.userProfile.findMany({
-          where: { id: { in: assignmentWatchAdminIds } },
-          select: { id: true, ...DISPLAY_NAME_SELECT },
-        })
-      : [];
+  const assignmentWatchAdminProfiles = sectionData(
+    await loadSection("admin watch action names", () =>
+      assignmentWatchAdminIds.length > 0
+        ? prisma.userProfile.findMany({
+            where: { id: { in: assignmentWatchAdminIds } },
+            select: { id: true, ...DISPLAY_NAME_SELECT },
+          })
+        : Promise.resolve([]),
+    ),
+    [],
+  );
   const assignmentWatchAdminNameById = new Map(
     assignmentWatchAdminProfiles.map((profile) => [
       profile.id,
@@ -1004,24 +1076,71 @@ async function AdminPageContent() {
     },
   );
 
+  const bonusConfig = bonusConfigResult.ok ? bonusConfigResult.data : null;
+
+  // A tab is degraded if anything it renders failed. The PPT requests tab
+  // includes the campaign rows: without them `selectCampaignBadge` quietly
+  // falls back to the base rate, so an admin would approve a request at 1x
+  // that the developer was quoted at 3x.
+  const sectionFailures: AdminSectionFailures = {
+    "ppt-requests":
+      sectionDetail(pendingPptRequestsResult) ??
+      sectionDetail(liveCampaignRowsResult),
+    bonuses:
+      sectionDetail(readyBonusCandidatesResult) ??
+      sectionDetail(bonusConfigResult),
+    incentives:
+      sectionDetail(incentiveAwardsResult) ??
+      sectionDetail(incentiveConfigResult),
+    "ppt-watch": sectionDetail(pptAssignmentWatchesResult),
+    "ppt-eligibility": sectionDetail(pptPayoutStatesResult),
+    pending:
+      sectionDetail(pendingTransactionsResult) ??
+      sectionDetail(creditUsageResult),
+    paid: sectionDetail(paidTransactionsResult),
+    rejected: sectionDetail(rejectedTransactionsResult),
+  };
+
+  // Proof screenshots cut across four tabs, and their absence is the kind of
+  // gap an admin reads as "they posted no evidence" right before rejecting.
+  const proofAttachmentsDetail = sectionDetail(proofAttachmentsResult);
+
   return (
     <Stack gap="xl">
-      <BillplzCollectionCard
-        currentCollectionId={currentCollectionId}
-        source={collectionSource}
-        callbackUrl={callbackUrl}
-      />
+      {proofAttachmentsDetail && (
+        <SectionUnavailable
+          title="Proof screenshots couldn't be loaded"
+          detail={proofAttachmentsDetail}
+        />
+      )}
+
+      {sectionDetail(billplzCollectionResult) ? (
+        <SectionUnavailable
+          title="Billplz collection settings couldn't be loaded"
+          detail={sectionDetail(billplzCollectionResult)}
+          emptyWarning={false}
+        />
+      ) : (
+        <BillplzCollectionCard
+          currentCollectionId={currentCollectionId}
+          source={collectionSource}
+          callbackUrl={callbackUrl}
+        />
+      )}
 
       <AdminPayoutTabs
+        failures={sectionFailures}
         pending={pending}
         paid={paid}
         rejected={rejected}
-        bonusConfig={{
-          enabled: bonusConfig.enabled,
-          myrRatePerPoint: bonusConfig.myrRatePerPoint,
-          robuxRatePerPoint: bonusConfig.robuxRatePerPoint,
-          excludedLabels: bonusConfig.excludedLabels,
-        }}
+        bonusConfig={
+          bonusConfig && {
+            enabled: bonusConfig.enabled,
+            myrRatePerPoint: bonusConfig.myrRatePerPoint,
+            robuxRatePerPoint: bonusConfig.robuxRatePerPoint,
+            excludedLabels: bonusConfig.excludedLabels,
+          }
+        }
         bonusCandidates={bonusCandidates}
         incentiveConfig={incentiveConfigData}
         incentiveAwards={incentiveAwardRows}

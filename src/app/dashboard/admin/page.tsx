@@ -109,24 +109,231 @@ const PPT_PROOF_SELECT = {
   proofCommentBody: true,
 } as const satisfies Prisma.PptPayoutStateSelect;
 
+/** The four payout fields the card renders — not the provider request/response
+ *  blobs in `providerData`, which are large and admin-debug only. */
+const PAYOUT_STATUS_SELECT = {
+  id: true,
+  provider: true,
+  status: true,
+  errorMessage: true,
+} as const satisfies Prisma.PayoutSelect;
+
+const INCENTIVE_LINE_ITEM_SELECT = {
+  id: true,
+  type: true,
+  period: true,
+  amount: true,
+  netAmount: true,
+  status: true,
+} as const satisfies Prisma.IncentiveAwardSelect;
+
+/**
+ * Transaction scalars `buildPayoutTransaction()` and `getStoredTaskTitle()`
+ * read. Selecting rather than including matters here beyond hygiene: the board
+ * loads up to 200 transactions with four relations each, and every column
+ * Accelerate has to serialize is CPU and memory on a Cloudflare Worker that
+ * gets killed at its limit (P6000/error 1102).
+ */
+const TRANSACTION_BOARD_SELECT = {
+  id: true,
+  userId: true,
+  amount: true,
+  currency: true,
+  status: true,
+  source: true,
+  bonusPeriod: true,
+  linearIssueId: true,
+  linearIssueIdentifier: true,
+  linearIssueTitle: true,
+  linearIssueUrl: true,
+  paidAt: true,
+  rejectedAt: true,
+  rejectionReason: true,
+  autoApproved: true,
+} as const satisfies Prisma.TransactionSelect;
+
+const PENDING_TRANSACTION_SELECT = {
+  ...TRANSACTION_BOARD_SELECT,
+  user: { select: PENDING_USER_SELECT },
+  payout: { select: PAYOUT_STATUS_SELECT },
+  bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
+  incentiveAwards: { select: INCENTIVE_LINE_ITEM_SELECT },
+  pptPayoutState: { select: PPT_PROOF_SELECT },
+} as const satisfies Prisma.TransactionSelect;
+
+const SETTLED_TRANSACTION_SELECT = {
+  ...TRANSACTION_BOARD_SELECT,
+  user: { select: SETTLED_USER_SELECT },
+  payout: { select: PAYOUT_STATUS_SELECT },
+  bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
+  incentiveAwards: { select: INCENTIVE_LINE_ITEM_SELECT },
+  pptPayoutState: { select: PPT_PROOF_SELECT },
+} as const satisfies Prisma.TransactionSelect;
+
+/** Enough of a requester to name them, route the campaign badge, and reach
+ *  them — never the payout rails, which this board does not render. */
+const PPT_REQUEST_REQUESTER_SELECT = {
+  ...PROFILE_DISPLAY_SELECT,
+  linearId: true,
+  developerRank: true,
+  user: { select: USER_IDENTITY_SELECT },
+} as const satisfies Prisma.UserProfileSelect;
+
+const PPT_REQUEST_BOARD_SELECT = {
+  id: true,
+  linearIssueId: true,
+  linearIssueIdentifier: true,
+  linearIssueTitle: true,
+  linearIssueUrl: true,
+  linearTeamId: true,
+  linearProjectId: true,
+  linearProjectName: true,
+  requestedEstimate: true,
+  projectedDueDate: true,
+  description: true,
+  note: true,
+  assigneeIntent: true,
+  intendedAssigneeLinearId: true,
+  intendedAssigneeName: true,
+  intendedAssigneeEmail: true,
+  createdAt: true,
+  requester: { select: PPT_REQUEST_REQUESTER_SELECT },
+  attachments: {
+    select: {
+      id: true,
+      filename: true,
+      mimeType: true,
+      byteSize: true,
+      width: true,
+      height: true,
+    },
+    orderBy: { sortOrder: "asc" },
+  },
+} as const satisfies Prisma.PptRequestSelect;
+
+const INCENTIVE_AWARD_BOARD_SELECT = {
+  id: true,
+  type: true,
+  period: true,
+  thresholdMet: true,
+  amount: true,
+  netAmount: true,
+  clawbackApplied: true,
+  currency: true,
+  status: true,
+  heldReason: true,
+  releaseAt: true,
+  createdAt: true,
+  transactionId: true,
+  user: { select: PROFILE_DISPLAY_SELECT },
+  awardIssues: {
+    select: {
+      issueCompletion: {
+        select: {
+          id: true,
+          linearIssueIdentifier: true,
+          linearIssueTitle: true,
+          linearIssueUrl: true,
+        },
+      },
+    },
+  },
+} as const satisfies Prisma.IncentiveAwardSelect;
+
+const BONUS_CANDIDATE_BOARD_SELECT = {
+  id: true,
+  userId: true,
+  currency: true,
+  period: true,
+  linearIssueIdentifier: true,
+  linearIssueTitle: true,
+  linearIssueUrl: true,
+  labels: true,
+  estimate: true,
+  maxAmount: true,
+  completedAt: true,
+  assigneeName: true,
+  assigneeEmail: true,
+  user: {
+    select: {
+      ...PROFILE_DISPLAY_SELECT,
+      user: { select: USER_IDENTITY_SELECT },
+    },
+  },
+} as const satisfies Prisma.BonusCandidateSelect;
+
+const PPT_PAYOUT_STATE_BOARD_SELECT = {
+  id: true,
+  linearIssueId: true,
+  linearIssueIdentifier: true,
+  linearIssueTitle: true,
+  linearIssueUrl: true,
+  assigneeEmail: true,
+  assigneeName: true,
+  status: true,
+  reason: true,
+  completionEpisode: true,
+  proofCommentId: true,
+  proofCommentUrl: true,
+  proofCommentBody: true,
+  proofOverride: true,
+  proofOverrideById: true,
+  proofOverrideNote: true,
+  warningCount: true,
+  updatedAt: true,
+  user: { select: PROFILE_DISPLAY_SELECT },
+  transaction: {
+    select: { status: true, payout: { select: { status: true } } },
+  },
+  events: {
+    orderBy: { createdAt: "desc" },
+    take: 5,
+    select: {
+      id: true,
+      type: true,
+      reason: true,
+      message: true,
+      createdAt: true,
+    },
+  },
+} as const satisfies Prisma.PptPayoutStateSelect;
+
+/** The heaviest query on the board — up to 250 rows, each previously carrying
+ *  a whole UserProfile to render one name. */
+const PPT_ASSIGNMENT_WATCH_BOARD_SELECT = {
+  id: true,
+  linearIssueId: true,
+  linearIssueIdentifier: true,
+  linearIssueTitle: true,
+  linearIssueUrl: true,
+  assigneeName: true,
+  assigneeEmail: true,
+  status: true,
+  assignedAt: true,
+  lastActivityAt: true,
+  warnedAt: true,
+  unassignedAt: true,
+  snoozedUntil: true,
+  snoozeReason: true,
+  warningCount: true,
+  selfBlockCount: true,
+  selfBlockReason: true,
+  selfBlockNote: true,
+  selfBlockExpiresAt: true,
+  releasedBySelfAt: true,
+  reassignReason: true,
+  lastAdminActionAt: true,
+  lastAdminActionById: true,
+  lastAdminActionNote: true,
+  user: { select: PROFILE_DISPLAY_SELECT },
+} as const satisfies Prisma.PptAssignmentWatchSelect;
+
 type PendingTransaction = Prisma.TransactionGetPayload<{
-  include: {
-    user: { select: typeof PENDING_USER_SELECT };
-    payout: true;
-    bonusCandidates: { select: typeof BONUS_LINE_ITEM_SELECT };
-    incentiveAwards: true;
-    pptPayoutState: { select: typeof PPT_PROOF_SELECT };
-  };
+  select: typeof PENDING_TRANSACTION_SELECT;
 }>;
 
 type SettledTransaction = Prisma.TransactionGetPayload<{
-  include: {
-    user: { select: typeof SETTLED_USER_SELECT };
-    payout: true;
-    bonusCandidates: { select: typeof BONUS_LINE_ITEM_SELECT };
-    incentiveAwards: true;
-    pptPayoutState: { select: typeof PPT_PROOF_SELECT };
-  };
+  select: typeof SETTLED_TRANSACTION_SELECT;
 }>;
 
 type TransactionWithUser = PendingTransaction | SettledTransaction;
@@ -325,79 +532,38 @@ async function AdminPageContent() {
   ] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: { in: ["PENDING", "ON_HOLD"] } },
-      include: {
-        user: { select: PENDING_USER_SELECT },
-        payout: true,
-        bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
-        incentiveAwards: true,
-        pptPayoutState: { select: PPT_PROOF_SELECT },
-      },
+      select: PENDING_TRANSACTION_SELECT,
       orderBy: { createdAt: "asc" },
       take: 100,
     }),
     prisma.transaction.findMany({
       where: { status: "PAID" },
-      include: {
-        user: { select: SETTLED_USER_SELECT },
-        payout: true,
-        bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
-        incentiveAwards: true,
-        pptPayoutState: { select: PPT_PROOF_SELECT },
-      },
+      select: SETTLED_TRANSACTION_SELECT,
       orderBy: { paidAt: "desc" },
       take: 50,
     }),
     prisma.transaction.findMany({
       where: { status: "REJECTED" },
-      include: {
-        user: { select: SETTLED_USER_SELECT },
-        payout: true,
-        bonusCandidates: { select: BONUS_LINE_ITEM_SELECT },
-        incentiveAwards: true,
-        pptPayoutState: { select: PPT_PROOF_SELECT },
-      },
+      select: SETTLED_TRANSACTION_SELECT,
       orderBy: { rejectedAt: "desc" },
       take: 50,
     }),
     prisma.pptRequest.findMany({
       where: { status: "PENDING" },
-      include: {
-        requester: {
-          include: { user: { select: USER_IDENTITY_SELECT } },
-        },
-        attachments: { orderBy: { sortOrder: "asc" } },
-      },
+      select: PPT_REQUEST_BOARD_SELECT,
       orderBy: { createdAt: "asc" },
       take: 100,
     }),
     getBonusConfig(),
     getIncentiveConfig(),
     prisma.incentiveAward.findMany({
-      include: {
-        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
-        awardIssues: {
-          include: {
-            issueCompletion: {
-              select: {
-                id: true,
-                linearIssueIdentifier: true,
-                linearIssueTitle: true,
-                linearIssueUrl: true,
-              },
-            },
-          },
-        },
-      },
+      select: INCENTIVE_AWARD_BOARD_SELECT,
       orderBy: { createdAt: "desc" },
       take: 50,
     }),
     prisma.bonusCandidate.findMany({
       where: { status: "READY_FOR_REVIEW" },
-      include: {
-        user: {
-          include: { user: { select: USER_IDENTITY_SELECT } },
-        },
-      },
+      select: BONUS_CANDIDATE_BOARD_SELECT,
       orderBy: [{ period: "asc" }, { completedAt: "asc" }],
       take: 100,
     }),
@@ -420,29 +586,7 @@ async function AdminPageContent() {
           },
         ],
       },
-      include: {
-        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
-        transaction: {
-          include: {
-            payout: {
-              select: {
-                status: true,
-              },
-            },
-          },
-        },
-        events: {
-          orderBy: { createdAt: "desc" },
-          take: 5,
-          select: {
-            id: true,
-            type: true,
-            reason: true,
-            message: true,
-            createdAt: true,
-          },
-        },
-      },
+      select: PPT_PAYOUT_STATE_BOARD_SELECT,
       orderBy: { updatedAt: "desc" },
       take: 50,
     }),
@@ -457,9 +601,7 @@ async function AdminPageContent() {
           { status: "RESOLVED", updatedAt: { gte: recentWatchHistoryCutoff } },
         ],
       },
-      include: {
-        user: { include: { user: { select: USER_IDENTITY_SELECT } } },
-      },
+      select: PPT_ASSIGNMENT_WATCH_BOARD_SELECT,
       orderBy: { updatedAt: "desc" },
       take: 250,
     }),

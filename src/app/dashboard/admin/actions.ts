@@ -26,6 +26,7 @@ import {
   classifyPayoutRoute,
 } from "@/lib/payout-routing";
 import prisma from "@/lib/prisma";
+import { PROFILE_PAYOUT_SELECT } from "@/lib/prisma-select";
 import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
 import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
@@ -39,7 +40,17 @@ export async function markTransactionAsPaid(transactionId: string) {
   try {
     const transaction = await prisma.transaction.findUnique({
       where: { id: transactionId },
-      include: { user: true, payout: true },
+      select: {
+        userId: true,
+        source: true,
+        status: true,
+        currency: true,
+        // Only what classifyPayoutRoute() reads. `include: { user: true }`
+        // pulled every UserProfile column — including document and KYC state —
+        // to answer a routing question about the payment rails.
+        user: { select: PROFILE_PAYOUT_SELECT },
+        payout: { select: { status: true, provider: true } },
+      },
     });
     if (!transaction) return { error: "Transaction not found" };
 

@@ -67,18 +67,27 @@ export async function logPiiAccess(input: PiiAccessInput): Promise<void> {
     if (recent) return;
 
     const { ipAddress, userAgent } = requestOrigin(input.headers);
-    await prisma.piiAccessLog.create({
-      data: {
-        actorId: input.actorId,
-        subjectId: input.subjectId ?? null,
-        resource: input.resource,
-        resourceId: input.resourceId ?? null,
-        context: input.context ?? null,
-        details: input.details ?? null,
-        ipAddress: ipAddress ?? null,
-        userAgent: userAgent ?? null,
-      },
-    });
+    const { withIdempotentWrite } = await import("@/lib/prisma-retry");
+
+    // This table is the only record of who opened a government ID or a set of
+    // bank details, and the catch below swallows failures so the surface being
+    // audited still renders. That combination means a dropped row is invisible
+    // — worth retrying. Append-only with a dedupe window just above, so a
+    // repeat writes at most one extra row.
+    await withIdempotentWrite("unique-keyed-create", "logPiiAccess", () =>
+      prisma.piiAccessLog.create({
+        data: {
+          actorId: input.actorId,
+          subjectId: input.subjectId ?? null,
+          resource: input.resource,
+          resourceId: input.resourceId ?? null,
+          context: input.context ?? null,
+          details: input.details ?? null,
+          ipAddress: ipAddress ?? null,
+          userAgent: userAgent ?? null,
+        },
+      }),
+    );
   } catch (error) {
     console.error("[pii-audit] Failed to record PII access:", error);
   }

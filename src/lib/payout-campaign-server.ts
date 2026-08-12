@@ -21,6 +21,7 @@ import {
   selectCampaignBadge,
 } from "@/lib/payout-campaign";
 import prisma from "@/lib/prisma";
+import { withIdempotentWrite } from "@/lib/prisma-retry";
 
 // Server-side half of the payout campaign feature: reading campaigns, deciding
 // which one applies to a specific amount, and keeping the uplift pool ledger.
@@ -318,22 +319,31 @@ export async function recordCampaignApplication(
     revertedAt: null,
   };
 
-  return tx.payoutCampaignApplication.upsert({
-    where: {
-      campaignId_scope_entityId: {
-        campaignId: input.campaignId,
-        scope: input.scope,
-        entityId: input.entityId,
-      },
-    },
-    create: {
-      campaignId: input.campaignId,
-      scope: input.scope,
-      entityId: input.entityId,
-      ...data,
-    },
-    update: data,
-  });
+  // The uplift ledger AND the idempotency key for a campaign application:
+  // unique on (campaignId, scope, entityId), so a repeat updates the row it
+  // already wrote. withIdempotentWrite passes straight through when `tx` is a
+  // real transaction client, so this never sleeps under a caller's locks.
+  return withIdempotentWrite(
+    "unique-keyed-upsert",
+    "recordCampaignApplication",
+    () =>
+      tx.payoutCampaignApplication.upsert({
+        where: {
+          campaignId_scope_entityId: {
+            campaignId: input.campaignId,
+            scope: input.scope,
+            entityId: input.entityId,
+          },
+        },
+        create: {
+          campaignId: input.campaignId,
+          scope: input.scope,
+          entityId: input.entityId,
+          ...data,
+        },
+        update: data,
+      }),
+  );
 }
 
 /**

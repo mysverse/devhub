@@ -331,6 +331,61 @@ export function buildProofReviewPrompt(proof: PromptProof) {
   ].join("\n");
 }
 
+// ── Week summary ───────────────────────────────────────────────────────────
+
+/**
+ * A developer's own week, in counts and issue titles.
+ *
+ * Money appears only as a count of payouts, never as an amount: every figure
+ * DevHub shows goes through `projectPptPayout()`/`formatAmount()`, and a model
+ * asked to mention a number would eventually produce one that disagrees with
+ * the card it sits under. The card renders the amounts; this writes the prose
+ * around them.
+ */
+export type PromptWeek = {
+  paidCount: number;
+  pendingCount: number;
+  proofPostedCount: number;
+  /** Titles of tasks whose payout is waiting on the developer. */
+  waitingOnYou: string[];
+  /** Titles of tasks they are currently assigned. */
+  activeTitles: string[];
+};
+
+export const WEEK_SUMMARY_SCHEMA = z.object({
+  headline: z
+    .string()
+    .describe("One sentence on how the week went. Under 100 characters."),
+  nextStep: z
+    .string()
+    .nullable()
+    .describe(
+      "The single most useful thing to do next, or null when nothing is outstanding.",
+    ),
+});
+
+export type WeekSummaryResult = z.infer<typeof WEEK_SUMMARY_SCHEMA>;
+
+export const WEEK_SUMMARY_SYSTEM = `You write two short lines for one developer at a small internal Roblox game studio, summarising their own week.
+
+Speak to them directly and plainly. No greeting, no cheerleading, no exclamation marks. If the week was quiet, say so without making it sound like a failing — people have other jobs.
+
+Never state an amount of money, a rate, or a multiplier. DevHub renders every figure itself, right next to your sentence, and a number from you that disagrees with it is worse than no sentence at all. Counts of tasks and payouts are fine.
+
+If nothing is waiting on them, set nextStep to null rather than inventing something to do.`;
+
+export function buildWeekSummaryPrompt(week: PromptWeek) {
+  return [
+    "Summarise this developer's last seven days.",
+    "",
+    `payouts paid: ${week.paidCount}`,
+    `payouts awaiting payment: ${week.pendingCount}`,
+    `proof comments posted: ${week.proofPostedCount}`,
+    `tasks waiting on them: ${week.waitingOnYou.join("; ") || "(none)"}`,
+    `tasks currently assigned: ${week.activeTitles.join("; ") || "(none)"}`,
+  ].join("\n");
+}
+
 // ── Writing assist ─────────────────────────────────────────────────────────
 
 /**

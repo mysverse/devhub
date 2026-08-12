@@ -348,6 +348,13 @@ export function buildReply(body: MessageRequest) {
     };
   }
 
+  if ("headline" in properties) {
+    return {
+      headline: "Steady week — a couple of things are still waiting on you.",
+      nextStep: "Post proof on the task that is closest to done.",
+    };
+  }
+
   if ("summary" in properties) {
     return {
       summary:

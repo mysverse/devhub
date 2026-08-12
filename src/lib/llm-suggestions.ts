@@ -4,6 +4,7 @@ import {
   buildProofReviewPrompt,
   buildTaskIdeaPrompt,
   buildTaskReasonPrompt,
+  buildWeekSummaryPrompt,
   PPT_DRAFT_SCHEMA,
   PPT_DRAFT_SYSTEM,
   type PptDraft,
@@ -14,12 +15,16 @@ import {
   type PromptIssue,
   type PromptProof,
   type PromptScope,
+  type PromptWeek,
   type ProofReviewResult,
   TASK_IDEA_SCHEMA,
   TASK_IDEA_SYSTEM,
   TASK_REASON_SCHEMA,
   TASK_REASON_SYSTEM,
   type TaskIdeaSuggestions,
+  WEEK_SUMMARY_SCHEMA,
+  WEEK_SUMMARY_SYSTEM,
+  type WeekSummaryResult,
 } from "@/lib/llm-prompts";
 
 // The drafting surfaces. Every one returns null when the adapter is
@@ -127,5 +132,24 @@ export async function reviewProofForAdmin(
     schema: PROOF_REVIEW_SCHEMA,
     // A summary, a handful of claims and a few questions. Never a draft.
     maxTokens: 800,
+  });
+}
+
+/**
+ * Two lines over a developer's own week. The card underneath already renders
+ * every number deterministically, so null here costs nothing but the prose.
+ */
+export async function summarizeMyWeek(
+  week: PromptWeek,
+  userId: string,
+): Promise<WeekSummaryResult | null> {
+  return generateStructured({
+    surface: "week_summary",
+    userId,
+    system: WEEK_SUMMARY_SYSTEM,
+    prompt: buildWeekSummaryPrompt(week),
+    schema: WEEK_SUMMARY_SCHEMA,
+    // A headline and one next step. Nothing here is a draft.
+    maxTokens: 500,
   });
 }

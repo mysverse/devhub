@@ -288,9 +288,7 @@ async function main() {
       assistantDialog.getByText("Projected payout", { exact: true }),
     );
     await waitForText(assistantDialog.getByText("RM180.00", { exact: true }));
-    await waitForText(
-      page.getByRole("button", { name: "Submit PPT request" }),
-    );
+    await waitForText(page.getByRole("button", { name: "Submit PPT request" }));
     await waitForText(page.getByText("2 checks used"));
     await page.getByText("2 checks used").click();
     await waitForText(

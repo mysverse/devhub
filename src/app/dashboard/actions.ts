@@ -11,6 +11,9 @@ import { resolveDisplayName } from "@/lib/display-name";
 import { getLinearClient, LinearReauthRequiredError } from "@/lib/linear";
 import { describeLinearMutationError } from "@/lib/linear-error";
 import { fetchIssuesByIds } from "@/lib/linear-queries";
+import { isLlmConfigured } from "@/lib/llm";
+import type { WeekSummaryResult } from "@/lib/llm-prompts";
+import { summarizeMyWeek } from "@/lib/llm-suggestions";
 import { IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { getResolvedPayoutPolicy } from "@/lib/payout-policy-server";
 import {
@@ -22,6 +25,7 @@ import {
 import prisma from "@/lib/prisma";
 import { resolveTaskSuggestions } from "@/lib/task-suggestion";
 import { getUserProfile } from "@/lib/user-profile";
+import { loadWeekInReview } from "@/lib/week-in-review";
 
 function revalidateBoards(viewerLinearId: string) {
   revalidatePath("/dashboard/ppts");
@@ -323,4 +327,32 @@ export async function markTaskUnblocked(issueId: string) {
   revalidatePath("/dashboard");
 
   return { success: true };
+}
+
+/**
+ * Two lines over the caller's own week, on demand.
+ *
+ * Reads the same loader the card renders from, so the prose can never describe
+ * a different week from the numbers beside it. Money is never sent: the prompt
+ * carries counts, and every figure on screen is rendered by DevHub.
+ */
+export async function summarizeMyWeekForMe(): Promise<
+  { available: false } | { available: true; summary: WeekSummaryResult | null }
+> {
+  const { userId } = await getSession();
+  if (!userId) return { available: false };
+  if (!isLlmConfigured()) return { available: false };
+
+  const week = await loadWeekInReview(userId);
+  const summary = await summarizeMyWeek(
+    {
+      paidCount: week.paid.length,
+      pendingCount: week.pending.length,
+      proofPostedCount: week.proofPostedCount,
+      waitingOnYou: week.waitingOnYou,
+      activeTitles: week.activeTitles,
+    },
+    userId,
+  );
+  return { available: true, summary };
 }

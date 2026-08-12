@@ -3,7 +3,8 @@ import AskAssistantButton from "@/components/assistant/AskAssistantButton";
 import LinkAnchor from "@/components/LinkAnchor";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
-import prisma from "@/lib/prisma";
+import { loadWeekInReview } from "@/lib/week-in-review";
+import WeekSummaryButton from "./WeekSummaryButton";
 
 /**
  * The last seven days, counted rather than narrated.
@@ -19,8 +20,6 @@ import prisma from "@/lib/prisma";
  * already satisfies it.
  */
 
-const WINDOW_DAYS = 7;
-
 type Stat = { label: string; value: string; hint: string | null };
 
 export default async function WeekInReview({
@@ -30,32 +29,8 @@ export default async function WeekInReview({
   userId: string;
   currency: CurrencyCode;
 }) {
-  const since = new Date(Date.now() - WINDOW_DAYS * 24 * 60 * 60 * 1000);
-
-  const [paid, pending, proofPosted, awaitingYou] = await Promise.all([
-    prisma.transaction.findMany({
-      // paidAt, not createdAt: a payout created a fortnight ago and settled
-      // yesterday is this week's money to the person who received it.
-      where: { userId, status: "PAID", paidAt: { gte: since } },
-      select: { amount: true, currency: true },
-    }),
-    prisma.transaction.findMany({
-      where: { userId, status: { in: ["PENDING", "ON_HOLD"] } },
-      select: { amount: true, currency: true },
-    }),
-    prisma.pptPayoutState.count({
-      where: { userId, proofProvidedAt: { gte: since } },
-    }),
-    // "Waiting on you" is the only number here that asks for an action, so it
-    // is the one the card leads with when it is not zero.
-    prisma.pptPayoutState.count({
-      where: {
-        userId,
-        status: { in: ["BLOCKED", "NEEDS_PROOF"] },
-        reason: { in: ["MISSING_PROOF", "PROOF_NOT_QUALIFYING"] },
-      },
-    }),
-  ]);
+  const week = await loadWeekInReview(userId);
+  const { paid, pending, proofPostedCount, waitingOnYou } = week;
 
   const total = (rows: { amount: number; currency: string }[]) =>
     rows
@@ -67,8 +42,8 @@ export default async function WeekInReview({
   if (
     paid.length === 0 &&
     pending.length === 0 &&
-    proofPosted === 0 &&
-    awaitingYou === 0
+    proofPostedCount === 0 &&
+    waitingOnYou.length === 0
   ) {
     return null;
   }
@@ -96,13 +71,16 @@ export default async function WeekInReview({
     },
     {
       label: "Proof posted",
-      value: String(proofPosted),
-      hint: proofPosted === 0 ? "nothing this week" : "in the last 7 days",
+      value: String(proofPostedCount),
+      hint: proofPostedCount === 0 ? "nothing this week" : "in the last 7 days",
     },
     {
       label: "Waiting on you",
-      value: String(awaitingYou),
-      hint: awaitingYou > 0 ? "needs proof to pay out" : "nothing outstanding",
+      value: String(waitingOnYou.length),
+      hint:
+        waitingOnYou.length > 0
+          ? "needs proof to pay out"
+          : "nothing outstanding",
     },
   ];
 
@@ -113,6 +91,7 @@ export default async function WeekInReview({
           Your week
         </Text>
         <Group gap="xs" wrap="nowrap">
+          <WeekSummaryButton />
           <AskAssistantButton
             entryPoint="WEEK_IN_REVIEW"
             label="Explain my week"

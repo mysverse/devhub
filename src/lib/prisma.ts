@@ -3,7 +3,9 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 import { Pool } from "pg";
 import {
+  isInTransactionScope,
   RETRYABLE_READ_OPERATIONS,
+  runInTransactionScope,
   transientErrorCode,
   withTransientRetry,
 } from "@/lib/prisma-retry";
@@ -48,16 +50,16 @@ const databaseUrl = getDatabaseUrl();
  * row; a call site whose write is structurally idempotent opts in by calling
  * `withTransientRetry()` itself.
  *
- * This also fires for operations inside an interactive `prisma.$transaction`,
- * where a retry would run against a session the server has already discarded.
- * There are no interactive transactions in this codebase today — if one is
- * added, exclude it here.
+ * Operations inside an interactive `prisma.$transaction` are excluded — see
+ * `isInTransactionScope()` in prisma-retry.ts for why, and
+ * `markTransactionScope()` below for how the boundary is detected.
  */
 const transientReadRetry = Prisma.defineExtension({
   name: "transient-read-retry",
   query: {
     async $allOperations({ model, operation, args, query }) {
       if (!RETRYABLE_READ_OPERATIONS.has(operation)) return query(args);
+      if (isInTransactionScope()) return query(args);
 
       return withTransientRetry(() => query(args), {
         onRetry: ({ attempt, attempts, delayMs, error }) => {
@@ -71,6 +73,38 @@ const transientReadRetry = Prisma.defineExtension({
   },
 });
 
+/**
+ * Wraps `$transaction` so the retry extension can tell it is running inside an
+ * interactive transaction. Prisma gives the extension no such flag, so the
+ * boundary is marked here with an AsyncLocalStorage scope that the extension
+ * reads.
+ *
+ * Only the interactive form is wrapped. The array form
+ * (`$transaction([p1, p2])`) receives promises whose queries were already
+ * issued outside any transaction, and retrying those is correct.
+ */
+function markTransactionScope(client: PrismaClient): PrismaClient {
+  return new Proxy(client, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (property !== "$transaction" || typeof value !== "function") {
+        return value;
+      }
+
+      const original = value as (...args: unknown[]) => unknown;
+      return (...args: unknown[]) => {
+        if (typeof args[0] !== "function") return original.apply(target, args);
+        const callback = args[0] as (tx: unknown) => unknown;
+        return original.call(
+          target,
+          (tx: unknown) => runInTransactionScope(() => callback(tx)),
+          ...args.slice(1),
+        );
+      };
+    },
+  });
+}
+
 function createPrismaClient(pool?: Pool): PrismaClient {
   const base = isAccelerateUrl(databaseUrl)
     ? (new PrismaClient({
@@ -80,7 +114,9 @@ function createPrismaClient(pool?: Pool): PrismaClient {
         adapter: new PrismaPg(pool ?? createPgPool(databaseUrl)),
       });
 
-  return base.$extends(transientReadRetry) as unknown as PrismaClient;
+  return markTransactionScope(
+    base.$extends(transientReadRetry) as unknown as PrismaClient,
+  );
 }
 
 // Cache the Prisma client + pg pool on globalThis so `next dev` hot reloads

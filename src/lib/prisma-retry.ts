@@ -1,3 +1,5 @@
+import { AsyncLocalStorage } from "node:async_hooks";
+
 /**
  * Transient database failure classification and retry.
  *
@@ -133,6 +135,37 @@ export function transientErrorCode(error: unknown): string {
   if (meta && typeof meta.status === "number") return String(meta.status);
   if (typeof record.name === "string") return record.name;
   return "unknown";
+}
+
+/**
+ * Marks the dynamic extent of an interactive `prisma.$transaction` callback.
+ *
+ * Prisma's query extensions fire for operations inside an interactive
+ * transaction exactly as they do outside one, and the extension arguments
+ * carry no flag distinguishing the two (verified against Prisma 7.9). Retrying
+ * in there is the wrong thing to do twice over:
+ *
+ *   - The backoff sleeps while the transaction holds its locks and burns its
+ *     deadline. Prisma aborts an interactive transaction after 5s by default,
+ *     so a retry that *succeeds* can still push the transaction past the limit
+ *     and roll back work that would otherwise have committed.
+ *   - When the failure is the session dying — which is what a killed Accelerate
+ *     worker does — every retry runs against a connection the server has
+ *     already discarded, so it fails three times instead of once.
+ *
+ * There are ~25 `prisma.$transaction(async …)` call sites in this repo,
+ * several with reads inside (e.g. `src/lib/ppt-comment-attachments.ts`, on the
+ * PPT proof submit path), so this is not hypothetical. The scope is set by the
+ * `$transaction` wrapper in prisma.ts.
+ */
+const transactionScope = new AsyncLocalStorage<true>();
+
+export function runInTransactionScope<T>(callback: () => T): T {
+  return transactionScope.run(true, callback);
+}
+
+export function isInTransactionScope(): boolean {
+  return transactionScope.getStore() === true;
 }
 
 export const RETRY_ATTEMPTS = 3;

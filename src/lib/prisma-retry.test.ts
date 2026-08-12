@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  isInTransactionScope,
   isTransientDatabaseError,
   RETRYABLE_READ_OPERATIONS,
   retryDelayMs,
+  runInTransactionScope,
   transientErrorCode,
   withTransientRetry,
 } from "./prisma-retry";
@@ -142,6 +144,31 @@ test("a non-transient failure is rethrown immediately", async () => {
   );
 
   assert.equal(calls, 1);
+});
+
+test("transaction scope is set for the whole callback and does not leak", async () => {
+  // Guards the reason retries are skipped inside an interactive transaction:
+  // the backoff would sleep while the transaction holds its locks and burns
+  // its 5s deadline. The scope has to survive an await — the operations it
+  // covers are all awaited — and has to be gone afterwards, or every later
+  // read on that request silently loses its retry.
+  assert.equal(isInTransactionScope(), false);
+
+  await runInTransactionScope(async () => {
+    assert.equal(isInTransactionScope(), true);
+    await Promise.resolve();
+    assert.equal(isInTransactionScope(), true);
+  });
+
+  assert.equal(isInTransactionScope(), false);
+});
+
+test("a transient failure inside a transaction scope is still classified", () => {
+  // The skip is a policy decision made by the caller, not a property of the
+  // error — withTransientRetry() itself stays scope-agnostic and testable.
+  runInTransactionScope(() => {
+    assert.equal(isTransientDatabaseError(workerExceededResources()), true);
+  });
 });
 
 test("jitter stays within ±25% of the backoff", () => {

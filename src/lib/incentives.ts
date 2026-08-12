@@ -651,8 +651,23 @@ export async function recordIssueCompletionFromLinear(
 
     return completion;
   } catch (error) {
+    // A racing duplicate is benign and expected: this is a findUnique then
+    // create, not an upsert, so two webhook deliveries for the same issue can
+    // collide. Re-read and carry on.
+    if (isUniqueConstraintError(error)) {
+      return prisma.issueCompletion.findUnique({
+        where: { linearIssueId: input.id },
+      });
+    }
+
+    // Anything else is rethrown so the Linear webhook returns 500 and Linear
+    // redelivers. Swallowing it answered { success: true } for a completion
+    // that was never recorded — and this is the SOLE producer of
+    // IssueCompletion, so the developer is quietly paid less that week with
+    // only a console line to show for it. The route's other handlers are
+    // unguarded and already get redelivery; this one opted out.
     console.error("[incentives] Failed to record Linear completion:", error);
-    return null;
+    throw error;
   }
 }
 

@@ -7,6 +7,7 @@ import {
   retryDelayMs,
   runInTransactionScope,
   transientErrorCode,
+  withIdempotentWrite,
   withTransientRetry,
 } from "./prisma-retry";
 
@@ -169,6 +170,56 @@ test("a transient failure inside a transaction scope is still classified", () =>
   runInTransactionScope(() => {
     assert.equal(isTransientDatabaseError(workerExceededResources()), true);
   });
+});
+
+test("an idempotent write is retried like a read", async () => {
+  let calls = 0;
+  const result = await withIdempotentWrite(
+    "unique-keyed-upsert",
+    "ensureUserProfile",
+    async () => {
+      calls++;
+      if (calls < 2) throw workerExceededResources();
+      return "written";
+    },
+  );
+
+  assert.equal(result, "written");
+  assert.equal(calls, 2);
+});
+
+test("an idempotent write does NOT retry inside a transaction", async () => {
+  // recordCampaignApplication is called both standalone and with a `tx` from
+  // the bonus approval transaction. Retrying in there sleeps under that
+  // transaction's own locks and can blow Prisma's 5s deadline, rolling back a
+  // bonus that would otherwise have committed.
+  let calls = 0;
+
+  await assert.rejects(
+    runInTransactionScope(async () =>
+      withIdempotentWrite("unique-keyed-upsert", "campaign", async () => {
+        calls++;
+        throw workerExceededResources();
+      }),
+    ),
+    (error: unknown) => transientErrorCode(error) === "P6000",
+  );
+
+  assert.equal(calls, 1);
+});
+
+test("an idempotent write rethrows an application error immediately", async () => {
+  let calls = 0;
+
+  await assert.rejects(
+    withIdempotentWrite("unique-keyed-create", "activation", async () => {
+      calls++;
+      throw Object.assign(new Error("duplicate"), { code: "P2002" });
+    }),
+    /duplicate/,
+  );
+
+  assert.equal(calls, 1);
 });
 
 test("jitter stays within ±25% of the backoff", () => {

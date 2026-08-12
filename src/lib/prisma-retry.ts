@@ -206,6 +206,66 @@ const defaultSleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 /**
+ * Why a particular write is safe to run twice.
+ *
+ * Deliberately a closed union rather than a free-form string: the whole point
+ * is that the safety argument lands in the diff, in one reviewable place,
+ * rather than being re-derived at each call site by whoever is in a hurry.
+ * Adding a new member is an edit to this module — an intentional exception to
+ * OCP, not an oversight. Do not "fix" it into an open string.
+ *
+ *   unique-keyed-upsert   — upsert whose `where` is a real unique constraint,
+ *                           so a repeat updates the row it already created.
+ *   unique-keyed-create   — create protected by a unique index, where the
+ *                           caller already treats P2002 as success.
+ *   absolute-value-update — sets a value that does not depend on the current
+ *                           one (`status: "X"`, `seenAt: <fixed date>`), so
+ *                           applying it twice is applying it once.
+ *   claim-token-cas       — CAS guarded by a token this invocation generated,
+ *                           so only this invocation can ever win the race.
+ *
+ * NOT for a bare status CAS (`where: { status: "PENDING" }`). A re-issue after
+ * a successful first attempt matches nothing, returns `count: 0`, and every
+ * call site in this repo reads that as "someone else got there first" — so the
+ * admin is told "not in PENDING status" for a payment that just succeeded.
+ */
+export type IdempotencyReason =
+  | "unique-keyed-upsert"
+  | "unique-keyed-create"
+  | "absolute-value-update"
+  | "claim-token-cas";
+
+/**
+ * The call-site door to write retries. `withTransientRetry` is the mechanism;
+ * this is what domain code should reach for, because it cannot be called
+ * without naming why repeating the write is safe.
+ *
+ * Writes are not retried by the client extension (see prisma.ts) precisely
+ * because safety is a property of the call site's data model, not of the
+ * operation name.
+ */
+export async function withIdempotentWrite<T>(
+  reason: IdempotencyReason,
+  label: string,
+  write: () => Promise<T>,
+): Promise<T> {
+  // Load-bearing, not decoration. recordCampaignApplication is called both
+  // standalone and with a `tx` from the bonus approval transaction; retrying
+  // in there would sleep under that transaction's own locks and can blow
+  // Prisma's 5s deadline, rolling back a bonus that would have committed.
+  if (isInTransactionScope()) return write();
+
+  return withTransientRetry(write, {
+    onRetry: ({ attempt, attempts, delayMs, error }) => {
+      console.warn(
+        `[prisma-retry] write ${label} (${reason}) attempt ${attempt}/${attempts} ` +
+          `failed with ${transientErrorCode(error)}, retrying in ${delayMs}ms`,
+      );
+    },
+  });
+}
+
+/**
  * Run `fn`, retrying only transient database failures. Worst case with the
  * defaults is two extra attempts and roughly half a second of added latency —
  * small enough to sit inside a page render, large enough to outlive a worker

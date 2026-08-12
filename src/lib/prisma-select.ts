@@ -54,3 +54,25 @@ type _DisplayPresetSatisfiesResolver =
     : never;
 const _assertDisplayPreset: _DisplayPresetSatisfiesResolver = true;
 void _assertDisplayPreset;
+
+/**
+ * The payout fields a developer-facing surface may read.
+ *
+ * Encodes a policy rather than a shape: `providerData` holds the raw provider
+ * request and response — bank codes, account numbers, the full FinSys reply —
+ * and `include: { payout: true }` shipped all of it into the RSC payload of a
+ * page any developer can open. It is also the single heaviest column on the
+ * heaviest developer-facing read.
+ *
+ * This is the one select preset worth sharing. Presets for page *shapes* are
+ * a trap — two pages that look alike diverge for product reasons and coupling
+ * them means the next feature on one silently re-widens the other.
+ */
+export const PAYOUT_STATUS_SELECT = {
+  id: true,
+  provider: true,
+  status: true,
+  errorMessage: true,
+  createdAt: true,
+  completedAt: true,
+} as const satisfies Prisma.PayoutSelect;

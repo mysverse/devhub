@@ -15,7 +15,12 @@ import {
 // story a developer reads is the same everywhere.
 
 export type TransactionExplainInput = Transaction & {
-  payout?: Payout | null;
+  /** Narrowed from the full row: developer surfaces select only these, so
+   *  the provider request/response blob never reaches a browser. */
+  payout?: Pick<
+    Payout,
+    "provider" | "status" | "errorMessage" | "createdAt" | "completedAt"
+  > | null;
   pptPayoutState?: Pick<PptPayoutState, "status" | "reason"> | null;
   /** Joined in by callers that want the campaign named in the breakdown. */
   campaignName?: string | null;

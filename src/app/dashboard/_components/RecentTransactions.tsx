@@ -26,6 +26,7 @@ import { formatBonusPeriod } from "@/lib/bonus";
 import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount } from "@/lib/currency";
 import prisma from "@/lib/prisma";
+import { PAYOUT_STATUS_SELECT } from "@/lib/prisma-select";
 import { statusCopy, TRANSACTION_STATUS } from "@/lib/status-copy";
 import { explainTransaction } from "@/lib/transaction-explain";
 import DashboardSectionHeader from "./DashboardSectionHeader";
@@ -125,7 +126,7 @@ export default async function RecentTransactions({ userId }: Props) {
   const rows = await prisma.transaction.findMany({
     where: { userId },
     include: {
-      payout: true,
+      payout: { select: PAYOUT_STATUS_SELECT },
       pptPayoutState: { select: { status: true, reason: true } },
     },
     orderBy: { createdAt: "desc" },

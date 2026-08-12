@@ -31,6 +31,7 @@ import type { CurrencyCode } from "@/lib/currency";
 import { formatAmount, getCurrencyForPaymentMethod } from "@/lib/currency";
 import { PPT_OWNER_COPY } from "@/lib/ppt-reason-copy";
 import prisma from "@/lib/prisma";
+import { PAYOUT_STATUS_SELECT } from "@/lib/prisma-select";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { statusCopy, TRANSACTION_STATUS } from "@/lib/status-copy";
 import { explainTransaction } from "@/lib/transaction-explain";
@@ -139,7 +140,7 @@ async function TransactionsContent({
     prisma.transaction.findMany({
       where,
       include: {
-        payout: true,
+        payout: { select: PAYOUT_STATUS_SELECT },
         pptPayoutState: {
           select: {
             status: true,

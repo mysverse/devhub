@@ -46,7 +46,7 @@
       "schedule": "0 8 * * *"
     },
     {
-      "path": "/api/cron/payout-confirmations",
+      "path": "/api/cron/reconcile",
       "schedule": "15 * * * *"
     }
   ]

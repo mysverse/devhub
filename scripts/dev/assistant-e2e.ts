@@ -259,7 +259,10 @@ async function main() {
     await waitForText(
       page.getByText("Create ordinary Linear issue: Audit spawn points"),
     );
-    await waitForText(page.getByRole("button", { name: "Confirm" }));
+    // The confirm button is labelled per action kind (actionCtaLabel), not
+    // "Confirm" — asserting the generic word passed only until the copy
+    // improved, and then failed for the best possible reason.
+    await waitForText(page.getByRole("button", { name: "Create Linear task" }));
     await assertManualScrollHolds(page);
 
     await newChat(page);
@@ -285,7 +288,9 @@ async function main() {
       assistantDialog.getByText("Projected payout", { exact: true }),
     );
     await waitForText(assistantDialog.getByText("RM180.00", { exact: true }));
-    await waitForText(page.getByRole("button", { name: "Confirm" }));
+    await waitForText(
+      page.getByRole("button", { name: "Submit PPT request" }),
+    );
     await waitForText(page.getByText("2 checks used"));
     await page.getByText("2 checks used").click();
     await waitForText(

@@ -39,6 +39,46 @@ function hasBankDetails(input: PayoutRouteInput) {
   );
 }
 
+/**
+ * Whether a fresh provider payout may be started when one already exists.
+ *
+ * The three initiate*Payout functions each hand-rolled this as "not PROCESSING
+ * and not COMPLETED, so delete it and start over", which disagrees with
+ * classifyPayoutRoute (that treats PENDING as in-flight too) and, worse,
+ * deletes rows that carry a providerPayoutId. That id is the only evidence
+ * that a provider was ever asked, it is `@unique`, and both poll crons select
+ * on it — so deleting it converts "we are not sure whether this was sent" into
+ * "nothing was ever sent", and the retry sends real money again.
+ *
+ * A payout that never reached a provider has no id and is safe to replace.
+ */
+export function canInitiateProviderPayout(
+  payout: { status: string; providerPayoutId?: string | null } | null,
+): { allowed: boolean; reason: string } {
+  if (!payout) return { allowed: true, reason: "No existing payout." };
+
+  if (payout.status === "COMPLETED") {
+    return { allowed: false, reason: "This payout already completed." };
+  }
+  if (payout.status === "PROCESSING" || payout.status === "PENDING") {
+    return {
+      allowed: false,
+      reason: "A provider payout is already in flight.",
+    };
+  }
+  if (payout.providerPayoutId) {
+    return {
+      allowed: false,
+      reason:
+        "This payout was already sent to the provider and its result is unknown — check the provider before sending again.",
+    };
+  }
+  return {
+    allowed: true,
+    reason: "The previous attempt never reached the provider.",
+  };
+}
+
 export function classifyPayoutRoute(
   input: PayoutRouteInput,
 ): PayoutRouteClassification {

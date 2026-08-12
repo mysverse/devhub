@@ -17,6 +17,7 @@ import {
   PAYOUT_STALE_MS,
   selectUnreconciledPayouts,
 } from "@/lib/payout-reconcile";
+import { canInitiateProviderPayout } from "@/lib/payout-routing";
 import prisma from "@/lib/prisma";
 import { createFinSysPayout, verifyGroupMembership } from "@/lib/roblox";
 import { createDisbursement, isXenditEnabled } from "@/lib/xendit";
@@ -77,42 +78,52 @@ export async function handlePayoutCompletion(
     return false;
   }
 
-  const paidTx = await prisma.transaction.findUnique({
-    where: { id: transactionId },
-    select: { userId: true, source: true },
-  });
-  if (paidTx?.source === "PPT") {
-    await awardAchievement(paidTx.userId, "FIRST_PAYOUT", { transactionId });
-  }
-  if (paidTx?.userId) {
-    await recordActivationEvent({
-      userId: paidTx.userId,
-      kind: "payout_paid",
-      entityId: transactionId,
-      metadata: { source: paidTx.source },
-    });
-  }
-
-  try {
-    const { markIncentiveAwardsPaidForTransaction } = await import(
-      "@/lib/incentives"
-    );
-    await markIncentiveAwardsPaidForTransaction(transactionId);
-  } catch (err) {
-    console.error(
-      `Failed to mark incentive awards paid for ${transactionId}:`,
-      err,
-    );
-  }
-
-  try {
-    await sendPaymentConfirmation(transactionId);
-  } catch (err) {
-    console.error(
-      `Failed to send payment confirmation for ${transactionId}:`,
-      err,
-    );
-  }
+  // Both CAS results above keep their boolean semantics: the poll crons count
+  // them as `updated++`, so "already terminal" must stay distinguishable from
+  // "just transitioned". Everything below is follow-up on money that has
+  // already landed, and none of it may throw — this function runs inside
+  // webhook handlers and poll crons, where a throw is an error counter and a
+  // provider retry rather than anything that helps the developer.
+  //
+  // The achievement and the read that feeds it were bare awaits; a transient
+  // failure on either skipped the confirmation email entirely.
+  await runFollowUps("payout-completion", [
+    {
+      name: "developer-milestones",
+      run: async () => {
+        const paidTx = await prisma.transaction.findUnique({
+          where: { id: transactionId },
+          select: { userId: true, source: true },
+        });
+        if (!paidTx?.userId) return;
+        if (paidTx.source === "PPT") {
+          await awardAchievement(paidTx.userId, "FIRST_PAYOUT", {
+            transactionId,
+          });
+        }
+        await recordActivationEvent({
+          userId: paidTx.userId,
+          kind: "payout_paid",
+          entityId: transactionId,
+          metadata: { source: paidTx.source },
+        });
+      },
+    },
+    {
+      name: "incentive-awards",
+      run: async () => {
+        // Imported lazily to break the incentives <-> payout cycle.
+        const { markIncentiveAwardsPaidForTransaction } = await import(
+          "@/lib/incentives"
+        );
+        await markIncentiveAwardsPaidForTransaction(transactionId);
+      },
+    },
+    {
+      name: "confirmation",
+      run: () => sendPaymentConfirmation(transactionId),
+    },
+  ]);
 
   return true;
 }
@@ -164,16 +175,16 @@ export async function initiateBillplzPayout(transactionId: string) {
 
   // Skip if there's already an active payout
   if (transaction.payout) {
-    if (
-      transaction.payout.status === "PROCESSING" ||
-      transaction.payout.status === "COMPLETED"
-    ) {
+    const reattempt = canInitiateProviderPayout(transaction.payout);
+    if (!reattempt.allowed) {
+      console.log(
+        `[payout] Not re-initiating payout ${transaction.payout.id}: ${reattempt.reason}`,
+      );
       return null;
     }
-    // Delete the failed payout to allow retry
-    await prisma.payout.delete({
-      where: { id: transaction.payout.id },
-    });
+    // Only reached when the previous attempt never reached the provider, so
+    // the row carries no provider id and replacing it cannot lose evidence.
+    await prisma.payout.delete({ where: { id: transaction.payout.id } });
   }
 
   const amountCents = Math.round(transaction.amount * 100);
@@ -299,15 +310,16 @@ export async function initiateXenditPayout(transactionId: string) {
 
   // Skip if there's already an active payout
   if (transaction.payout) {
-    if (
-      transaction.payout.status === "PROCESSING" ||
-      transaction.payout.status === "COMPLETED"
-    ) {
+    const reattempt = canInitiateProviderPayout(transaction.payout);
+    if (!reattempt.allowed) {
+      console.log(
+        `[payout] Not re-initiating payout ${transaction.payout.id}: ${reattempt.reason}`,
+      );
       return null;
     }
-    await prisma.payout.delete({
-      where: { id: transaction.payout.id },
-    });
+    // Only reached when the previous attempt never reached the provider, so
+    // the row carries no provider id and replacing it cannot lose evidence.
+    await prisma.payout.delete({ where: { id: transaction.payout.id } });
   }
 
   const description = getTransactionPayoutDescription(transaction);
@@ -393,15 +405,16 @@ export async function initiateRobloxPayout(transactionId: string) {
 
   // Skip if there's already an active payout
   if (transaction.payout) {
-    if (
-      transaction.payout.status === "PROCESSING" ||
-      transaction.payout.status === "COMPLETED"
-    ) {
+    const reattempt = canInitiateProviderPayout(transaction.payout);
+    if (!reattempt.allowed) {
+      console.log(
+        `[payout] Not re-initiating payout ${transaction.payout.id}: ${reattempt.reason}`,
+      );
       return null;
     }
-    await prisma.payout.delete({
-      where: { id: transaction.payout.id },
-    });
+    // Only reached when the previous attempt never reached the provider, so
+    // the row carries no provider id and replacing it cannot lose evidence.
+    await prisma.payout.delete({ where: { id: transaction.payout.id } });
   }
 
   // Verify group membership before attempting payout

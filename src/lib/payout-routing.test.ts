@@ -1,6 +1,45 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { canConfirmManualPayment, classifyPayoutRoute } from "./payout-routing";
+import {
+  canConfirmManualPayment,
+  canInitiateProviderPayout,
+  classifyPayoutRoute,
+} from "./payout-routing";
+
+test("a transaction with no payout can be paid", () => {
+  assert.equal(canInitiateProviderPayout(null).allowed, true);
+});
+
+test("an in-flight or completed payout is never replaced", () => {
+  for (const status of ["PENDING", "PROCESSING", "COMPLETED"]) {
+    assert.equal(
+      canInitiateProviderPayout({ status, providerPayoutId: null }).allowed,
+      false,
+      `${status} must not be replaced`,
+    );
+  }
+});
+
+test("a failed attempt that never reached the provider can be replaced", () => {
+  const decision = canInitiateProviderPayout({
+    status: "FAILED",
+    providerPayoutId: null,
+  });
+  assert.equal(decision.allowed, true);
+});
+
+test("a failed payout that carries a provider id is NOT replaced", () => {
+  // The id is the only evidence a provider was ever asked, it is @unique, and
+  // both poll crons select on it. Deleting the row turns "we do not know
+  // whether this was sent" into "nothing was ever sent" — and the retry sends
+  // real money a second time.
+  const decision = canInitiateProviderPayout({
+    status: "FAILED",
+    providerPayoutId: "billplz-abc",
+  });
+  assert.equal(decision.allowed, false);
+  assert.match(decision.reason, /check the provider/i);
+});
 
 test("provider processing payouts cannot be manually confirmed", () => {
   const route = classifyPayoutRoute({

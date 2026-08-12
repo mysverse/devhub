@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { deleteKycDocuments } from "@/lib/blob-storage";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
+import { runBatch } from "@/lib/fault-isolation";
 import { createKycAuditEntry, KYC_CLEANUP_HOURS } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
 
@@ -31,14 +32,23 @@ export async function GET(req: Request) {
     select: { id: true, userId: true },
   });
 
-  for (const v of expiredResults) {
-    await prisma.kycVerification.update({
-      where: { id: v.id },
-      data: { status: "EXPIRED" },
-    });
-    await createKycAuditEntry(v.id, "system", "EXPIRED");
-    expiredCount++;
-  }
+  // Per-row isolation on all three passes. This cron destroys government IDs
+  // and selfies on a retention deadline; one bad row used to abort the run,
+  // leaving documents that should have been deleted sitting in blob storage
+  // with nothing in the response saying so.
+  await runBatch({
+    label: "kyc-expire",
+    items: expiredResults,
+    identify: (v) => v.id,
+    run: async (v) => {
+      await prisma.kycVerification.update({
+        where: { id: v.id },
+        data: { status: "EXPIRED" },
+      });
+      await createKycAuditEntry(v.id, "system", "EXPIRED");
+      expiredCount++;
+    },
+  });
 
   // 2. Delete documents for decided verifications (48h after decision)
   const cleanupCutoff = new Date(
@@ -57,35 +67,40 @@ export async function GET(req: Request) {
     },
   });
 
-  for (const v of toClean) {
-    const urls = [v.idDocumentBlobUrl, v.selfieBlobUrl].filter(
-      Boolean,
-    ) as string[];
+  await runBatch({
+    label: "kyc-cleanup-decided",
+    items: toClean,
+    identify: (v) => v.id,
+    run: async (v) => {
+      const urls = [v.idDocumentBlobUrl, v.selfieBlobUrl].filter(
+        Boolean,
+      ) as string[];
 
-    if (urls.length > 0) {
-      try {
-        await deleteKycDocuments(urls);
-      } catch (err) {
-        console.error(
-          `[kyc-cleanup] Failed to delete blobs for verification ${v.id}:`,
-          err,
-        );
-        continue;
+      if (urls.length > 0) {
+        try {
+          await deleteKycDocuments(urls);
+        } catch (err) {
+          console.error(
+            `[kyc-cleanup] Failed to delete blobs for verification ${v.id}:`,
+            err,
+          );
+          return;
+        }
       }
-    }
 
-    await prisma.kycVerification.update({
-      where: { id: v.id },
-      data: {
-        idDocumentBlobUrl: null,
-        selfieBlobUrl: null,
-        documentsDeletedAt: now,
-      },
-    });
+      await prisma.kycVerification.update({
+        where: { id: v.id },
+        data: {
+          idDocumentBlobUrl: null,
+          selfieBlobUrl: null,
+          documentsDeletedAt: now,
+        },
+      });
 
-    await createKycAuditEntry(v.id, "system", "DOCUMENTS_DELETED");
-    cleanedCount++;
-  }
+      await createKycAuditEntry(v.id, "system", "DOCUMENTS_DELETED");
+      cleanedCount++;
+    },
+  });
 
   // 3. Delete documents for EXPIRED submissions immediately
   const expiredToClean = await prisma.kycVerification.findMany({
@@ -99,35 +114,40 @@ export async function GET(req: Request) {
     },
   });
 
-  for (const v of expiredToClean) {
-    const urls = [v.idDocumentBlobUrl, v.selfieBlobUrl].filter(
-      Boolean,
-    ) as string[];
+  await runBatch({
+    label: "kyc-cleanup-expired",
+    items: expiredToClean,
+    identify: (v) => v.id,
+    run: async (v) => {
+      const urls = [v.idDocumentBlobUrl, v.selfieBlobUrl].filter(
+        Boolean,
+      ) as string[];
 
-    if (urls.length > 0) {
-      try {
-        await deleteKycDocuments(urls);
-      } catch (err) {
-        console.error(
-          `[kyc-cleanup] Failed to delete blobs for expired verification ${v.id}:`,
-          err,
-        );
-        continue;
+      if (urls.length > 0) {
+        try {
+          await deleteKycDocuments(urls);
+        } catch (err) {
+          console.error(
+            `[kyc-cleanup] Failed to delete blobs for expired verification ${v.id}:`,
+            err,
+          );
+          return;
+        }
       }
-    }
 
-    await prisma.kycVerification.update({
-      where: { id: v.id },
-      data: {
-        idDocumentBlobUrl: null,
-        selfieBlobUrl: null,
-        documentsDeletedAt: now,
-      },
-    });
+      await prisma.kycVerification.update({
+        where: { id: v.id },
+        data: {
+          idDocumentBlobUrl: null,
+          selfieBlobUrl: null,
+          documentsDeletedAt: now,
+        },
+      });
 
-    await createKycAuditEntry(v.id, "system", "DOCUMENTS_DELETED");
-    cleanedCount++;
-  }
+      await createKycAuditEntry(v.id, "system", "DOCUMENTS_DELETED");
+      cleanedCount++;
+    },
+  });
 
   console.log(
     `[kyc-cleanup] Expired: ${expiredCount}, Documents cleaned: ${cleanedCount}`,

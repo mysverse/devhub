@@ -8,6 +8,7 @@ import {
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
 import { resolveDisplayName } from "@/lib/display-name";
+import { runBatch } from "@/lib/fault-isolation";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import {
   applyMultiplier,
@@ -101,53 +102,59 @@ async function announceStart(campaign: PayoutCampaign) {
   const audience = await audienceFor(campaign);
   let sent = 0;
 
-  for (const profile of audience) {
-    const currency = getCurrencyForPaymentMethod(profile.paymentMethod);
-    const scopeLabel = describeCampaignScopes(campaign.scopes);
-    const multiplierLabel = formatMultiplier(campaign.multiplier);
+  // One recipient failing must not silence the rest of the announcement.
+  await runBatch({
+    label: "campaign-started-announce",
+    items: audience,
+    identify: (profile) => profile.id,
+    run: async (profile) => {
+      const currency = getCurrencyForPaymentMethod(profile.paymentMethod);
+      const scopeLabel = describeCampaignScopes(campaign.scopes);
+      const multiplierLabel = formatMultiplier(campaign.multiplier);
 
-    await notify({
-      userId: profile.id,
-      domain: "campaign",
-      type: "STARTED",
-      title: `${multiplierLabel} — ${campaign.headline}`,
-      message:
-        campaign.body ??
-        `${scopeLabel} are multiplied until ${campaign.endsAt.toLocaleString()}.`,
-      href: "/dashboard/ppts",
-      entityType: "payout_campaign",
-      entityId: campaign.id,
-      payload: {
-        campaignId: campaign.id,
-        slug: campaign.slug,
-        multiplier: campaign.multiplier,
-        endsAt: campaign.endsAt.toISOString(),
-      },
-      dedupeKey: `campaign:STARTED:${profile.id}:${campaign.slug}`,
-      channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
-      email: profile.user.email
-        ? {
-            to: profile.user.email,
-            subject: `${multiplierLabel} payouts on DevHub — ${campaign.headline}`,
-            category: "campaign_started",
-            idempotencyKey: `campaign:started:${campaign.slug}:${profile.id}`,
-            react: createElement(CampaignStarted, {
-              userName: resolveDisplayName({
-                profile,
-                fallback: "developer",
+      await notify({
+        userId: profile.id,
+        domain: "campaign",
+        type: "STARTED",
+        title: `${multiplierLabel} — ${campaign.headline}`,
+        message:
+          campaign.body ??
+          `${scopeLabel} are multiplied until ${campaign.endsAt.toLocaleString()}.`,
+        href: "/dashboard/ppts",
+        entityType: "payout_campaign",
+        entityId: campaign.id,
+        payload: {
+          campaignId: campaign.id,
+          slug: campaign.slug,
+          multiplier: campaign.multiplier,
+          endsAt: campaign.endsAt.toISOString(),
+        },
+        dedupeKey: `campaign:STARTED:${profile.id}:${campaign.slug}`,
+        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+        email: profile.user.email
+          ? {
+              to: profile.user.email,
+              subject: `${multiplierLabel} payouts on DevHub — ${campaign.headline}`,
+              category: "campaign_started",
+              idempotencyKey: `campaign:started:${campaign.slug}:${profile.id}`,
+              react: createElement(CampaignStarted, {
+                userName: resolveDisplayName({
+                  profile,
+                  fallback: "developer",
+                }),
+                headline: campaign.headline,
+                body: campaign.body,
+                multiplierLabel,
+                scopeLabel,
+                endsAt: campaign.endsAt.toISOString(),
+                rateLine: rateLineFor(campaign, currency),
               }),
-              headline: campaign.headline,
-              body: campaign.body,
-              multiplierLabel,
-              scopeLabel,
-              endsAt: campaign.endsAt.toISOString(),
-              rateLine: rateLineFor(campaign, currency),
-            }),
-          }
-        : undefined,
-    });
-    sent++;
-  }
+            }
+          : undefined,
+      });
+      sent++;
+    },
+  });
 
   return sent;
 }
@@ -157,26 +164,32 @@ async function announceEndingSoon(campaign: PayoutCampaign) {
   const multiplierLabel = formatMultiplier(campaign.multiplier);
   let sent = 0;
 
-  for (const profile of audience) {
-    await notify({
-      userId: profile.id,
-      domain: "campaign",
-      type: "ENDING_SOON",
-      title: `${multiplierLabel} ends ${campaign.endsAt.toLocaleString()}`,
-      message: `${campaign.name} is nearly over. Anything that becomes payable after it ends pays the normal rate.`,
-      href: "/dashboard/ppts",
-      entityType: "payout_campaign",
-      entityId: campaign.id,
-      payload: {
-        campaignId: campaign.id,
-        slug: campaign.slug,
-        endsAt: campaign.endsAt.toISOString(),
-      },
-      dedupeKey: `campaign:ENDING_SOON:${profile.id}:${campaign.slug}`,
-      channels: [IN_APP_CHANNEL],
-    });
-    sent++;
-  }
+  // One recipient failing must not silence the rest of the announcement.
+  await runBatch({
+    label: "campaign-ending-announce",
+    items: audience,
+    identify: (profile) => profile.id,
+    run: async (profile) => {
+      await notify({
+        userId: profile.id,
+        domain: "campaign",
+        type: "ENDING_SOON",
+        title: `${multiplierLabel} ends ${campaign.endsAt.toLocaleString()}`,
+        message: `${campaign.name} is nearly over. Anything that becomes payable after it ends pays the normal rate.`,
+        href: "/dashboard/ppts",
+        entityType: "payout_campaign",
+        entityId: campaign.id,
+        payload: {
+          campaignId: campaign.id,
+          slug: campaign.slug,
+          endsAt: campaign.endsAt.toISOString(),
+        },
+        dedupeKey: `campaign:ENDING_SOON:${profile.id}:${campaign.slug}`,
+        channels: [IN_APP_CHANNEL],
+      });
+      sent++;
+    },
+  });
 
   return sent;
 }
@@ -193,31 +206,37 @@ async function announceEnded(campaign: PayoutCampaign) {
   });
 
   let sent = 0;
-  for (const row of applications) {
-    const uplift = row._sum.upliftAmount ?? 0;
-    if (uplift <= 0) continue;
-    const currency: CurrencyCode = row.currency === "ROBUX" ? "ROBUX" : "MYR";
+  // One recipient failing must not silence the rest of the announcement.
+  await runBatch({
+    label: "campaign-ended-announce",
+    items: applications,
+    identify: (row) => row.userId,
+    run: async (row) => {
+      const uplift = row._sum.upliftAmount ?? 0;
+      if (uplift <= 0) return;
+      const currency: CurrencyCode = row.currency === "ROBUX" ? "ROBUX" : "MYR";
 
-    await notify({
-      userId: row.userId,
-      domain: "campaign",
-      type: "ENDED",
-      title: `${campaign.name} has ended`,
-      message: `It paid you ${formatAmount(uplift, currency)} on top of the normal rate.`,
-      href: "/dashboard/transactions",
-      entityType: "payout_campaign",
-      entityId: campaign.id,
-      payload: {
-        campaignId: campaign.id,
-        slug: campaign.slug,
-        upliftAmount: uplift,
-        currency: row.currency,
-      },
-      dedupeKey: `campaign:ENDED:${row.userId}:${campaign.slug}:${row.currency}`,
-      channels: [IN_APP_CHANNEL],
-    });
-    sent++;
-  }
+      await notify({
+        userId: row.userId,
+        domain: "campaign",
+        type: "ENDED",
+        title: `${campaign.name} has ended`,
+        message: `It paid you ${formatAmount(uplift, currency)} on top of the normal rate.`,
+        href: "/dashboard/transactions",
+        entityType: "payout_campaign",
+        entityId: campaign.id,
+        payload: {
+          campaignId: campaign.id,
+          slug: campaign.slug,
+          upliftAmount: uplift,
+          currency: row.currency,
+        },
+        dedupeKey: `campaign:ENDED:${row.userId}:${campaign.slug}:${row.currency}`,
+        channels: [IN_APP_CHANNEL],
+      });
+      sent++;
+    },
+  });
 
   return sent;
 }

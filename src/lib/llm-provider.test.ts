@@ -98,6 +98,11 @@ describe("writing budget", () => {
     }
   });
 
+  it("keeps chat off the writing ledger too", () => {
+    // Chat is gated by turns, so it belongs to neither per-user call budget.
+    assert.equal(usesWritingBudget("assistant_chat"), false);
+  });
+
   it("leaves every existing surface on the default ledger", () => {
     // If one of these ever started spending from the writing budget, the cap
     // that protects drafting would be silently measuring the wrong thing.

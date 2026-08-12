@@ -50,6 +50,19 @@ const DEFAULT_MAX_WRITING_CALLS_PER_USER_PER_HOUR = 30;
  */
 const WRITING_SURFACE_PREFIXES = ["write_", "review_"];
 
+/**
+ * Chat is gated by turns, not by provider calls, and has been since
+ * `checkLlmRateLimits` grew its `chat` branch — but the default per-user count
+ * still included every `assistant_chat` row, so a long conversation quietly
+ * spent the budget the comment below says is reserved for one-shot surfaces. A
+ * developer who used the assistant for ten minutes then found PPT drafting and
+ * proof summaries unavailable, with a cap that was never meant to bind them.
+ *
+ * Both exclusions sit under the global hourly cap, which is what actually
+ * bounds workspace spend.
+ */
+const CHAT_SURFACE = "assistant_chat";
+
 export function resolveLlmModel(): LlmModel {
   const configured = process.env.ANTHROPIC_MODEL;
   if (!configured) return DEFAULT_ANTHROPIC_MODEL;
@@ -167,7 +180,12 @@ function budgetSurfaceFilter(budget: LlmBudget) {
       surface: { startsWith: prefix },
     })),
   };
-  return budget === "writing" ? matchesWriting : { NOT: matchesWriting };
+  if (budget === "writing") return matchesWriting;
+  return {
+    NOT: {
+      OR: [...matchesWriting.OR, { surface: CHAT_SURFACE }],
+    },
+  };
 }
 
 export async function checkLlmRateLimits(

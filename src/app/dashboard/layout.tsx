@@ -10,6 +10,7 @@ import {
   selectCampaign,
 } from "@/lib/payout-campaign";
 import { getCampaignRows } from "@/lib/payout-campaign-server";
+import { loadOptionalSection } from "@/lib/section-result";
 import { getUserProfile } from "@/lib/user-profile";
 import DashboardLayoutClient from "./DashboardLayoutClient";
 
@@ -83,8 +84,25 @@ export default function DashboardLayout({
 }) {
   return (
     <DashboardLayoutClient
-      adminPromise={getDashboardAdminStatus()}
-      campaignPromise={getDashboardCampaign()}
+      // Both promises are created by the LAYOUT, so a rejection escapes
+      // dashboard/error.tsx — that boundary only covers the layout's children —
+      // and lands on global-error.tsx, an unstyled box with no nav, replacing
+      // every dashboard route. One of the two feeds a decorative promo banner.
+      //
+      // loadOptionalSection degrades each to its fallback instead: no admin
+      // links, no banner. It rethrows Next's control-flow errors, which is
+      // load-bearing here because getDashboardAdminStatus() calls
+      // redirect("/onboarding") for a user with no profile.
+      adminPromise={loadOptionalSection(
+        "dashboard admin status",
+        getDashboardAdminStatus,
+        false,
+      )}
+      campaignPromise={loadOptionalSection(
+        "dashboard campaign banner",
+        getDashboardCampaign,
+        null,
+      )}
       assistantAvailable={isAssistantConfigured()}
       writingAssistAvailable={isLlmConfigured()}
     >

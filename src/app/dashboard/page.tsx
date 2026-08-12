@@ -1,7 +1,8 @@
 import { Alert, Stack } from "@mantine/core";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { cache, Suspense } from "react";
+import { cache } from "react";
+import PageSection from "@/components/PageSection";
 import { getSession } from "@/lib/auth-utils";
 import { getCurrencyForPaymentMethod } from "@/lib/currency";
 import { isAssistantConfigured } from "@/lib/llm";
@@ -231,45 +232,51 @@ async function RecentTransactionsSection() {
 export default function DashboardPage() {
   return (
     <Stack gap={48}>
-      <Suspense fallback={<HeroSkeleton />}>
+      <PageSection title="Your overview" fallback={<HeroSkeleton />}>
         <HeroSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense>
+      <PageSection title="Getting started">
         <GettingStartedSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense fallback={<ActiveTasksSkeleton />}>
+      <PageSection title="Active tasks" fallback={<ActiveTasksSkeleton />}>
         <ActiveTasksSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense>
+      <PageSection title="Tasks needing proof">
         <ProofNeededSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense>
+      <PageSection title="Week in review">
         <WeekInReviewSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense fallback={<IncentiveProgressSkeleton />}>
+      <PageSection
+        title="Incentive progress"
+        fallback={<IncentiveProgressSkeleton />}
+      >
         <IncentiveProgressSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense>
+      <PageSection title="Achievements">
         <AchievementsSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense fallback={<CarouselSkeleton />}>
+      <PageSection title="Suggested tasks" fallback={<CarouselSkeleton />}>
         <SuggestedPptsSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense fallback={<LeaderboardSkeleton />}>
+      <PageSection title="Leaderboard" fallback={<LeaderboardSkeleton />}>
         <LeaderboardSection />
-      </Suspense>
+      </PageSection>
 
-      <Suspense fallback={<TransactionsSkeleton />}>
+      <PageSection
+        title="Recent transactions"
+        fallback={<TransactionsSkeleton />}
+      >
         <RecentTransactionsSection />
-      </Suspense>
+      </PageSection>
     </Stack>
   );
 }

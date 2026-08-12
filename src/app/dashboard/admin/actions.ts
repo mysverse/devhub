@@ -9,6 +9,7 @@ import { createPaymentOrderCollection } from "@/lib/billplz";
 import { uploadTransactionPdf } from "@/lib/blob-storage";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
+import { followUpFailed, runFollowUps } from "@/lib/fault-isolation";
 import {
   cancelIncentiveAwardsForTransaction,
   markIncentiveAwardsPaidForTransaction,
@@ -26,7 +27,6 @@ import {
   classifyPayoutRoute,
 } from "@/lib/payout-routing";
 import prisma from "@/lib/prisma";
-import { transientErrorCode } from "@/lib/prisma-retry";
 import { PROFILE_PAYOUT_SELECT } from "@/lib/prisma-select";
 import { BILLPLZ_COLLECTION_ID_KEY, getKV, setKV } from "@/lib/redis";
 import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
@@ -94,53 +94,57 @@ export async function markTransactionAsPaid(transactionId: string) {
     // ALREADY PAID. A throw here used to escape to the outer catch and report
     // failure for a payment that went through — and because the status is no
     // longer PENDING, retrying returns "not in PENDING status" and the
-    // developer never receives their confirmation. Each step fails
-    // independently, exactly as the automated path does (see payout.ts).
-    try {
-      await markIncentiveAwardsPaidForTransaction(transactionId);
-    } catch (err) {
-      console.error(
-        `Failed to mark incentive awards paid for ${transactionId}:`,
-        err,
-      );
-    }
-
-    if (transaction.source === "PPT") {
-      try {
-        await awardAchievement(transaction.userId, "FIRST_PAYOUT", {
-          transactionId,
-        });
-      } catch (err) {
-        console.error("Failed to award FIRST_PAYOUT achievement:", err);
-      }
-    }
-
-    await recordActivationEvent({
-      userId: transaction.userId,
-      kind: "payout_paid",
-      entityId: transactionId,
-      metadata: { source: transaction.source, manual: true },
-    });
-
-    // Send payment confirmation email with PDF slip.
+    // developer never receives their confirmation.
     //
-    // Reported back rather than only logged. The money is already out and the
-    // status is no longer PENDING, so pressing the button again answers "not
-    // in PENDING status" — the failure is unrecoverable from this action and
-    // used to be invisible outside the server logs. The caller shows it and
-    // offers resendPaymentConfirmation().
-    try {
-      await sendPaymentConfirmation(transactionId);
-    } catch (err) {
-      console.error("Failed to send payment confirmation email:", err);
-      return {
-        success: true,
-        confirmation: "failed" as const,
-        confirmationDetail: transientErrorCode(err),
-      };
-    }
+    // These were three hand-rolled try blocks in three comment styles, plus
+    // one bare await that happened to be safe because recordActivationEvent
+    // guards itself. That "happened to be safe" is the argument for a helper:
+    // knowing which of these throw required reading all four.
+    const followUps = await runFollowUps("mark-transaction-paid", [
+      {
+        name: "incentive-awards",
+        run: () => markIncentiveAwardsPaidForTransaction(transactionId),
+      },
+      ...(transaction.source === "PPT"
+        ? [
+            {
+              name: "achievement",
+              run: () =>
+                awardAchievement(transaction.userId, "FIRST_PAYOUT", {
+                  transactionId,
+                }),
+            },
+          ]
+        : []),
+      {
+        name: "activation-event",
+        run: () =>
+          recordActivationEvent({
+            userId: transaction.userId,
+            kind: "payout_paid",
+            entityId: transactionId,
+            metadata: { source: transaction.source, manual: true },
+          }),
+      },
+      {
+        name: "confirmation",
+        run: () => sendPaymentConfirmation(transactionId),
+      },
+    ]);
 
-    return { success: true, confirmation: "sent" as const };
+    // The confirmation is reported separately because it is the one step with
+    // a recovery path the admin can drive: the money is already out and the
+    // status is no longer PENDING, so pressing the button again answers "not
+    // in PENDING status". The caller offers resendPaymentConfirmation().
+    const confirmationFailed = followUpFailed(followUps, "confirmation");
+    return {
+      success: true,
+      confirmation: confirmationFailed
+        ? ("failed" as const)
+        : ("sent" as const),
+      confirmationDetail: confirmationFailed ? followUps.detail : undefined,
+      followUpDetail: followUps.detail,
+    };
   } catch (error) {
     const err = error as Error;
     return { error: err.message || "Failed to update transaction" };
@@ -194,6 +198,89 @@ export async function payViaBillplz(transactionId: string) {
   }
 }
 
+/**
+ * The rejection slip. Its own step so a blob-storage outage cannot take the
+ * developer's notification with it — the slip is regenerable on demand from
+ * /api/transactions/[id]/pdf, the notification is not.
+ */
+async function storeRejectionSlip(transactionId: string) {
+  const { buffer } = await generateTransactionSlipBuffer(transactionId);
+  const pdfBlobUrl = await uploadTransactionPdf(transactionId, buffer);
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { pdfBlobUrl },
+  });
+}
+
+/**
+ * Tells the developer their payout was rejected. Reads the transaction itself
+ * rather than taking it as an argument, so a failed read fails only this step
+ * instead of every step after it.
+ */
+async function sendRejectionNotification(
+  transactionId: string,
+  reason?: string,
+) {
+  const transaction = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    select: {
+      userId: true,
+      source: true,
+      amount: true,
+      currency: true,
+      bonusPeriod: true,
+      linearIssueTitle: true,
+      linearIssueIdentifier: true,
+    },
+  });
+  if (!transaction) return;
+
+  const { email, name } = await getUserEmailAndName(transaction.userId);
+
+  const taskTitle =
+    transaction.source === "BONUS"
+      ? transaction.linearIssueTitle ||
+        `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
+      : transaction.source === "INCENTIVE"
+        ? transaction.linearIssueTitle || "DevHub incentive awards"
+        : transaction.linearIssueTitle ||
+          transaction.linearIssueIdentifier ||
+          "Manual Payout";
+
+  const amount = formatAmount(
+    transaction.amount,
+    transaction.currency as CurrencyCode,
+  );
+
+  await notify({
+    userId: transaction.userId,
+    domain: "payment",
+    type: "REJECTED",
+    title: "Payout rejected",
+    message: reason
+      ? `${amount} for ${taskTitle} was rejected: ${reason}`
+      : `${amount} for ${taskTitle} was rejected.`,
+    href: "/dashboard",
+    entityType: "transaction",
+    entityId: transactionId,
+    payload: { transactionId, amount, taskTitle, reason },
+    dedupeKey: `transaction:rejected:${transactionId}`,
+    channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
+    email: {
+      to: email,
+      subject: "Payout Rejected - MYSverse DevHub",
+      category: "payment_rejected",
+      idempotencyKey: `transaction:rejected:${transactionId}`,
+      react: PaymentRejected({
+        userName: name,
+        amount,
+        taskTitle,
+        reason: reason || undefined,
+      }),
+    },
+  });
+}
+
 export async function rejectTransaction(
   transactionId: string,
   reason?: string,
@@ -219,84 +306,37 @@ export async function rejectTransaction(
     }
 
     revalidatePath("/dashboard/admin");
-    await cancelIncentiveAwardsForTransaction(transactionId, reason || null);
-    // The money never went out, so return its uplift to the campaign pool.
-    await revertCampaignApplicationsForTransaction(transactionId);
 
-    // Fetch the transaction for email and PDF generation
-    const transaction = await prisma.transaction.findUnique({
-      where: { id: transactionId },
-    });
+    // Everything past this point is follow-up work on a transaction that is
+    // ALREADY REJECTED. These used to be bare awaits in this try: one
+    // transient failure and the admin was told "Failed to reject transaction"
+    // for a rejection that had committed, the campaign uplift stayed charged,
+    // the awards stayed TRANSACTION_PENDING, and — because the notify step
+    // came last — the developer was never told at all. Retrying then answered
+    // "not in PENDING status". That is the 2026-08-12 incident, on this path.
+    //
+    // The developer's notification is ordered ahead of the slip: a rejection
+    // they were never told about is a worse outcome than one with no PDF, and
+    // the slip is regenerable on demand from /api/transactions/[id]/pdf.
+    const followUps = await runFollowUps("reject-transaction", [
+      {
+        name: "incentive-awards",
+        run: () =>
+          cancelIncentiveAwardsForTransaction(transactionId, reason || null),
+      },
+      {
+        // The money never went out, so return its uplift to the campaign pool.
+        name: "campaign-uplift",
+        run: () => revertCampaignApplicationsForTransaction(transactionId),
+      },
+      {
+        name: "notification",
+        run: () => sendRejectionNotification(transactionId, reason),
+      },
+      { name: "rejection-slip", run: () => storeRejectionSlip(transactionId) },
+    ]);
 
-    if (!transaction) {
-      return { success: true };
-    }
-
-    // Generate and store rejection slip in Vercel Blob
-    try {
-      const { buffer } = await generateTransactionSlipBuffer(transactionId);
-      const pdfBlobUrl = await uploadTransactionPdf(transactionId, buffer);
-      await prisma.transaction.update({
-        where: { id: transactionId },
-        data: { pdfBlobUrl },
-      });
-    } catch (blobError) {
-      console.error(
-        "Failed to upload rejection PDF to blob storage:",
-        blobError,
-      );
-    }
-
-    // Send rejection notification email (non-blocking)
-    try {
-      const { email, name } = await getUserEmailAndName(transaction.userId);
-
-      const taskTitle =
-        transaction.source === "BONUS"
-          ? transaction.linearIssueTitle ||
-            `${formatBonusPeriod(transaction.bonusPeriod)} Bonus`
-          : transaction.source === "INCENTIVE"
-            ? transaction.linearIssueTitle || "DevHub incentive awards"
-            : transaction.linearIssueTitle ||
-              transaction.linearIssueIdentifier ||
-              "Manual Payout";
-
-      const amount = formatAmount(
-        transaction.amount,
-        transaction.currency as CurrencyCode,
-      );
-      await notify({
-        userId: transaction.userId,
-        domain: "payment",
-        type: "REJECTED",
-        title: "Payout rejected",
-        message: reason
-          ? `${amount} for ${taskTitle} was rejected: ${reason}`
-          : `${amount} for ${taskTitle} was rejected.`,
-        href: "/dashboard",
-        entityType: "transaction",
-        entityId: transactionId,
-        payload: { transactionId, amount, taskTitle, reason },
-        dedupeKey: `transaction:rejected:${transactionId}`,
-        channels: [IN_APP_CHANNEL, EMAIL_CHANNEL],
-        email: {
-          to: email,
-          subject: "Payout Rejected - MYSverse DevHub",
-          category: "payment_rejected",
-          idempotencyKey: `transaction:rejected:${transactionId}`,
-          react: PaymentRejected({
-            userName: name,
-            amount,
-            taskTitle,
-            reason: reason || undefined,
-          }),
-        },
-      });
-    } catch (emailError) {
-      console.error("Failed to send rejection notification email:", emailError);
-    }
-
-    return { success: true };
+    return { success: true, followUpDetail: followUps.detail };
   } catch (error) {
     const err = error as Error;
     return { error: err.message || "Failed to reject transaction" };

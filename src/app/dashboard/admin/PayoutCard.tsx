@@ -296,6 +296,15 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     );
     if (res?.error) {
       toast.error(res.error);
+    } else if (res?.followUpDetail) {
+      // The rejection committed; some of the cleanup after it did not. Say
+      // both, because "rejected" alone would hide a campaign uplift that is
+      // still charged or a developer who was never told.
+      toast.warning(
+        `Payout rejected, but follow-up work failed (${res.followUpDetail}). ` +
+          "The hourly reconcile job will retry it.",
+        { duration: 10_000 },
+      );
     } else {
       toast.success("Payout rejected");
     }

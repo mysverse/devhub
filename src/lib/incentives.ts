@@ -23,6 +23,7 @@ import {
   getCurrencyForPaymentMethod,
 } from "@/lib/currency";
 import { resolveDisplayName } from "@/lib/display-name";
+import { runFollowUps } from "@/lib/fault-isolation";
 import {
   buildIncentiveEarningPotential,
   buildIncentiveNextTargets,
@@ -1068,75 +1069,114 @@ async function createIncentiveAward({
         )
       : null;
 
+  let award: IncentiveAward;
   try {
-    const award = await prisma.incentiveAward.create({
-      data: {
-        userId,
-        type,
-        period,
-        thresholdMet,
-        detail,
-        amount: normalizedAmount,
-        baseAmount,
-        campaignId: campaign?.campaign.id ?? null,
-        campaignMultiplier: campaign?.multiplier ?? null,
-        netAmount: normalizedAmount,
-        currency,
-        status,
-        heldReason,
-        releaseAt,
-        awardIssues:
-          issueIds.length > 0
-            ? {
-                createMany: {
-                  data: issueIds.map((issueCompletionId) => ({
-                    issueCompletionId,
-                  })),
-                  skipDuplicates: true,
-                },
-              }
-            : undefined,
-      },
-    });
-
-    if (campaign) {
-      await recordCampaignApplication({
-        campaignId: campaign.campaign.id,
-        scope: "INCENTIVE",
-        entityId: award.id,
-        userId,
-        currency,
-        baseAmount,
-        multiplier: campaign.multiplier,
-        upliftAmount: campaign.upliftAmount,
+    // The award and its campaign ledger row commit together. Separately, a
+    // failure between them left the multiplied award paid out with no
+    // PayoutCampaignApplication behind it — so getCampaignSpend under-counted
+    // and the campaign could silently overspend its pool. The bonus path
+    // already does it this way; incentives were the outlier.
+    award = await prisma.$transaction(async (tx) => {
+      const created = await tx.incentiveAward.create({
+        data: {
+          userId,
+          type,
+          period,
+          thresholdMet,
+          detail,
+          amount: normalizedAmount,
+          baseAmount,
+          campaignId: campaign?.campaign.id ?? null,
+          campaignMultiplier: campaign?.multiplier ?? null,
+          netAmount: normalizedAmount,
+          currency,
+          status,
+          heldReason,
+          releaseAt,
+          awardIssues:
+            issueIds.length > 0
+              ? {
+                  createMany: {
+                    data: issueIds.map((issueCompletionId) => ({
+                      issueCompletionId,
+                    })),
+                    skipDuplicates: true,
+                  },
+                }
+              : undefined,
+        },
       });
-    }
 
-    await createAwardNotification(award.id, userId);
-    await appendIncentiveEvent({
-      awardId: award.id,
-      userId,
-      type: status === "HELD" ? "HELD" : "AWARD_CREATED",
-      period,
-      message: heldReason,
-      metadata: {
-        type,
-        amount: normalizedAmount,
-        baseAmount,
-        campaign: campaign?.campaign.slug ?? null,
-        currency,
-      },
+      if (campaign) {
+        await recordCampaignApplication(
+          {
+            campaignId: campaign.campaign.id,
+            scope: "INCENTIVE",
+            entityId: created.id,
+            userId,
+            currency,
+            baseAmount,
+            multiplier: campaign.multiplier,
+            upliftAmount: campaign.upliftAmount,
+          },
+          tx,
+        );
+      }
+
+      return created;
     });
-    await notifyDeveloperAward(award.id);
-    if (heldReason) {
-      await notifyAdminsForAward(award.id, heldReason);
-    }
-
-    return award;
   } catch (error) {
+    // The unique index on (userId, type, period) is this award's idempotency
+    // key, so a duplicate means someone else already created it.
+    //
+    // Scoped to the transaction on purpose. This catch used to wrap the four
+    // notification calls below as well, so a P2002 raised by a NOTIFICATION —
+    // notify() dedupes on a unique key too — was read as "award already
+    // exists" and the function returned null for an award it had just created.
     if (isUniqueConstraintError(error)) return null;
     throw error;
   }
+
+  // Follow-ups on an award that is already committed. None of them may take
+  // the award down with them.
+  await runFollowUps("incentive-award-created", [
+    {
+      name: "award-notification",
+      run: () => createAwardNotification(award.id, userId),
+    },
+    {
+      name: "event",
+      run: () =>
+        appendIncentiveEvent({
+          awardId: award.id,
+          userId,
+          type: status === "HELD" ? "HELD" : "AWARD_CREATED",
+          period,
+          message: heldReason,
+          metadata: {
+            type,
+            amount: normalizedAmount,
+            baseAmount,
+            campaign: campaign?.campaign.slug ?? null,
+            currency,
+          },
+        }),
+    },
+    {
+      name: "developer-notification",
+      run: () => notifyDeveloperAward(award.id),
+    },
+    ...(heldReason
+      ? [
+          {
+            name: "admin-alert",
+            run: () => notifyAdminsForAward(award.id, heldReason),
+          },
+        ]
+      : []),
+  ]);
+
+  return award;
 }
 
 export async function evaluateMilestones(userId: string) {
@@ -1613,49 +1653,78 @@ async function releaseAwardGroup(
     currency,
   );
 
-  const transaction = await prisma.transaction.create({
-    data: {
-      userId,
-      amount: netAmount,
-      baseAmount: baseTotal,
-      campaignId: sharedCampaignId,
-      campaignMultiplier: sharedMultiplier,
-      currency,
-      source: "INCENTIVE",
-      status: "PENDING",
-      autoApproved: config.autoPayout,
-      linearIssueIdentifier: `INCENTIVE-${dateOnlyUtc(now)}`,
-      linearIssueTitle: `Incentive Awards - ${valid.length} item${valid.length === 1 ? "" : "s"}`,
-    },
-  });
+  // The payable transaction, its campaign ledger links, and the awards moving
+  // off their claim commit together or not at all.
+  //
+  // Separately, a failure between the create and the updateMany left a payable
+  // INCENTIVE transaction with no awards pointing at it, while the awards
+  // stayed RELEASING. The stranded-release reconciler then hands those awards
+  // back to PENDING and they release again — into a SECOND transaction, for
+  // money the first one already covers. The orphan is payable the whole time.
+  //
+  // initiateAutoPayout deliberately stays outside: it calls a payment provider,
+  // and an external call inside an interactive transaction holds locks for the
+  // length of a network round trip and risks Prisma's 5s deadline.
+  const transaction = await prisma.$transaction(async (tx) => {
+    const created = await tx.transaction.create({
+      data: {
+        userId,
+        amount: netAmount,
+        baseAmount: baseTotal,
+        campaignId: sharedCampaignId,
+        campaignMultiplier: sharedMultiplier,
+        currency,
+        source: "INCENTIVE",
+        status: "PENDING",
+        autoApproved: config.autoPayout,
+        linearIssueIdentifier: `INCENTIVE-${dateOnlyUtc(now)}`,
+        linearIssueTitle: `Incentive Awards - ${valid.length} item${valid.length === 1 ? "" : "s"}`,
+      },
+    });
 
-  await linkCampaignApplicationsToTransaction({
-    scope: "INCENTIVE",
-    entityIds: validIds,
-    transactionId: transaction.id,
-  });
+    await linkCampaignApplicationsToTransaction(
+      {
+        scope: "INCENTIVE",
+        entityIds: validIds,
+        transactionId: created.id,
+      },
+      tx,
+    );
 
-  await prisma.incentiveAward.updateMany({
-    where: {
-      id: { in: validIds },
-      status: "RELEASING",
-      releaseClaimId: claimId,
-    },
-    data: {
-      status: "TRANSACTION_PENDING",
-      transactionId: transaction.id,
-      claimedAt: null,
-      releaseClaimId: null,
-    },
-  });
-  await prisma.incentiveEvent.createMany({
-    data: valid.map((award) => ({
-      awardId: award.id,
-      userId,
-      type: "TX_CREATED",
-      period: award.period,
-      message: transaction.id,
-    })),
+    const moved = await tx.incentiveAward.updateMany({
+      where: {
+        id: { in: validIds },
+        status: "RELEASING",
+        releaseClaimId: claimId,
+      },
+      data: {
+        status: "TRANSACTION_PENDING",
+        transactionId: created.id,
+        claimedAt: null,
+        releaseClaimId: null,
+      },
+    });
+
+    // Our claim token is the only thing that can match these rows, so a short
+    // count means something took them from under us. Roll the whole thing back
+    // rather than leave a transaction covering awards it does not own.
+    if (moved.count !== validIds.length) {
+      throw new Error(
+        `[incentives] release claim ${claimId} moved ${moved.count}/${validIds.length} awards; rolling back`,
+      );
+    }
+
+    await tx.incentiveEvent.createMany({
+      data: valid.map((award) => ({
+        awardId: award.id,
+        userId,
+        type: "TX_CREATED",
+        period: award.period,
+        message: created.id,
+      })),
+    });
+
+    return created;
   });
 
   if (config.autoPayout) {

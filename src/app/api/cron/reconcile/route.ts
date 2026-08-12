@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { isAuthorizedCronRequest } from "@/lib/cron-auth";
 import { runBatch } from "@/lib/fault-isolation";
+import {
+  sweepAwardsOfPaidTransactions,
+  sweepStrandedReleaseClaims,
+} from "@/lib/incentive-reconcile";
 import { sweepFailedNotificationEmails } from "@/lib/notifications/retry-sweep";
 import { sweepMissingPaymentConfirmations } from "@/lib/payment-confirmation";
 
@@ -26,6 +30,8 @@ import { sweepMissingPaymentConfirmations } from "@/lib/payment-confirmation";
 const RECONCILERS = [
   { name: "payment-confirmations", run: sweepMissingPaymentConfirmations },
   { name: "notification-emails", run: sweepFailedNotificationEmails },
+  { name: "stranded-releases", run: sweepStrandedReleaseClaims },
+  { name: "awards-of-paid-transactions", run: sweepAwardsOfPaidTransactions },
 ] as const;
 
 export async function GET(req: Request) {

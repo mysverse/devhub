@@ -30,6 +30,26 @@ export type NotificationCatalogEntry = {
   defaults: NotificationChannelDefaultMap;
   /** False = always sent (emitted without preference checks). */
   configurable: boolean;
+  /**
+   * Who may re-send this email after a failed delivery.
+   *
+   * `"sweep"` — the generic reconciler may retry it, because everything the
+   * email needs is on the Notification row (title, message, href).
+   *
+   * `"owned"` — only its own emit path may retry it. The email carries
+   * something the Notification row cannot reconstruct, so a generic retry
+   * would send a degraded version AND mark the delivery SENT, which then
+   * blinds the real reconciler forever. `payment:PROCESSED` is the case:
+   * `defaultEmail()` rebuilds attachments only from the options passed at emit
+   * time, so a generic retry would send a payment confirmation with no PDF
+   * slip and permanently hide it from sweepMissingPaymentConfirmations.
+   *
+   * Declared per entry rather than inferred, and required rather than
+   * defaulted, for the same reason the preference allowlist is derived from
+   * this catalog: a hand-written `if (domain === "payment")` in the sweep is
+   * exactly the drift that has already bitten this codebase once.
+   */
+  emailRetry: "sweep" | "owned";
 };
 
 export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
@@ -43,6 +63,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "Something prevents payout on a completed task — includes the reason and your next step.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt",
@@ -53,6 +74,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A task changed after completion (reopened, relabeled, reassigned), pausing its payout.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt",
@@ -62,6 +84,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "All checks passed and your payout was created.",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt",
@@ -71,6 +94,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your #ppt-proof comment was accepted.",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt",
@@ -81,6 +105,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A task DevHub already paid was reopened or changed — admins review what happens next.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── Payments (always sent) ───────────────────────────────────────────────
   {
@@ -91,6 +116,10 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "A payment went out to your payout method, with the slip.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    // The only "owned" entry: this email carries the PDF slip, which
+    // defaultEmail() cannot rebuild from the Notification row.
+    // sweepMissingPaymentConfirmations is its retry path.
+    emailRetry: "owned",
   },
   {
     domain: "payment",
@@ -101,6 +130,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A payout passed every check but is over your weekly auto-approval limit, so an admin releases it manually.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "payment",
@@ -110,6 +140,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "An admin rejected a payment, with the reason.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── Bonuses & incentives ─────────────────────────────────────────────────
   {
@@ -121,6 +152,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A task of yours qualified as a bonus candidate (amount not guaranteed until admin review).",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "incentive",
@@ -130,6 +162,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "You earned a weekly incentive award, pending release.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "incentive",
@@ -139,6 +172,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "An admin adjusted or disputed one of your incentive awards.",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── KYC (always sent — compliance) ───────────────────────────────────────
   {
@@ -149,6 +183,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your identity verification passed.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "kyc",
@@ -158,6 +193,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Verification failed, with the reason and how to resubmit.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── PPT requests (configurable) ──────────────────────────────────────────
   {
@@ -168,6 +204,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "When an admin approves one of your PPT requests.",
     defaults: { in_app: true, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_request",
@@ -177,6 +214,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "When an admin rejects one of your PPT requests.",
     defaults: { in_app: true, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_request",
@@ -186,6 +224,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Admin review notice when developers submit PPT requests.",
     defaults: { in_app: true, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   // ── PPT tasks & fairness (configurable) ──────────────────────────────────
   {
@@ -197,6 +236,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     // Addressed to one person and expects action — the case a DM is for.
     defaults: { in_app: true, email: true, discord: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -208,6 +248,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     // Broadcast, so a DM would be noise by default — but opt-in is available.
     defaults: { in_app: true, email: false, discord: false },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -219,6 +260,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     // The whole point is that it reaches a person directly.
     defaults: { in_app: true, email: true, discord: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -229,6 +271,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A quiet in-app heads-up when a claimed task has been idle for a day — well before the formal reminder.",
     defaults: { in_app: true, email: false },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -239,6 +282,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "When an assigned PPT has no visible activity for the warning window.",
     defaults: { in_app: true, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -249,6 +293,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "When DevHub releases a stale assignment back to the board (you can reclaim it).",
     defaults: { in_app: true, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -259,6 +304,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "When a task you marked blocked auto-resumes its activity timer.",
     defaults: { in_app: true, email: false },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -269,6 +315,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "When another developer takes over a task assigned to you, with their reason.",
     defaults: { in_app: true, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -279,6 +326,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A weekly email with open PPTs worth claiming — only sent when you have no active tasks.",
     defaults: { in_app: false, email: true },
     configurable: true,
+    emailRetry: "sweep",
   },
   {
     domain: "ppt_task",
@@ -289,6 +337,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "Admin notice when a developer marks the same task blocked multiple times and may need help.",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── Welcome pack (always sent) ───────────────────────────────────────────
   {
@@ -299,6 +348,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your order was approved and is being prepared.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "welcome_pack",
@@ -308,6 +358,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your order is on its way, with tracking.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "welcome_pack",
@@ -317,6 +368,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your order arrived.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "welcome_pack",
@@ -326,6 +378,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your order hit a delay, with the reason.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "welcome_pack",
@@ -335,6 +388,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "An admin rejected your order, with the reason.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "welcome_pack",
@@ -344,6 +398,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "Your order was cancelled.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "welcome_pack",
@@ -353,6 +408,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description: "An admin cancelled your order, with the reason.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── Payout campaigns (always sent — this is money on the table) ──────────
   {
@@ -364,6 +420,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A limited-time campaign is paying more than the normal rate — what it boosts, and when it ends.",
     defaults: { in_app: true, email: true },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "campaign",
@@ -374,6 +431,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A reminder roughly two days before a campaign ends, so nothing you are close to finishing misses it.",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   {
     domain: "campaign",
@@ -384,6 +442,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "A wrap-up of what a finished campaign paid you on top of the normal rate.",
     defaults: { in_app: true, email: false },
     configurable: false,
+    emailRetry: "sweep",
   },
   // ── Recognition (in-app only, deliberately quiet) ────────────────────────
   {
@@ -395,6 +454,7 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
       "In-app celebrations for milestones like your first proof, first payout, and completion streaks. Never emailed.",
     defaults: { in_app: true, email: false },
     configurable: true,
+    emailRetry: "sweep",
   },
 ];
 

@@ -21,6 +21,40 @@ test("every presentation override has a catalog entry (no drift)", () => {
   );
 });
 
+test("every entry declares who may retry its email", () => {
+  // Required, not defaulted: a new notification whose email carries an
+  // attachment must be forced to say so. Defaulting to "sweep" would let the
+  // generic reconciler send a degraded copy and stamp it SENT, which then
+  // hides the loss from the reconciler that could have repaired it.
+  const missing = NOTIFICATION_CATALOG.filter(
+    (entry) => entry.emailRetry !== "sweep" && entry.emailRetry !== "owned",
+  ).map((entry) => `${entry.domain}:${entry.type}`);
+
+  assert.deepEqual(missing, []);
+});
+
+test("an owned entry has an email channel to own", () => {
+  // "owned" means "the generic sweep must not touch this one" — on an entry
+  // that never sends email it would be a no-op hiding a mistake.
+  const pointless = NOTIFICATION_CATALOG.filter(
+    (entry) => entry.emailRetry === "owned" && !entry.defaults.email,
+  ).map((entry) => `${entry.domain}:${entry.type}`);
+
+  assert.deepEqual(pointless, []);
+});
+
+test("payment:PROCESSED stays owned by its own sweep", () => {
+  // Its email carries the PDF slip, which defaultEmail() rebuilds only from
+  // the options passed at emit time. If this ever flips to "sweep", the
+  // generic reconciler will send payment confirmations with no slip and
+  // permanently blind sweepMissingPaymentConfirmations.
+  const entry = NOTIFICATION_CATALOG.find(
+    (e) => e.domain === "payment" && e.type === "PROCESSED",
+  );
+  assert.ok(entry, "payment:PROCESSED missing from the catalog");
+  assert.equal(entry.emailRetry, "owned");
+});
+
 test("catalog entries are unique per domain:type", () => {
   const seen = new Set<string>();
   for (const entry of NOTIFICATION_CATALOG) {

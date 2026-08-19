@@ -29,6 +29,11 @@ import {
 import ConfirmModal from "@/components/ConfirmModal";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
+  duitNowIdTypeLabel,
+  formatDuitNowIdForBank,
+  formatDuitNowIdForDisplay,
+} from "@/lib/duitnow-id";
+import {
   getBankDisplayName,
   getPaymentMethodLabel,
   isBillplzSupported,
@@ -48,6 +53,10 @@ import {
   rejectTransaction,
   resendPaymentConfirmation,
 } from "./actions";
+import {
+  confirmDuitNowIdResolved,
+  markDuitNowIdUnreachable,
+} from "./duitnow-actions";
 import { sendPaymentInfoNotice } from "./email-actions";
 import ProofReviewPanel from "./ProofReviewPanel";
 import type { PayoutPaymentDetails, PayoutTransaction } from "./types";
@@ -109,9 +118,53 @@ function renderPaymentDetails(
     );
   }
   if (paymentMethod === "DUITNOW") {
-    if (tx.duitNowId) {
-      return <>ID: {tx.duitNowId}</>;
+    // Precedence matches classifyPayoutRoute, which checks the bank triple
+    // BEFORE the proxy. This branch used to check the proxy first, so a
+    // developer with both was shown "ID: 0123456789" while Billplz was
+    // actually paid their bank account. Whichever we pay is what we show.
+    const hasBankTriple = Boolean(
+      tx.bankName && tx.bankAccountNumber && tx.bankAccountName,
+    );
+
+    if (hasBankTriple) {
+      return (
+        <>
+          <div>Bank: {getBankDisplayName(tx.bankName)}</div>
+          <div>Acct: {tx.bankAccountNumber}</div>
+          <div>Name: {tx.bankAccountName}</div>
+          {tx.duitNowId && (
+            <div style={{ color: "var(--mantine-color-dimmed)" }}>
+              (DuitNow ID {tx.duitNowId} on file — not used, the bank account
+              takes precedence)
+            </div>
+          )}
+        </>
+      );
     }
+
+    if (tx.duitNowId) {
+      return (
+        <>
+          <div>
+            Transfer via:{" "}
+            {tx.duitNowIdType ? (
+              duitNowIdTypeLabel(tx.duitNowIdType)
+            ) : (
+              <span style={{ color: "var(--mantine-color-red-6)" }}>
+                Type not recorded — ask the developer to re-save it
+              </span>
+            )}
+          </div>
+          <div>
+            ID:{" "}
+            {tx.duitNowIdType
+              ? formatDuitNowIdForDisplay(tx.duitNowIdType, tx.duitNowId)
+              : tx.duitNowId}
+          </div>
+        </>
+      );
+    }
+
     return (
       <>
         <div>
@@ -143,6 +196,9 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const [billplzLoading, setBillplzLoading] = useState(false);
   const [xenditLoading, setXenditLoading] = useState(false);
   const [robloxLoading, setRobloxLoading] = useState(false);
+  const [lookupBusy, setLookupBusy] = useState<
+    "resolved" | "NOT_FOUND" | "NAME_MISMATCH" | null
+  >(null);
   const [rejecting, setRejecting] = useState(false);
   const [error, setError] = useState("");
   const [
@@ -199,6 +255,54 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     tx.paymentMethod === "ROBUX" &&
     !!tx.paymentDetails?.robloxId &&
     (!tx.payout || tx.payout.status === "FAILED");
+
+  // A proxy payout: a DuitNow ID with no bank triple. This is the only shape
+  // that goes through a manual bank lookup, so it is the only one worth asking
+  // an admin to record an answer for.
+  const isDuitNowProxy =
+    tx.paymentMethod === "DUITNOW" &&
+    !!tx.paymentDetails?.duitNowId &&
+    !tx.paymentDetails?.bankAccountNumber;
+
+  // What the last bank lookup said, if anything. Advisory: it never gates the
+  // payout buttons — the backfill leaves every pre-existing proxy UNCONFIRMED,
+  // so gating on it would freeze every in-flight proxy payout on deploy day.
+  const duitNowStatus = tx.paymentDetails?.duitNowIdStatus ?? "UNCONFIRMED";
+  const duitNowCheckedAt = tx.paymentDetails?.duitNowIdCheckedAt;
+  const duitNowStatusColor =
+    duitNowStatus === "UNREACHABLE"
+      ? "red"
+      : duitNowStatus === "RESOLVED"
+        ? "teal"
+        : "dimmed";
+  const duitNowStatusLabel =
+    duitNowStatus === "UNREACHABLE"
+      ? `Bank could not reach this ID${duitNowCheckedAt ? ` — checked ${new Date(duitNowCheckedAt).toLocaleDateString("en-MY")}` : ""}`
+      : duitNowStatus === "RESOLVED"
+        ? `Bank found this ID${duitNowCheckedAt ? ` — checked ${new Date(duitNowCheckedAt).toLocaleDateString("en-MY")}` : ""}`
+        : duitNowStatus === "CONFIRMED"
+          ? "Developer says it is registered; no bank lookup recorded yet"
+          : "Nobody has confirmed this ID is registered";
+
+  async function recordLookup(
+    outcome: "resolved" | "NOT_FOUND" | "NAME_MISMATCH",
+  ) {
+    setLookupBusy(outcome);
+    const res =
+      outcome === "resolved"
+        ? await confirmDuitNowIdResolved(tx.userId)
+        : await markDuitNowIdUnreachable(tx.userId, outcome);
+    setLookupBusy(null);
+    if (res?.error) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(
+      outcome === "resolved"
+        ? "Recorded — the bank can reach this ID."
+        : "Recorded, and the developer has been told what to fix.",
+    );
+  }
 
   const payoutProcessing = tx.payout?.status === "PROCESSING";
   const payoutFailed = tx.payout?.status === "FAILED";
@@ -523,6 +627,11 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
               <Text size="sm" c="dimmed" ff="monospace" component="div">
                 {renderPaymentDetails(tx.paymentMethod, tx.paymentDetails)}
               </Text>
+              {isDuitNowProxy && tx.paymentDetails && (
+                <Text size="xs" c={duitNowStatusColor} mt={4}>
+                  {duitNowStatusLabel}
+                </Text>
+              )}
             </Box>
 
             {tx.payout && (
@@ -574,6 +683,23 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                       : "Bank Transfer Fields"}
                 </Text>
                 <Stack gap={6}>
+                  {/* The proxy itself, in the form the bank field takes —
+                      PayNet specifies MBNO as "+60…" and bank inputs reject
+                      the separators humans read by. Until now none of the
+                      payment values had a copy button at all: the admin
+                      hand-selected them out of a monospace <Text>. */}
+                  {tx.paymentMethod === "DUITNOW" &&
+                    tx.paymentDetails?.duitNowId &&
+                    tx.paymentDetails.duitNowIdType &&
+                    !tx.paymentDetails.bankAccountNumber && (
+                      <CopyField
+                        label={`DuitNow ${duitNowIdTypeLabel(tx.paymentDetails.duitNowIdType)}`}
+                        value={formatDuitNowIdForBank(
+                          tx.paymentDetails.duitNowIdType,
+                          tx.paymentDetails.duitNowId,
+                        )}
+                      />
+                    )}
                   <CopyField
                     label="Recipient's Reference"
                     value={
@@ -712,6 +838,46 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                 >
                   Notify: Payment Issue
                 </Button>
+                {/* The bank lookup an admin performs anyway is the only
+                    ground truth about whether a proxy is registered — no
+                    public proxy-resolution API exists for a non-bank. These
+                    record its answer instead of discarding it. */}
+                {isDuitNowProxy && (
+                  <Stack gap={4} mt="sm">
+                    <Text size="xs" c="dimmed">
+                      Did the bank find this DuitNow ID?
+                    </Text>
+                    <Group grow gap="xs">
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="teal"
+                        loading={lookupBusy === "resolved"}
+                        onClick={() => recordLookup("resolved")}
+                      >
+                        Found it
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="orange"
+                        loading={lookupBusy === "NAME_MISMATCH"}
+                        onClick={() => recordLookup("NAME_MISMATCH")}
+                      >
+                        Wrong name
+                      </Button>
+                      <Button
+                        size="xs"
+                        variant="light"
+                        color="red"
+                        loading={lookupBusy === "NOT_FOUND"}
+                        onClick={() => recordLookup("NOT_FOUND")}
+                      >
+                        Not found
+                      </Button>
+                    </Group>
+                  </Stack>
+                )}
               </>
             )}
             {isPaid && (

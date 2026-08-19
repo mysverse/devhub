@@ -354,6 +354,10 @@ function buildPayoutTransaction(
       ? {
           paypalEmail: user.paypalEmail,
           duitNowId: user.duitNowId,
+          duitNowIdType: user.duitNowIdType,
+          duitNowIdStatus: user.duitNowIdStatus,
+          duitNowIdCheckedAt: user.duitNowIdCheckedAt?.toISOString() ?? null,
+          duitNowIdIssue: user.duitNowIdIssue,
           bankName: user.bankName,
           bankAccountNumber: user.bankAccountNumber,
           bankAccountName: user.bankAccountName,

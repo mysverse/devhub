@@ -134,6 +134,20 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
   },
   {
     domain: "payment",
+    type: "DETAILS_UNREACHABLE",
+    audience: "developer",
+    title: "We could not find your DuitNow ID",
+    description:
+      "An admin searched for your DuitNow ID at our bank and nothing came up — usually it was never registered. Your payout waits until it is fixed.",
+    defaults: { in_app: true, email: true },
+    configurable: false,
+    // Everything the email needs is on the Notification row, so the generic
+    // reconciler may re-send it. That matters more here than almost anywhere:
+    // this is the message that tells someone why they have not been paid.
+    emailRetry: "sweep",
+  },
+  {
+    domain: "payment",
     type: "REJECTED",
     audience: "developer",
     title: "Payment rejected",

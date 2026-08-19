@@ -114,3 +114,17 @@ test("a mixed batch keeps only what is eligible", () => {
     ["keep"],
   );
 });
+
+/**
+ * The "we cannot reach your payment details" message is the one that explains
+ * why someone has not been paid. `admin_notice:PAYMENT_INFO` — the path that
+ * carried it before — has no catalog entry, so isSweepableNotification treats
+ * it as unknown and the email is never re-sent when it fails. The replacement
+ * must be catalogued and sweepable.
+ */
+test("the unreachable-payment-details email can be re-sent after a failure", () => {
+  assert.equal(isSweepableNotification("payment", "DETAILS_UNREACHABLE"), true);
+
+  // Pinning the bug it replaces, so removing the catalog entry fails here.
+  assert.equal(isSweepableNotification("admin_notice", "PAYMENT_INFO"), false);
+});

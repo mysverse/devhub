@@ -33,6 +33,12 @@ export const PROFILE_PAYOUT_SELECT = {
   paymentMethod: true,
   paypalEmail: true,
   duitNowId: true,
+  // The type is as load-bearing as the value: the bank asks which kind of
+  // proxy this is before it asks for the digits, and the digits cannot say.
+  duitNowIdType: true,
+  duitNowIdStatus: true,
+  duitNowIdCheckedAt: true,
+  duitNowIdIssue: true,
   bankName: true,
   bankAccountNumber: true,
   bankAccountName: true,

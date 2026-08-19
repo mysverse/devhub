@@ -1,3 +1,5 @@
+import type { DuitNowIdType } from "@/lib/duitnow-id";
+
 /**
  * The payment rails an admin needs to actually send money, plus the address to
  * contact the developer about a problem. Nested rather than flattened onto
@@ -8,6 +10,11 @@
 export type PayoutPaymentDetails = {
   paypalEmail: string | null;
   duitNowId: string | null;
+  /** Required, not optional — see the note above about silent absence. */
+  duitNowIdType: DuitNowIdType | null;
+  duitNowIdStatus: string;
+  duitNowIdCheckedAt: string | null;
+  duitNowIdIssue: string | null;
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;

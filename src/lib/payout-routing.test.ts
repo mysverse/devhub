@@ -90,3 +90,67 @@ test("missing manual details cannot be manually confirmed", () => {
   assert.equal(route.status, "missing_details");
   assert.equal(canConfirmManualPayment(route), false);
 });
+
+/**
+ * A DuitNow proxy ID is always the manual path. There is no provider that
+ * disburses to a proxy — Billplz takes bank_code + account number, and
+ * Xendit's Malaysian payouts are bank accounts too.
+ */
+test("a DuitNow proxy ID routes to manual confirmation", () => {
+  const route = classifyPayoutRoute({
+    transactionStatus: "PENDING",
+    currency: "MYR",
+    paymentMethod: "DUITNOW",
+    duitNowId: "+60123456789",
+  });
+  assert.equal(route.status, "manual_eligible");
+  assert.equal(canConfirmManualPayment(route), true);
+});
+
+/**
+ * Bank details win over a proxy when a developer has both. PayoutCard used to
+ * render the opposite precedence, so an admin was told to pay a proxy while
+ * Billplz was actually paid the bank account.
+ */
+test("a bank triple takes precedence over a proxy ID on the same profile", () => {
+  const route = classifyPayoutRoute({
+    transactionStatus: "PENDING",
+    currency: "MYR",
+    paymentMethod: "DUITNOW",
+    duitNowId: "+60123456789",
+    bankName: "MBBEMYKL",
+    bankAccountNumber: "512345678901",
+    bankAccountName: "Nurul Aina binti Ahmad",
+  });
+  assert.equal(route.status, "provider_eligible");
+  assert.equal(route.provider, "BILLPLZ");
+});
+
+/**
+ * duitNowIdStatus is display-only and must never reach this function. The
+ * migration leaves every pre-existing proxy user UNCONFIRMED by construction,
+ * so gating a payout on it would make every in-flight proxy payout
+ * unpayable on the day it ships. If someone adds it to PayoutRouteInput, this
+ * fails.
+ */
+test("the DuitNow lookup status cannot influence routing", () => {
+  const base = {
+    transactionStatus: "PENDING" as const,
+    currency: "MYR",
+    paymentMethod: "DUITNOW",
+    duitNowId: "+60123456789",
+  };
+  const baseline = classifyPayoutRoute(base);
+  for (const duitNowIdStatus of [
+    "UNCONFIRMED",
+    "CONFIRMED",
+    "RESOLVED",
+    "UNREACHABLE",
+  ]) {
+    assert.deepEqual(
+      classifyPayoutRoute({ ...base, duitNowIdStatus } as typeof base),
+      baseline,
+      duitNowIdStatus,
+    );
+  }
+});

@@ -172,6 +172,31 @@ test("flags payment rails named in a client component", () => {
   );
 });
 
+/**
+ * `\bduitNowId\b` silently missed every column added beside duitNowId: the
+ * trailing word boundary fails against a following word character, so
+ * duitNowIdType and its siblings could be rendered in a client component with
+ * this guard staying green.
+ */
+test("flags the columns that sit beside duitNowId, not just duitNowId", () => {
+  for (const field of [
+    "duitNowId",
+    "duitNowIdType",
+    "duitNowIdStatus",
+    "duitNowIdCheckedAt",
+    "duitNowIdIssue",
+  ]) {
+    assert.deepEqual(
+      rules(
+        "src/app/dashboard/SomeCard.tsx",
+        `"use client";\nconst x = profile.${field};`,
+      ),
+      ["pii/bank-field-in-client-component"],
+      field,
+    );
+  }
+});
+
 test("an inline pragma suppresses, but only with a reason", () => {
   const withReason = `// pii-allow: pii/display-name-fallback — signature line of a legal agreement\nLEGAL_NAME: profile.legalName ?? "____",`;
   assert.deepEqual(checkPiiRules(ADMIN_PAGE, withReason), []);

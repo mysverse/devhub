@@ -46,8 +46,31 @@ async function SettingsContent() {
 
   const [userProfile, linkedAccounts, latestKyc, notificationPreferences] =
     await Promise.all([
+      // Explicit select, not the whole row: this object is handed straight to
+      // a client component, so every column added to UserProfile would
+      // otherwise start shipping to the browser on its own — including
+      // admin-facing state about the developer.
       prisma.userProfile.findUnique({
         where: { id: userId },
+        select: {
+          preferredName: true,
+          legalName: true,
+          shippingAddress: true,
+          linearEmail: true,
+          robloxId: true,
+          role: true,
+          developerRank: true,
+          paymentMethod: true,
+          paypalEmail: true,
+          duitNowId: true,
+          duitNowIdType: true,
+          duitNowIdStatus: true,
+          bankName: true,
+          bankAccountNumber: true,
+          bankAccountName: true,
+          robuxUsername: true,
+          autoPayoutEnabled: true,
+        },
       }),
       prisma.account.findMany({
         where: { userId },

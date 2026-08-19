@@ -48,6 +48,11 @@ export type ConfirmModalProps = {
   cancelLabel?: string;
   /** True while the confirm action is in flight. Disables both buttons. */
   loading?: boolean;
+  /**
+   * Blocks confirmation while something in `extra` is still incomplete — an
+   * unticked acknowledgement, an empty required reason. Cancel stays live.
+   */
+  confirmDisabled?: boolean;
 };
 
 /**
@@ -70,6 +75,7 @@ export default function ConfirmModal({
   confirmIcon,
   cancelLabel = "Cancel",
   loading = false,
+  confirmDisabled = false,
 }: ConfirmModalProps) {
   const preset = TONE_PRESETS[tone];
 
@@ -108,6 +114,7 @@ export default function ConfirmModal({
           <Button
             color={confirmColor ?? preset.color}
             loading={loading}
+            disabled={confirmDisabled}
             onClick={onConfirm}
             leftSection={confirmIcon}
           >

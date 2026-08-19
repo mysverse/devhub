@@ -3,7 +3,6 @@
 import {
   ActionIcon,
   Alert,
-  Badge,
   Box,
   Button,
   Card,
@@ -11,8 +10,6 @@ import {
   Container,
   Group,
   Modal,
-  Radio,
-  RadioGroup,
   ScrollArea,
   Select,
   Stack,
@@ -52,17 +49,21 @@ import {
   SPRING,
   StepTransition,
 } from "@/components/animations";
+import DuitNowConfirmModal from "@/components/DuitNowConfirmModal";
+import DuitNowFields from "@/components/DuitNowFields";
 import { oauth2 } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 import { formatAmount, getRateMultiplier } from "@/lib/currency";
+import {
+  type DuitNowFieldName,
+  type DuitNowValue,
+  duitNowFieldErrors,
+  needsDuitNowConfirmation,
+} from "@/lib/duitnow-form";
 import type {
   IntegrationAvailability,
   SetupIntegrationAvailability,
 } from "@/lib/integration-availability";
-import {
-  DUITNOW_INSTITUTIONS,
-  isBillplzSupported,
-} from "@/lib/payment-validation";
 import {
   DEFAULT_PAYOUT_POLICY,
   type PayoutPolicy,
@@ -133,12 +134,26 @@ export default function OnboardingFlow({
   const [paymentMethod, setPaymentMethod] = useState<
     "PAYPAL" | "ROBUX" | "DUITNOW" | "BANK_TRANSFER"
   >("PAYPAL");
-  const [duitNowType, setDuitNowType] = useState<"ID" | "BANK">("ID");
   const [paypalEmail, setPaypalEmail] = useState("");
-  const [duitNowId, setDuitNowId] = useState("");
   const [bankName, setBankName] = useState("");
   const [bankAccountNumber, setBankAccountNumber] = useState("");
   const [bankAccountName, setBankAccountName] = useState("");
+  // DuitNow details go through the same component and the same rules as HR
+  // Settings. This step used to check only that the ID was non-empty, which is
+  // why unusable IDs were entered here and only discovered at payout.
+  const [duitNow, setDuitNow] = useState<DuitNowValue>({
+    mode: "BANK",
+    idType: null,
+    duitNowId: "",
+    bankName: null,
+    bankAccountNumber: "",
+    bankAccountName: "",
+  });
+  const [duitNowTouched, setDuitNowTouched] = useState<
+    Partial<Record<DuitNowFieldName, boolean>>
+  >({});
+  const [duitNowConfirmOpen, setDuitNowConfirmOpen] = useState(false);
+  const duitNowErrors = duitNowFieldErrors(duitNow);
 
   const discordAvailability = integrationAvailability.discord;
   const robloxAvailability = integrationAvailability.roblox;
@@ -199,7 +214,12 @@ export default function OnboardingFlow({
     setActive((a) => Math.max(a - 1, 0));
   }
 
-  async function handleSubmit() {
+  /**
+   * `confirmedNow` is passed by the confirmation modal rather than read from
+   * state: the modal calls straight back into this, and a setState would not
+   * have landed yet.
+   */
+  async function handleSubmit(confirmedNow = false) {
     if (paymentMethod === "PAYPAL" && !paypalEmail.trim()) {
       toast.error("Please enter your PayPal email.");
       return;
@@ -217,17 +237,35 @@ export default function OnboardingFlow({
       );
       return;
     }
-    if (
-      paymentMethod === "DUITNOW" &&
-      duitNowType === "ID" &&
-      !duitNowId.trim()
-    ) {
-      toast.error("Please enter your DuitNow ID.");
-      return;
+    if (paymentMethod === "DUITNOW") {
+      // The same rules HR Settings applies. This step previously checked only
+      // that the field was non-empty, so an unusable ID was accepted here and
+      // discovered at payout.
+      const firstError = Object.values(duitNowFieldErrors(duitNow))[0];
+      if (firstError) {
+        setDuitNowTouched({
+          duitNowIdType: true,
+          duitNowId: true,
+          bankName: true,
+          bankAccountNumber: true,
+          bankAccountName: true,
+        });
+        toast.error(firstError);
+        return;
+      }
+      if (
+        !confirmedNow &&
+        needsDuitNowConfirmation(duitNow, {
+          duitNowId: null,
+          duitNowIdType: null,
+          duitNowIdStatus: "UNCONFIRMED",
+        })
+      ) {
+        setDuitNowConfirmOpen(true);
+        return;
+      }
     }
-    const needsBankDetails =
-      paymentMethod === "BANK_TRANSFER" ||
-      (paymentMethod === "DUITNOW" && duitNowType === "BANK");
+    const needsBankDetails = paymentMethod === "BANK_TRANSFER";
     if (
       needsBankDetails &&
       (!bankName.trim() || !bankAccountNumber.trim() || !bankAccountName.trim())
@@ -247,21 +285,43 @@ export default function OnboardingFlow({
       paypalEmail:
         paymentMethod === "PAYPAL" ? paypalEmail.trim() || null : null,
       duitNowId:
-        paymentMethod === "DUITNOW" && duitNowType === "ID"
-          ? duitNowId.trim() || null
+        paymentMethod === "DUITNOW" && duitNow.mode === "ID"
+          ? duitNow.duitNowId.trim() || null
           : null,
       // Sent for the first time here. The server has declared duitNowType in
       // its schema since onboarding was written, but this payload never
       // carried it, so the server has always had to infer the branch from
       // which fields happen to be populated.
-      duitNowType: paymentMethod === "DUITNOW" ? duitNowType : null,
-      duitNowIdType: null,
-      duitNowConfirmed: false,
-      bankName: needsBankDetails ? bankName.trim() || null : null,
-      bankAccountNumber: needsBankDetails
-        ? bankAccountNumber.trim() || null
-        : null,
-      bankAccountName: needsBankDetails ? bankAccountName.trim() || null : null,
+      duitNowType: paymentMethod === "DUITNOW" ? duitNow.mode : null,
+      duitNowIdType:
+        paymentMethod === "DUITNOW" && duitNow.mode === "ID"
+          ? duitNow.idType
+          : null,
+      duitNowConfirmed: confirmedNow,
+      bankName:
+        paymentMethod === "DUITNOW"
+          ? duitNow.mode === "BANK"
+            ? duitNow.bankName
+            : null
+          : needsBankDetails
+            ? bankName.trim() || null
+            : null,
+      bankAccountNumber:
+        paymentMethod === "DUITNOW"
+          ? duitNow.mode === "BANK"
+            ? duitNow.bankAccountNumber.trim() || null
+            : null
+          : needsBankDetails
+            ? bankAccountNumber.trim() || null
+            : null,
+      bankAccountName:
+        paymentMethod === "DUITNOW"
+          ? duitNow.mode === "BANK"
+            ? duitNow.bankAccountName.trim() || null
+            : null
+          : needsBankDetails
+            ? bankAccountName.trim() || null
+            : null,
       agreedDocuments: Array.from(agreedDocuments),
       coiEntries: coiEntries.length > 0 ? coiEntries : undefined,
     });
@@ -791,86 +851,17 @@ export default function OnboardingFlow({
                 ))}
 
               {paymentMethod === "DUITNOW" && (
-                <Stack gap="sm">
-                  <RadioGroup
-                    label="DuitNow Type"
-                    value={duitNowType}
-                    onChange={(val) => setDuitNowType(val as "ID" | "BANK")}
-                  >
-                    <Group mt="xs">
-                      <Radio value="ID" label="Phone / NRIC ID" />
-                      <Radio value="BANK" label="Bank Account" />
-                    </Group>
-                  </RadioGroup>
-
-                  {duitNowType === "ID" ? (
-                    <TextInput
-                      label="DuitNow ID (Phone / NRIC)"
-                      placeholder="Enter DuitNow ID"
-                      value={duitNowId}
-                      onChange={(e) => setDuitNowId(e.target.value)}
-                      required
-                    />
-                  ) : (
-                    <Box pl="md" style={cardStyle}>
-                      <Stack gap="sm">
-                        <Select
-                          label="Bank / eWallet"
-                          data={DUITNOW_INSTITUTIONS}
-                          value={bankName || null}
-                          onChange={(val) => setBankName(val || "")}
-                          placeholder="Search for your bank or eWallet"
-                          searchable
-                          required
-                          renderOption={({ option }) => (
-                            <Group
-                              gap="xs"
-                              justify="space-between"
-                              wrap="nowrap"
-                              w="100%"
-                            >
-                              <Text size="sm">{option.label}</Text>
-                              {isBillplzSupported(option.value) && (
-                                <Badge
-                                  size="xs"
-                                  variant="light"
-                                  color="teal"
-                                  style={{ flexShrink: 0 }}
-                                >
-                                  Auto payout
-                                </Badge>
-                              )}
-                            </Group>
-                          )}
-                        />
-                        {bankName && (
-                          <Text
-                            size="xs"
-                            c={isBillplzSupported(bankName) ? "teal" : "dimmed"}
-                          >
-                            {isBillplzSupported(bankName)
-                              ? "Automated payouts supported via Billplz"
-                              : "Manual payouts only"}
-                          </Text>
-                        )}
-                        <TextInput
-                          label="Account Number"
-                          placeholder="1234567890"
-                          value={bankAccountNumber}
-                          onChange={(e) => setBankAccountNumber(e.target.value)}
-                          required
-                        />
-                        <TextInput
-                          label="Account Holder Name"
-                          placeholder={legalName || "John Doe"}
-                          value={bankAccountName}
-                          onChange={(e) => setBankAccountName(e.target.value)}
-                          required
-                        />
-                      </Stack>
-                    </Box>
-                  )}
-                </Stack>
+                <DuitNowFields
+                  value={duitNow}
+                  onChange={(patch) =>
+                    setDuitNow((prev) => ({ ...prev, ...patch }))
+                  }
+                  errors={duitNowErrors}
+                  touched={duitNowTouched}
+                  onBlur={(field) =>
+                    setDuitNowTouched((prev) => ({ ...prev, [field]: true }))
+                  }
+                />
               )}
 
               {paymentMethod === "BANK_TRANSFER" && (
@@ -923,7 +914,7 @@ export default function OnboardingFlow({
           </Button>
         ) : (
           <Button
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             loading={loading}
             leftSection={<PartyPopper size={16} />}
             color="blue"
@@ -932,6 +923,21 @@ export default function OnboardingFlow({
           </Button>
         )}
       </Group>
+
+      {duitNow.idType && (
+        <DuitNowConfirmModal
+          opened={duitNowConfirmOpen}
+          onClose={() => setDuitNowConfirmOpen(false)}
+          onConfirm={() => {
+            setDuitNowConfirmOpen(false);
+            void handleSubmit(true);
+          }}
+          idType={duitNow.idType}
+          duitNowId={duitNow.duitNowId}
+          legalName={legalName.trim() || null}
+          loading={loading}
+        />
+      )}
     </Container>
   );
 }

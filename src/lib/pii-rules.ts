@@ -68,10 +68,27 @@ export const PII_ALLOWLIST: PiiAllowEntry[] = [
     reason:
       "Admin payout UI. Pending rows only — settled rows get a null paymentDetails (see PayoutTransaction).",
   },
+  {
+    rule: "pii/bank-field-in-client-component",
+    file: "src/components/DuitNowFields.tsx",
+    reason:
+      "The shared payment-details editor. The user editing their own rails — it renders only what its host passes in, and both hosts pass the signed-in user's own profile.",
+  },
+  {
+    rule: "pii/bank-field-in-client-component",
+    file: "src/components/DuitNowConfirmModal.tsx",
+    reason:
+      "Restates the user's own DuitNow ID back to them before saving it. Displays, never fetches.",
+  },
 ];
 
+// `duitNowId\w*` on purpose: `\bduitNowId\b` does not match duitNowIdType,
+// duitNowIdStatus, duitNowIdCheckedAt or duitNowIdIssue, because the trailing
+// word boundary fails against a following word character. Those columns carry
+// where and whether someone can be paid, and one of them was very nearly a
+// bank-returned legal name.
 const BANK_FIELDS =
-  /\b(bankAccountNumber|bankAccountName|duitNowId|paypalEmail)\b/;
+  /\b(bankAccountNumber|bankAccountName|duitNowId\w*|paypalEmail)\b/;
 
 /**
  * Two details keep this rule quiet on legitimate code:

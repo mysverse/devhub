@@ -2,32 +2,31 @@
 
 import {
   Alert,
-  Badge,
-  Box,
   Button,
-  Group,
-  Radio,
-  RadioGroup,
   Select,
   Stack,
-  Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { StepTransition } from "@/components/animations";
+import DuitNowConfirmModal from "@/components/DuitNowConfirmModal";
+import DuitNowFields from "@/components/DuitNowFields";
 import FormSection from "@/components/FormSection";
+import {
+  type DuitNowFieldName,
+  type DuitNowValue,
+  duitNowFieldErrors,
+  initialDuitNowMode,
+  needsDuitNowConfirmation,
+} from "@/lib/duitnow-form";
+import type { DuitNowIdType } from "@/lib/duitnow-id";
 import type { IntegrationAvailability } from "@/lib/integration-availability";
 import {
-  DUITNOW_INSTITUTIONS,
-  isBillplzSupported,
-  normalizeMalaysianPhone,
   validateBankAccountName,
   validateBankAccountNumber,
   validateBankName,
-  validateDuitNowBankName,
-  validateDuitNowId,
 } from "@/lib/payment-validation";
 import { updateProfileSettings } from "./actions";
 
@@ -38,6 +37,8 @@ type ProfileProps = {
     paymentMethod: string;
     paypalEmail: string | null;
     duitNowId: string | null;
+    duitNowIdType: DuitNowIdType | null;
+    duitNowIdStatus: string;
     bankName: string | null;
     bankAccountNumber: string | null;
     bankAccountName: string | null;
@@ -55,15 +56,40 @@ export default function SettingsForm({
 }: ProfileProps) {
   const [loading, setLoading] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState(profile.paymentMethod);
-  const [duitNowType, setDuitNowType] = useState<"ID" | "BANK">(
-    profile.bankAccountNumber || profile.paymentMethod === "BANK_TRANSFER"
-      ? "BANK"
-      : "ID",
-  );
-  const [duitNowBankName, setDuitNowBankName] = useState<string | null>(
-    profile.paymentMethod === "DUITNOW" ? profile.bankName : null,
-  );
+  const [duitNow, setDuitNow] = useState<DuitNowValue>({
+    mode: initialDuitNowMode(profile),
+    idType: profile.duitNowIdType,
+    duitNowId: profile.duitNowId ?? "",
+    bankName: profile.paymentMethod === "DUITNOW" ? profile.bankName : null,
+    bankAccountNumber:
+      profile.paymentMethod === "DUITNOW"
+        ? (profile.bankAccountNumber ?? "")
+        : "",
+    bankAccountName:
+      profile.paymentMethod === "DUITNOW"
+        ? (profile.bankAccountName ?? "")
+        : "",
+  });
+  const [duitNowTouched, setDuitNowTouched] = useState<
+    Partial<Record<DuitNowFieldName, boolean>>
+  >({});
   const [errors, setErrors] = useState<Record<string, string | null>>({});
+
+  // The confirmation lives outside the <form> (Mantine portals its modal to
+  // document.body), so it cannot submit the form itself. It records consent,
+  // and an effect re-submits through the form so every other field — display
+  // name, legal name, shipping address — is still in the FormData. Building a
+  // partial FormData by hand would null them: the action writes them
+  // unconditionally.
+  const formRef = useRef<HTMLFormElement>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [duitNowConfirmed, setDuitNowConfirmed] = useState(false);
+
+  useEffect(() => {
+    if (duitNowConfirmed) formRef.current?.requestSubmit();
+  }, [duitNowConfirmed]);
+
+  const duitNowErrors = duitNowFieldErrors(duitNow);
 
   function setFieldError(field: string, error: string | null) {
     setErrors((prev) => ({ ...prev, [field]: error }));
@@ -95,19 +121,16 @@ export default function SettingsForm({
     }
 
     if (paymentMethod === "DUITNOW") {
-      if (duitNowType === "ID") {
-        newErrors.duitNowId = validateDuitNowId(
-          (formData.get("duitNowId") as string) || "",
-        );
-      } else {
-        newErrors.bankName = validateDuitNowBankName(duitNowBankName || "");
-        newErrors.bankAccountNumber = validateBankAccountNumber(
-          (formData.get("bankAccountNumber") as string) || "",
-        );
-        newErrors.bankAccountName = validateBankAccountName(
-          (formData.get("bankAccountName") as string) || "",
-        );
-      }
+      Object.assign(newErrors, duitNowFieldErrors(duitNow));
+      // Every DuitNow field is now controlled, so a blocked submit must reveal
+      // the errors that were being held back until each field was touched.
+      setDuitNowTouched({
+        duitNowIdType: true,
+        duitNowId: true,
+        bankName: true,
+        bankAccountNumber: true,
+        bankAccountName: true,
+      });
     }
 
     if (paymentMethod === "BANK_TRANSFER") {
@@ -129,6 +152,17 @@ export default function SettingsForm({
   async function action(formData: FormData) {
     if (!validateAllFields(formData)) return;
 
+    // A proxy ID that nobody has confirmed is registered is the failure this
+    // whole flow exists for, so it is asked about before the write, not after.
+    if (
+      paymentMethod === "DUITNOW" &&
+      !duitNowConfirmed &&
+      needsDuitNowConfirmation(duitNow, profile)
+    ) {
+      setConfirmOpen(true);
+      return;
+    }
+
     setLoading(true);
 
     const res = await updateProfileSettings(formData);
@@ -139,11 +173,13 @@ export default function SettingsForm({
       toast.success("Settings updated successfully!");
     }
 
+    // Consent covers the value that was just saved, not the next edit.
+    setDuitNowConfirmed(false);
     setLoading(false);
   }
 
   return (
-    <form action={action} style={{ maxWidth: "42rem" }}>
+    <form ref={formRef} action={action} style={{ maxWidth: "42rem" }}>
       <Stack gap="xl">
         <FormSection title="Personal Information">
           <TextInput
@@ -267,135 +303,21 @@ export default function SettingsForm({
               ))}
 
             {paymentMethod === "DUITNOW" && (
-              <Stack gap="sm">
-                <RadioGroup
-                  value={duitNowType}
-                  onChange={(val) => {
-                    setDuitNowType(val as "ID" | "BANK");
-                    clearErrors();
-                  }}
-                >
-                  <Group mt="xs">
-                    <Radio value="ID" label="Phone / NRIC ID" />
-                    <Radio value="BANK" label="Bank Account" />
-                  </Group>
-                </RadioGroup>
-                <input type="hidden" name="duitNowType" value={duitNowType} />
-
-                <StepTransition step={duitNowType}>
-                  {duitNowType === "ID" ? (
-                    <TextInput
-                      label="DuitNow ID (Phone / NRIC)"
-                      name="duitNowId"
-                      defaultValue={profile.duitNowId || ""}
-                      placeholder="e.g. +60123456789 or 990101141234"
-                      description="Malaysian phone number (+60XXXXXXXXX) or NRIC (12 digits)"
-                      required
-                      error={errors.duitNowId}
-                      onBlur={(e) => {
-                        const val = e.currentTarget.value;
-                        const normalized = normalizeMalaysianPhone(val);
-                        if (normalized !== val) {
-                          e.currentTarget.value = normalized;
-                        }
-                        setFieldError(
-                          "duitNowId",
-                          validateDuitNowId(normalized),
-                        );
-                      }}
-                    />
-                  ) : (
-                    <Box
-                      pl="md"
-                      style={{
-                        borderLeft:
-                          "2px solid var(--mantine-color-blue-filled)",
-                      }}
-                    >
-                      <Stack gap="sm">
-                        <Select
-                          label="Bank / eWallet"
-                          name="bankName"
-                          data={DUITNOW_INSTITUTIONS}
-                          value={duitNowBankName}
-                          onChange={(val) => {
-                            setDuitNowBankName(val);
-                            setFieldError("bankName", null);
-                          }}
-                          placeholder="Search for your bank or eWallet"
-                          searchable
-                          required
-                          error={errors.bankName}
-                          renderOption={({ option, checked: _checked }) => (
-                            <Group
-                              gap="xs"
-                              justify="space-between"
-                              wrap="nowrap"
-                              w="100%"
-                            >
-                              <Text size="sm">{option.label}</Text>
-                              {isBillplzSupported(option.value) && (
-                                <Badge
-                                  size="xs"
-                                  variant="light"
-                                  color="teal"
-                                  style={{ flexShrink: 0 }}
-                                >
-                                  Auto payout
-                                </Badge>
-                              )}
-                            </Group>
-                          )}
-                        />
-                        {duitNowBankName && (
-                          <Text
-                            size="xs"
-                            c={
-                              isBillplzSupported(duitNowBankName)
-                                ? "teal"
-                                : "dimmed"
-                            }
-                          >
-                            {isBillplzSupported(duitNowBankName)
-                              ? "Automated payouts supported via Billplz"
-                              : "Manual payouts only"}
-                          </Text>
-                        )}
-                        <TextInput
-                          label="Account Number"
-                          name="bankAccountNumber"
-                          defaultValue={profile.bankAccountNumber || ""}
-                          placeholder="1234567890"
-                          required
-                          error={errors.bankAccountNumber}
-                          onBlur={(e) =>
-                            setFieldError(
-                              "bankAccountNumber",
-                              validateBankAccountNumber(e.currentTarget.value),
-                            )
-                          }
-                        />
-                        <TextInput
-                          label="Account Holder Name"
-                          name="bankAccountName"
-                          defaultValue={
-                            profile.bankAccountName || profile.legalName || ""
-                          }
-                          placeholder="John Doe"
-                          required
-                          error={errors.bankAccountName}
-                          onBlur={(e) =>
-                            setFieldError(
-                              "bankAccountName",
-                              validateBankAccountName(e.currentTarget.value),
-                            )
-                          }
-                        />
-                      </Stack>
-                    </Box>
-                  )}
-                </StepTransition>
-              </Stack>
+              <DuitNowFields
+                value={duitNow}
+                onChange={(patch) => {
+                  setDuitNow((prev) => ({ ...prev, ...patch }));
+                  // Switching branch or identifier invalidates any consent
+                  // already given for the previous value.
+                  setDuitNowConfirmed(false);
+                }}
+                errors={duitNowErrors}
+                touched={duitNowTouched}
+                onBlur={(field) =>
+                  setDuitNowTouched((prev) => ({ ...prev, [field]: true }))
+                }
+                withHiddenInputs
+              />
             )}
 
             {paymentMethod === "BANK_TRANSFER" && (
@@ -449,10 +371,33 @@ export default function SettingsForm({
           </StepTransition>
         </FormSection>
 
+        {/* Read by updateProfileSettings; only ever "true" for the exact value
+            the developer just confirmed in the modal. */}
+        <input
+          type="hidden"
+          name="duitNowConfirmed"
+          value={duitNowConfirmed ? "true" : "false"}
+        />
+
         <Button type="submit" loading={loading}>
           Save Settings
         </Button>
       </Stack>
+
+      {duitNow.idType && (
+        <DuitNowConfirmModal
+          opened={confirmOpen}
+          onClose={() => setConfirmOpen(false)}
+          onConfirm={() => {
+            setConfirmOpen(false);
+            setDuitNowConfirmed(true);
+          }}
+          idType={duitNow.idType}
+          duitNowId={duitNow.duitNowId}
+          legalName={profile.legalName}
+          loading={loading}
+        />
+      )}
     </form>
   );
 }

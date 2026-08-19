@@ -132,9 +132,11 @@ export async function seed() {
   const adminId = await createPersonaUser(PERSONAS.admin);
   const devId = await createPersonaUser(PERSONAS.developer);
   await createPersonaUser(PERSONAS.fresh); // user only — exercises onboarding
+  const proxyId = await createPersonaUser(PERSONAS.proxy);
 
   await createProviderAccounts(adminId, PERSONAS.admin);
   await createProviderAccounts(devId, PERSONAS.developer);
+  await createProviderAccounts(proxyId, PERSONAS.proxy);
 
   for (const user of BACKGROUND_USERS) {
     await prisma.user.create({
@@ -156,6 +158,7 @@ export async function seed() {
   const userIdByLinearId = new Map<string, string>([
     [PERSONAS.admin.linearId as string, adminId],
     [PERSONAS.developer.linearId as string, devId],
+    [PERSONAS.proxy.linearId as string, proxyId],
     ...BACKGROUND_USERS.map(
       (user) => [user.linearId, user.userId] as [string, string],
     ),
@@ -179,7 +182,13 @@ export async function seed() {
       initialReviewAt: daysAgo(660),
       finalReviewAt: daysAgo(610),
       paymentMethod: "DUITNOW",
-      duitNowId: "0123456789",
+      // Both a proxy and a bank triple, stored normalized the way the write
+      // paths store it. classifyPayoutRoute pays the bank triple here, so this
+      // is the fixture that catches a display surface preferring the proxy.
+      duitNowId: "+60123456789",
+      duitNowIdType: "MOBILE",
+      duitNowIdStatus: "RESOLVED",
+      duitNowIdCheckedAt: daysAgo(20),
       bankName: "MBBEMYKL",
       bankAccountNumber: "512345678901",
       bankAccountName: "Nurul Aina binti Ahmad",
@@ -203,11 +212,40 @@ export async function seed() {
       initialReviewAt: daysAgo(335),
       finalReviewAt: daysAgo(275),
       paymentMethod: "DUITNOW",
-      duitNowId: "0198765432",
+      duitNowId: "+60198765432",
+      duitNowIdType: "MOBILE",
+      duitNowIdStatus: "CONFIRMED",
+      duitNowIdCheckedAt: daysAgo(45),
       bankName: "MBBEMYKL",
       bankAccountNumber: "514812345678",
       bankAccountName: "Alexander Tan Wei Ming",
       autoPayoutEnabled: true,
+    },
+  });
+
+  // Proxy-only: a DuitNow ID and no bank triple at all. classifyPayoutRoute
+  // sends this one down the manual path, which is the path the admin bank
+  // lookup exists to serve. PASSPORT is the proxy type the old validator
+  // rejected outright, so this fixture also proves it now saves.
+  await prisma.userProfile.create({
+    data: {
+      id: proxyId,
+      discordId: PERSONAS.proxy.discordId,
+      robloxId: PERSONAS.proxy.robloxId,
+      linearId: PERSONAS.proxy.linearId,
+      linearEmail: PERSONAS.proxy.email,
+      preferredName: PERSONAS.proxy.preferredName,
+      legalName: "Priya a/p Devan",
+      role: "DEVELOPER",
+      developerRank: "DEVELOPER",
+      specialties: ["SCRIPTING"],
+      probationStartedAt: daysAgo(300),
+      initialReviewAt: daysAgo(270),
+      finalReviewAt: daysAgo(210),
+      paymentMethod: "DUITNOW",
+      duitNowId: "A12345678",
+      duitNowIdType: "PASSPORT",
+      duitNowIdStatus: "UNCONFIRMED",
     },
   });
 
@@ -218,7 +256,12 @@ export async function seed() {
       rank: "SENIOR_DEVELOPER" as const,
       specialties: ["BUILDING" as const],
       paymentMethod: "DUITNOW" as const,
-      duitNowId: "0171234567",
+      duitNowId: "+60171234567",
+      duitNowIdType: "MOBILE" as const,
+      // An admin looked this up in the bank and nothing came back. Drives the
+      // developer-facing fault banner and the admin card's unreachable state.
+      duitNowIdStatus: "UNREACHABLE" as const,
+      duitNowIdIssue: "NOT_FOUND" as const,
     },
     {
       user: mei,
@@ -227,6 +270,9 @@ export async function seed() {
       specialties: ["MESHING" as const],
       paymentMethod: "BANK_TRANSFER" as const,
       duitNowId: null,
+      duitNowIdType: null,
+      duitNowIdStatus: "UNCONFIRMED" as const,
+      duitNowIdIssue: null,
     },
     {
       user: ravi,
@@ -235,6 +281,9 @@ export async function seed() {
       specialties: ["SCRIPTING" as const],
       paymentMethod: "ROBUX" as const,
       duitNowId: null,
+      duitNowIdType: null,
+      duitNowIdStatus: "UNCONFIRMED" as const,
+      duitNowIdIssue: null,
     },
     {
       // Never claimed anything: no watches, no transactions, nothing below
@@ -246,6 +295,9 @@ export async function seed() {
       specialties: ["BUILDING" as const],
       paymentMethod: "PAYPAL" as const,
       duitNowId: null,
+      duitNowIdType: null,
+      duitNowIdStatus: "UNCONFIRMED" as const,
+      duitNowIdIssue: null,
     },
   ];
   for (const entry of backgroundProfiles) {
@@ -264,6 +316,9 @@ export async function seed() {
         probationStartedAt: daysAgo(500),
         paymentMethod: entry.paymentMethod,
         duitNowId: entry.duitNowId,
+        duitNowIdType: entry.duitNowIdType,
+        duitNowIdStatus: entry.duitNowIdStatus,
+        duitNowIdIssue: entry.duitNowIdIssue,
         bankName: entry.paymentMethod === "BANK_TRANSFER" ? "CIBBMYKL" : null,
         bankAccountNumber:
           entry.paymentMethod === "BANK_TRANSFER" ? "760123456789" : null,
@@ -2197,6 +2252,9 @@ export async function seed() {
   });
 
   console.log("  fresh     fresh@devhub.mock (no profile — onboarding)");
+  console.log(
+    `  proxy     ${PERSONAS.proxy.email}     (id ${proxyId}, DuitNow passport proxy, no bank)`,
+  );
 }
 
 async function main() {

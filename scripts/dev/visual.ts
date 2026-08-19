@@ -55,6 +55,10 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
   ],
   admin: ["/dashboard", "/dashboard/admin"],
   fresh: ["/onboarding"],
+  // Proxy-only payment details, so the DuitNow ID fields actually render.
+  // Every other persona carries a bank account number, which opens the
+  // settings form on the Bank account branch instead.
+  proxy: ["/dashboard/settings"],
 };
 
 type Violation = {

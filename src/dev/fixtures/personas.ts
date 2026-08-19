@@ -7,7 +7,7 @@
 
 export { DEV_PASSWORD } from "@/lib/dev-mode";
 
-export type PersonaKey = "admin" | "developer" | "fresh";
+export type PersonaKey = "admin" | "developer" | "fresh" | "proxy";
 
 export type Persona = {
   key: PersonaKey;
@@ -48,6 +48,22 @@ export const PERSONAS: Record<PersonaKey, Persona> = {
     linearId: null,
     discordId: null,
     robloxId: null,
+  },
+  // Paid by a DuitNow proxy ID and nothing else — no bank triple at all.
+  //
+  // Every other logged-in persona carries bankAccountNumber, which makes the
+  // payment settings form open on the Bank account branch, so without this one
+  // the proxy fields are unreachable from a screenshot and `pnpm visual` would
+  // pass green while never rendering them. The proxy is a passport, which the
+  // old validator refused outright.
+  proxy: {
+    key: "proxy",
+    email: "proxy@devhub.mock",
+    name: "Priya Proxy",
+    preferredName: "Priya",
+    linearId: "linear-user-priya",
+    discordId: "100000000000000007",
+    robloxId: "20000007",
   },
 };
 

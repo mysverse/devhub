@@ -98,6 +98,26 @@ model UserProfile {
   bankAccountName   String?
   robuxUsername     String?
 
+  /// Which kind of DuitNow proxy `duitNowId` is. Required to pay: the admin's
+  /// bank asks for the type before the value, and the value cannot reveal it —
+  /// a TnG eWallet account number, an NRIC, and Maybank/Affin/CCB/KFH/Standard
+  /// Chartered/Merchantrade/Boost/Setel/Instapay account numbers are all 12
+  /// digits with no distinguishing prefix. Null on rows predating this column
+  /// whose value was not unambiguously a mobile number; those are re-collected
+  /// on next edit rather than guessed at.
+  duitNowIdType      DuitNowIdType?
+  /// How far the ID has been checked. UNCONFIRMED is every legacy row.
+  /// CONFIRMED is the developer's own assertion that they registered it.
+  /// RESOLVED/UNREACHABLE are written only from a real bank lookup by an admin.
+  /// Display only — this must never gate a payout, or the backfill would make
+  /// every existing proxy payout unpayable on the day it ships.
+  duitNowIdStatus    DuitNowIdStatus @default(UNCONFIRMED)
+  duitNowIdCheckedAt DateTime?
+  /// Why a lookup failed, as a closed set rather than free text: this row is
+  /// read by a bare findUnique and handed whole to a client component, so
+  /// anything stored here is visible to the developer it describes.
+  duitNowIdIssue     DuitNowIdIssue?
+
   // Auto-payout opt-in for ewallet methods (requires KYC)
   autoPayoutEnabled Boolean @default(false)
 
@@ -556,6 +576,30 @@ enum PaymentMethod {
   DUITNOW
   ROBUX
   BANK_TRANSFER
+}
+
+/// DuitNow proxy types, mirroring PayNet's proxy enum
+/// (MBNO / NRIC / BREG / PSPT / ARMN). Rules live in src/lib/duitnow-id.ts.
+enum DuitNowIdType {
+  MOBILE
+  NRIC
+  BUSINESS_REG
+  PASSPORT
+  ARMY_POLICE
+}
+
+enum DuitNowIdStatus {
+  UNCONFIRMED
+  CONFIRMED
+  RESOLVED
+  UNREACHABLE
+}
+
+enum DuitNowIdIssue {
+  NOT_FOUND
+  NAME_MISMATCH
+  WRONG_TYPE
+  REGISTERED_ELSEWHERE
 }
 
 model Transaction {
@@ -1450,7 +1494,7 @@ enum PptCommentAttachmentStatus {
 /// rate-limit ledger and lets admins see proof attachments even when
 /// PptPayoutState.proofCommentBody truncates past them.
 model PptCommentAttachment {
-  id            String @id @default(cuid())
+  id            String      @id @default(cuid())
   linearIssueId String
   uploadedById  String
   uploadedBy    UserProfile @relation("PptCommentAttachmentUploader", fields: [uploadedById], references: [id], onDelete: Cascade)

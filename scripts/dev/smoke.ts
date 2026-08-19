@@ -50,6 +50,9 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
     "/dashboard/notifications",
   ],
   fresh: ["/onboarding"],
+  // Proxy-only payment details — exercises the DuitNow ID branch of the
+  // settings form, which every other persona's bank triple hides.
+  proxy: ["/dashboard", "/dashboard/settings", "/dashboard/transactions"],
 };
 
 const ERROR_MARKERS = [

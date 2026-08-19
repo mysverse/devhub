@@ -131,6 +131,13 @@ export const LINEAR_USERS: DevLinearUser[] = [
     email: PERSONAS.developer.email,
     avatarUrl: null,
   },
+  {
+    id: PERSONAS.proxy.linearId as string,
+    name: PERSONAS.proxy.name,
+    displayName: "priya",
+    email: PERSONAS.proxy.email,
+    avatarUrl: null,
+  },
   ...BACKGROUND_USERS.map((user) => ({
     id: user.linearId,
     name: user.name,

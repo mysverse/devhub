@@ -1,5 +1,10 @@
 import type { z } from "zod";
-import { isValidNricDate, normalizeMalaysianPhone } from "@/lib/duitnow-id";
+import {
+  checkDuitNowId,
+  isDuitNowIdType,
+  isValidNricDate,
+  normalizeMalaysianPhone,
+} from "@/lib/duitnow-id";
 
 // Re-exported so existing callers keep importing it from here. The single
 // implementation lives in duitnow-id.ts alongside the per-type rules.
@@ -325,7 +330,10 @@ export function paymentSuperRefine(
     paymentMethod: string;
     paypalEmail?: string | null;
     duitNowId?: string | null;
+    /** Which branch of the DuitNow form this is: proxy ID or bank account. */
     duitNowType?: string | null;
+    /** Which kind of proxy `duitNowId` is. See duitnow-id.ts. */
+    duitNowIdType?: string | null;
     bankName?: string | null;
     bankAccountNumber?: string | null;
     bankAccountName?: string | null;
@@ -356,7 +364,12 @@ export function paymentSuperRefine(
       (!data.duitNowType && !isIdMode && data.bankAccountNumber);
 
     if (isIdMode) {
-      const err = validateDuitNowId(data.duitNowId || "");
+      // With an explicit type, all five DuitNow proxy types are reachable.
+      // Without one the submission predates the type field, and the only
+      // values it can hold are the mobile-or-NRIC pair the old rule allowed.
+      const err = isDuitNowIdType(data.duitNowIdType)
+        ? checkDuitNowId(data.duitNowIdType, data.duitNowId || "")?.message
+        : validateDuitNowId(data.duitNowId || "");
       if (err) {
         ctx.addIssue({ code: "custom", message: err, path: ["duitNowId"] });
       }

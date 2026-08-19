@@ -40,13 +40,22 @@
  *    `isValidNricDate` stays at month 1-12 / day 1-31 on purpose.
  */
 
-/** A DuitNow proxy type. Comments carry PayNet's own code for each. */
-export type DuitNowIdType =
-  | "MOBILE" // MBNO - numeric, country code, leading "+"
-  | "NRIC" // NRIC - numeric for the current 12-digit IC
-  | "BUSINESS_REG" // BREG - alphanumeric, hyphens excluded
-  | "PASSPORT" // PSPT - alphanumeric; issuing country is a separate field
-  | "ARMY_POLICE"; // ARMN - alphanumeric, hyphens excluded
+/**
+ * The DuitNow proxy types. Comments carry PayNet's own code for each.
+ *
+ * A tuple rather than a union so zod schemas can take it directly and stay
+ * typed; the union below is derived from it, which is what keeps the schema,
+ * the Prisma enum and this module from drifting apart.
+ */
+export const DUITNOW_ID_TYPE_VALUES = [
+  "MOBILE", // MBNO - numeric, country code, leading "+"
+  "NRIC", // NRIC - numeric for the current 12-digit IC
+  "BUSINESS_REG", // BREG - alphanumeric, hyphens excluded
+  "PASSPORT", // PSPT - alphanumeric; issuing country is a separate field
+  "ARMY_POLICE", // ARMN - alphanumeric, hyphens excluded
+] as const;
+
+export type DuitNowIdType = (typeof DUITNOW_ID_TYPE_VALUES)[number];
 
 export type DuitNowIdTypeSpec = {
   value: DuitNowIdType;
@@ -100,10 +109,6 @@ export const DUITNOW_ID_TYPES: readonly DuitNowIdTypeSpec[] = [
     placeholder: "T1234567",
   },
 ] as const;
-
-export const DUITNOW_ID_TYPE_VALUES: DuitNowIdType[] = DUITNOW_ID_TYPES.map(
-  (spec) => spec.value,
-);
 
 export function isDuitNowIdType(value: unknown): value is DuitNowIdType {
   return (

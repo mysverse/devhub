@@ -250,6 +250,13 @@ export default function OnboardingFlow({
         paymentMethod === "DUITNOW" && duitNowType === "ID"
           ? duitNowId.trim() || null
           : null,
+      // Sent for the first time here. The server has declared duitNowType in
+      // its schema since onboarding was written, but this payload never
+      // carried it, so the server has always had to infer the branch from
+      // which fields happen to be populated.
+      duitNowType: paymentMethod === "DUITNOW" ? duitNowType : null,
+      duitNowIdType: null,
+      duitNowConfirmed: false,
       bankName: needsBankDetails ? bankName.trim() || null : null,
       bankAccountNumber: needsBankDetails
         ? bankAccountNumber.trim() || null

@@ -6,12 +6,11 @@ import { getSession } from "@/lib/auth-utils";
 import { siteConfig } from "@/lib/config";
 import { getProbationReviewDates } from "@/lib/developer-access";
 import { getDocumentTemplate, renderTemplate } from "@/lib/documents";
+import { DUITNOW_ID_TYPE_VALUES, type DuitNowIdType } from "@/lib/duitnow-id";
 import { getRobuxPayoutAvailability } from "@/lib/integration-availability";
 import { getLinearClient } from "@/lib/linear";
-import {
-  normalizeMalaysianPhone,
-  paymentSuperRefine,
-} from "@/lib/payment-validation";
+import { buildDuitNowWrite } from "@/lib/payment-profile";
+import { paymentSuperRefine } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 
 type OnboardingInput = {
@@ -22,6 +21,9 @@ type OnboardingInput = {
   paymentMethod: "PAYPAL" | "ROBUX" | "DUITNOW" | "BANK_TRANSFER";
   paypalEmail: string | null;
   duitNowId: string | null;
+  duitNowType: "ID" | "BANK" | null;
+  duitNowIdType: DuitNowIdType | null;
+  duitNowConfirmed: boolean | null;
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
@@ -47,6 +49,8 @@ const OnboardingSchema = z
       .nullable(),
     duitNowId: z.string().optional().nullable(),
     duitNowType: z.enum(["ID", "BANK"]).optional().nullable(),
+    duitNowIdType: z.enum(DUITNOW_ID_TYPE_VALUES).optional().nullable(),
+    duitNowConfirmed: z.boolean().optional().nullable(),
     bankName: z.string().optional().nullable(),
     bankAccountNumber: z.string().optional().nullable(),
     bankAccountName: z.string().optional().nullable(),
@@ -124,6 +128,11 @@ export async function completeOnboarding(
       }
     }
 
+    const current = await prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { duitNowId: true, duitNowIdType: true },
+    });
+
     const profileData = {
       preferredName: data.preferredName,
       legalName: data.legalName,
@@ -133,9 +142,14 @@ export async function completeOnboarding(
       robloxId: robloxAccount?.accountId ?? null,
       paymentMethod: data.paymentMethod,
       paypalEmail: data.paypalEmail || null,
-      duitNowId: data.duitNowId
-        ? normalizeMalaysianPhone(data.duitNowId)
-        : null,
+      ...buildDuitNowWrite(
+        {
+          duitNowId: data.duitNowId,
+          duitNowIdType: data.duitNowIdType,
+          confirmed: data.duitNowConfirmed ?? false,
+        },
+        current,
+      ),
       bankName: data.bankName || null,
       bankAccountNumber: data.bankAccountNumber || null,
       bankAccountName: data.bankAccountName || null,

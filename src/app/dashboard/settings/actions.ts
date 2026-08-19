@@ -3,13 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { getSession } from "@/lib/auth-utils";
+import { DUITNOW_ID_TYPE_VALUES } from "@/lib/duitnow-id";
 import { getRobuxPayoutAvailability } from "@/lib/integration-availability";
 import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import { configurablePreferenceKeys } from "@/lib/notifications/catalog";
-import {
-  normalizeMalaysianPhone,
-  paymentSuperRefine,
-} from "@/lib/payment-validation";
+import { buildDuitNowWrite } from "@/lib/payment-profile";
+import { paymentSuperRefine } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 import { withIdempotentWrite } from "@/lib/prisma-retry";
 
@@ -30,6 +29,8 @@ const SettingsSchema = z
       .nullable(),
     duitNowId: z.string().optional().nullable(),
     duitNowType: z.enum(["ID", "BANK"]).optional().nullable(),
+    duitNowIdType: z.enum(DUITNOW_ID_TYPE_VALUES).optional().nullable(),
+    duitNowConfirmed: z.boolean().optional().nullable(),
     shippingAddress: z.string().optional().nullable(),
     bankName: z.string().optional().nullable(),
     bankAccountNumber: z.string().optional().nullable(),
@@ -48,6 +49,8 @@ export async function updateProfileSettings(formData: FormData) {
     paypalEmail: formData.get("paypalEmail") || null,
     duitNowId: formData.get("duitNowId") || null,
     duitNowType: formData.get("duitNowType") || null,
+    duitNowIdType: formData.get("duitNowIdType") || null,
+    duitNowConfirmed: formData.get("duitNowConfirmed") === "true",
     shippingAddress: formData.get("shippingAddress") || null,
     bankName: formData.get("bankName") || null,
     bankAccountNumber: formData.get("bankAccountNumber") || null,
@@ -66,7 +69,9 @@ export async function updateProfileSettings(formData: FormData) {
     paymentMethod,
     paypalEmail,
     duitNowId,
-    // duitNowType is validation-only, not stored in DB
+    // duitNowType picks the form branch and is not stored; duitNowIdType is.
+    duitNowIdType,
+    duitNowConfirmed,
     shippingAddress,
     bankName,
     bankAccountNumber,
@@ -97,6 +102,14 @@ export async function updateProfileSettings(formData: FormData) {
       }
     }
 
+    // Read the stored identifier first: buildDuitNowWrite only resets a
+    // recorded bank lookup when the value it was about actually changed, so
+    // saving an unrelated field leaves it intact.
+    const current = await prisma.userProfile.findUnique({
+      where: { id: userId },
+      select: { duitNowId: true, duitNowIdType: true },
+    });
+
     await prisma.userProfile.update({
       where: { id: userId },
       data: {
@@ -104,7 +117,14 @@ export async function updateProfileSettings(formData: FormData) {
         legalName: legalName || null,
         paymentMethod,
         paypalEmail: paypalEmail || null,
-        duitNowId: duitNowId ? normalizeMalaysianPhone(duitNowId) : null,
+        ...buildDuitNowWrite(
+          {
+            duitNowId,
+            duitNowIdType,
+            confirmed: duitNowConfirmed ?? false,
+          },
+          current,
+        ),
         shippingAddress: shippingAddress || null,
         bankName: bankName || null,
         bankAccountNumber: bankAccountNumber || null,

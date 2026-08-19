@@ -6,10 +6,6 @@
       "schedule": "0 * * * *"
     },
     {
-      "path": "/api/cron/xendit-poll",
-      "schedule": "0 * * * *"
-    },
-    {
       "path": "/api/cron/kyc-cleanup",
       "schedule": "0 */6 * * *"
     },

@@ -65,7 +65,6 @@ export type DevState = {
   };
   upstash: Map<string, { value: string; expiresAt: number | null }>;
   billplz: Map<string, MockPaymentOrder>;
-  xendit: Map<string, MockPaymentOrder>;
   /** Discord guild member roles: userId → role ids. */
   discordRoles: Map<string, Set<string>>;
   blobs: Map<string, { contentType: string; bytes: Uint8Array }>;
@@ -73,7 +72,6 @@ export type DevState = {
     email: number;
     finsys: number;
     billplz: number;
-    xendit: number;
     discordMessage: number;
     llm: number;
   };
@@ -143,14 +141,12 @@ function createDevState(): DevState {
     },
     upstash: new Map(),
     billplz: new Map(),
-    xendit: new Map(),
     discordRoles: new Map(),
     blobs: new Map(),
     counters: {
       email: 0,
       finsys: 0,
       billplz: 0,
-      xendit: 0,
       discordMessage: 0,
       llm: 0,
     },

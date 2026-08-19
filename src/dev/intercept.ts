@@ -96,11 +96,6 @@ const ROUTES: DevRoute[] = [
       u.hostname === "billplz-sandbox.com",
     load: () => import("@/dev/handlers/billplz").then((m) => m.handleBillplz),
   },
-  {
-    name: "xendit",
-    match: (u) => u.hostname === "api.xendit.co",
-    load: () => import("@/dev/handlers/xendit").then((m) => m.handleXendit),
-  },
 ];
 
 export class DevModeUnhandledExternalRequestError extends Error {

@@ -26,15 +26,27 @@ function payout(
 
 test("a polled payout with a provider id is left to its poll cron", () => {
   assert.deepEqual(selectUnreconciledPayouts([payout()], NOW), []);
-  assert.deepEqual(
-    selectUnreconciledPayouts([payout({ provider: "XENDIT" })], NOW),
-    [],
+});
+
+/**
+ * Inverted when Xendit was removed. This previously asserted that a XENDIT row
+ * was left alone because "its cron owns it" — true only while xendit-poll
+ * existed. With the cron gone, a row like this would otherwise sit in
+ * PROCESSING forever, unpolled and unflagged, while also blocking manual
+ * payment of the transaction via classifyPayoutRoute's provider_processing
+ * branch. It must be loud.
+ */
+test("a payout whose provider has no poll cron is flagged, not trusted", () => {
+  const [flag] = selectUnreconciledPayouts(
+    [payout({ provider: "XENDIT" })],
+    NOW,
   );
+  assert.equal(flag?.reason, "no-poll-cron");
 });
 
 test("a payout with no provider id is invisible to the polls and is flagged", () => {
-  // billplz-poll and xendit-poll both filter providerPayoutId: { not: null },
-  // so this row is never looked at again by anything.
+  // billplz-poll filters providerPayoutId: { not: null }, so this row is
+  // never looked at again by anything.
   const [flag] = selectUnreconciledPayouts(
     [payout({ providerPayoutId: null })],
     NOW,

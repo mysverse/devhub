@@ -21,10 +21,7 @@ import {
   LINEAR_TEAM,
   LINEAR_USERS,
 } from "@/dev/fixtures/linear";
-import {
-  BILLPLZ_SEEDED_PAYMENT_ORDER_ID,
-  XENDIT_SEEDED_DISBURSEMENT_ID,
-} from "@/dev/fixtures/payments";
+import { BILLPLZ_SEEDED_PAYMENT_ORDER_ID } from "@/dev/fixtures/payments";
 import {
   BACKGROUND_USERS,
   PERSONAS,
@@ -776,27 +773,6 @@ export async function seed() {
       status: "PAID",
       createdAt: daysAgo(9),
       paidAt: daysAgo(8),
-    },
-  });
-
-  // International payout in flight: target of `pnpm simulate xendit`.
-  await prisma.transaction.create({
-    data: {
-      userId: mei.userId,
-      linearIssueTitle: "Stadium LOD commission (manual)",
-      amount: 50,
-      currency: "MYR",
-      source: "MANUAL",
-      status: "PENDING",
-      createdAt: daysAgo(2),
-      payout: {
-        create: {
-          provider: "XENDIT",
-          providerPayoutId: XENDIT_SEEDED_DISBURSEMENT_ID,
-          status: "PROCESSING",
-          createdAt: daysAgo(2),
-        },
-      },
     },
   });
 

@@ -32,7 +32,6 @@ export async function GET() {
     linearLabels: state.linear.labels.length,
     upstashKeys: state.upstash.size,
     billplzOrders: state.billplz.size,
-    xenditDisbursements: state.xendit.size,
     blobs: state.blobs.size,
     counters: state.counters,
   });

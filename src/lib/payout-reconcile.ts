@@ -26,7 +26,11 @@ export const PAYOUT_STALE_MS = 6 * 60 * 60 * 1000;
 
 /** Providers with a poll cron that can resolve a PROCESSING payout on its own,
  *  provided the payout carries the provider's id. */
-const POLLED_PROVIDERS = new Set(["BILLPLZ", "XENDIT"]);
+// Billplz is the only provider with a poll cron. Anything else carrying a
+// providerPayoutId has nothing that will ever resolve it, so it must reach an
+// admin rather than sit in PROCESSING — which also blocks manual payment of
+// that transaction, since classifyPayoutRoute returns provider_processing.
+const POLLED_PROVIDERS = new Set(["BILLPLZ"]);
 
 export type ReconcilablePayout = {
   id: string;

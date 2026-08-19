@@ -5,8 +5,7 @@
  *
  *   pnpm simulate linear --issue MYS-201 --action complete|reopen|cancel|comment|label
  *   pnpm simulate billplz [--id <providerPayoutId>|--latest] [--status completed|failed]
- *   pnpm simulate xendit  [--id <disbursementId>|--latest] [--status COMPLETED|FAILED]
- *   pnpm simulate cron <billplz-poll|xendit-poll|kyc-cleanup|incentives-weekly|
+ *   pnpm simulate cron <billplz-poll|kyc-cleanup|incentives-weekly|
  *                       incentives-release|ppt-admin-digest|ppt-eligibility|
  *                       ppt-assignment-watch|data-retention|campaign-lifecycle>
  */
@@ -92,7 +91,7 @@ async function simulateLinear() {
 
 // ── Payout providers ──────────────────────────────────────────────────────────
 
-async function latestProcessingPayout(provider: "BILLPLZ" | "XENDIT") {
+async function latestProcessingPayout(provider: "BILLPLZ") {
   const { Client } = await import("pg");
   const client = new Client({ connectionString: requireEnv("DATABASE_URL") });
   await client.connect();
@@ -138,30 +137,10 @@ async function simulateBillplz() {
   await logResponse(`billplz ${status} ${id}`, res);
 }
 
-async function simulateXendit() {
-  const id = arg("id") ?? (await latestProcessingPayout("XENDIT"));
-  const status = arg("status") ?? "COMPLETED";
-
-  const res = await fetch(`${BASE_URL}/api/webhooks/xendit`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-callback-token": requireEnv("XENDIT_CALLBACK_VERIFICATION_TOKEN"),
-    },
-    body: JSON.stringify({
-      id,
-      status,
-      ...(status === "FAILED" ? { failure_code: "SIMULATED_FAILURE" } : {}),
-    }),
-  });
-  await logResponse(`xendit ${status} ${id}`, res);
-}
-
 // ── Crons ─────────────────────────────────────────────────────────────────────
 
 const CRON_ROUTES = [
   "billplz-poll",
-  "xendit-poll",
   "kyc-cleanup",
   "incentives-weekly",
   "incentives-release",
@@ -193,16 +172,13 @@ async function main() {
       return simulateLinear();
     case "billplz":
       return simulateBillplz();
-    case "xendit":
-      return simulateXendit();
     case "cron":
       return simulateCron(process.argv[3]);
     default:
       console.error(
-        "Usage: pnpm simulate <linear|billplz|xendit|cron> [options]\n" +
+        "Usage: pnpm simulate <linear|billplz|cron> [options]\n" +
           "  linear  --issue MYS-201 --action complete|reopen|cancel|comment|label [--body ...] [--label PPT] [--remove]\n" +
           "  billplz [--id <providerPayoutId>] [--status completed|failed]\n" +
-          "  xendit  [--id <disbursementId>] [--status COMPLETED|FAILED]\n" +
           `  cron    <${CRON_ROUTES.join("|")}>`,
       );
       process.exit(1);

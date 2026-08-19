@@ -5,15 +5,18 @@ import {
   Button,
   Select,
   Stack,
+  Text,
   Textarea,
   TextInput,
 } from "@mantine/core";
+import { TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { StepTransition } from "@/components/animations";
 import DuitNowConfirmModal from "@/components/DuitNowConfirmModal";
 import DuitNowFields from "@/components/DuitNowFields";
 import FormSection from "@/components/FormSection";
+import { duitNowIssueMessage } from "@/lib/duitnow-copy";
 import {
   type DuitNowFieldName,
   type DuitNowValue,
@@ -21,7 +24,10 @@ import {
   initialDuitNowMode,
   needsDuitNowConfirmation,
 } from "@/lib/duitnow-form";
-import type { DuitNowIdType } from "@/lib/duitnow-id";
+import {
+  type DuitNowIdType,
+  isDuitNowConfirmationStale,
+} from "@/lib/duitnow-id";
 import type { IntegrationAvailability } from "@/lib/integration-availability";
 import {
   validateBankAccountName,
@@ -39,6 +45,8 @@ type ProfileProps = {
     duitNowId: string | null;
     duitNowIdType: DuitNowIdType | null;
     duitNowIdStatus: string;
+    duitNowIdCheckedAt: Date | null;
+    duitNowIdIssue: string | null;
     bankName: string | null;
     bankAccountNumber: string | null;
     bankAccountName: string | null;
@@ -204,6 +212,42 @@ export default function SettingsForm({
             rows={3}
           />
         </FormSection>
+
+        {/* A payout an admin has already found unpayable has to look like a
+            fault, not like a settings hint — this is the one screen that can
+            fix it. Same doctrine as SectionUnavailable. */}
+        {profile.duitNowIdStatus === "UNREACHABLE" && (
+          <Alert
+            color="red"
+            variant="light"
+            icon={<TriangleAlert size={16} />}
+            title="We could not find your DuitNow ID"
+          >
+            <Stack gap="xs">
+              <Text size="sm">
+                {duitNowIssueMessage(profile.duitNowIdIssue)}
+              </Text>
+              <Text size="sm">
+                Register the ID in your banking or e-wallet app and save it
+                again below, or switch to a bank account number — those are
+                always reachable.
+              </Text>
+            </Stack>
+          </Alert>
+        )}
+
+        {profile.duitNowIdStatus !== "UNREACHABLE" &&
+          isDuitNowConfirmationStale(profile.duitNowIdCheckedAt) && (
+            <Alert
+              color="yellow"
+              variant="light"
+              icon={<TriangleAlert size={16} />}
+            >
+              You last confirmed your payment details on{" "}
+              {profile.duitNowIdCheckedAt?.toLocaleDateString("en-MY")}. If
+              anything has changed, update it before your next payout.
+            </Alert>
+          )}
 
         <FormSection title="Payment Preferences" gap="lg">
           <Select

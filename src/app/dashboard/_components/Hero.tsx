@@ -2,6 +2,10 @@ import type { DeveloperRank, UserProfile } from "@prisma/client";
 import { getUserWeeklyUsage, getWeekBounds } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getCurrencyForPaymentMethod } from "@/lib/currency";
+import {
+  duitNowIdTypeLabel,
+  formatDuitNowIdForDisplay,
+} from "@/lib/duitnow-id";
 import { getAssignedActiveIssuesForUser } from "@/lib/linear-data";
 import { resolveLinearFetchError } from "@/lib/linear-error";
 import {
@@ -46,13 +50,21 @@ function getPaymentMethodDetail(userProfile: UserProfile) {
   }
 
   if (userProfile.paymentMethod === "DUITNOW") {
-    return userProfile.duitNowId
-      ? `ID: ${userProfile.duitNowId}`
-      : userProfile.bankAccountNumber
-        ? `${getBankDisplayName(userProfile.bankName)} - ${
-            userProfile.bankAccountNumber
-          }`
-        : "Not set";
+    // Bank details first, matching classifyPayoutRoute — showing the proxy
+    // while the bank account is what actually gets paid is how the admin card
+    // came to disagree with the router.
+    if (userProfile.bankAccountNumber) {
+      return `${getBankDisplayName(userProfile.bankName)} - ${
+        userProfile.bankAccountNumber
+      }`;
+    }
+    if (!userProfile.duitNowId) return "Not set";
+    if (userProfile.duitNowIdStatus === "UNREACHABLE") {
+      return "Not reachable — needs fixing";
+    }
+    return userProfile.duitNowIdType
+      ? `${duitNowIdTypeLabel(userProfile.duitNowIdType)} ${formatDuitNowIdForDisplay(userProfile.duitNowIdType, userProfile.duitNowId)}`
+      : `ID: ${userProfile.duitNowId}`;
   }
 
   return "Not set";
@@ -72,7 +84,14 @@ function isPaymentMethodSet(userProfile: UserProfile) {
   }
 
   if (userProfile.paymentMethod === "DUITNOW") {
-    return Boolean(userProfile.duitNowId || userProfile.bankAccountNumber);
+    if (userProfile.bankAccountNumber) return true;
+    // A proxy the bank could not find is not "set" in any sense the developer
+    // cares about: this drives the dashboard's own "payment details complete"
+    // signal, and saying complete while an admin has recorded that we cannot
+    // pay them is the opposite of what that signal is for.
+    return Boolean(
+      userProfile.duitNowId && userProfile.duitNowIdStatus !== "UNREACHABLE",
+    );
   }
 
   return false;

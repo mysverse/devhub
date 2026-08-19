@@ -19,21 +19,10 @@
 import { revalidatePath } from "next/cache";
 import PaymentInfoInvalid from "@/emails/PaymentInfoInvalid";
 import { requireAdmin } from "@/lib/authz";
+import { duitNowIssueMessage } from "@/lib/duitnow-copy";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import prisma from "@/lib/prisma";
 import { getUserEmailAndName } from "@/lib/user-contact";
-
-/** Why a lookup failed, in the developer's words rather than the admin's. */
-const ISSUE_COPY: Record<string, string> = {
-  NOT_FOUND:
-    "We searched for your DuitNow ID at our bank and nothing came up. That usually means it was never registered as a DuitNow ID — having the number in your banking or e-wallet app is not the same thing.",
-  NAME_MISMATCH:
-    "Your DuitNow ID resolves to an account in a different name from the one on your DevHub profile. We can only pay an account in your own name.",
-  WRONG_TYPE:
-    "Your DuitNow ID does not match the kind of ID it is saved as, so our bank cannot look it up.",
-  REGISTERED_ELSEWHERE:
-    "Your DuitNow ID is registered somewhere our bank cannot reach. Registering it against a Malaysian bank account, or giving us a bank account number instead, will fix it.",
-};
 
 export async function confirmDuitNowIdResolved(userId: string) {
   await requireAdmin();
@@ -74,7 +63,7 @@ export async function markDuitNowIdUnreachable(
     });
 
     const { email, name } = await getUserEmailAndName(userId);
-    const reason = ISSUE_COPY[issue] ?? ISSUE_COPY.NOT_FOUND;
+    const reason = duitNowIssueMessage(issue);
     // Keyed on the check, not on the day: a second lookup after the developer
     // says they fixed it has to be able to tell them it still does not work.
     const key = `payment:duitnow-unreachable:${userId}:${profile.duitNowIdCheckedAt?.toISOString()}`;

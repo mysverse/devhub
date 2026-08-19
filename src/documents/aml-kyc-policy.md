@@ -1,88 +1,106 @@
 ---
 title: "AML/KYC Policy"
-version: "1.0.0"
+version: "2.0.0"
 type: "AML_KYC"
 ---
 
 # Anti-Money Laundering & Know Your Customer Policy
 
-*Last updated: April 2026*
+*Last updated: August 2026*
 
-## 1. Introduction
+## 1. Identity verification has been discontinued
 
-This policy explains how MYSverse Digital Ventures ("we", "us") handles identity verification for contributors who opt into automated eWallet payouts through our DevHub platform. Identity verification (Know Your Customer, or KYC) is required by our payment partner to comply with anti-money laundering (AML) regulations.
+**MYSverse Digital Ventures ("we", "us") no longer collects identity documents
+through DevHub.** The upload form has been removed and there is no way to
+submit an ID or a selfie.
 
-**This policy applies only to contributors who choose to enable automatic payouts via eWallet providers** (e.g., TnG E-Wallet, GrabPay). KYC is not required for:
+Verification previously applied to one group only: contributors who opted into
+**automated eWallet payouts**. That option existed to satisfy a prospective
+payment partner's own compliance obligations. The partnership did not proceed,
+the automated eWallet route was never available in practice, and it has now
+been removed from the platform — so the basis for asking anyone to verify
+their identity no longer exists.
 
-- General platform usage
-- Manual payout requests processed by administrators
-- Bank transfer payouts (via Billplz)
-- Robux payouts
+**No payout method requires verification.** That was already true of manual
+payouts, Billplz bank transfers and Robux; it is now true of everything,
+including eWallet and DuitNow ID payouts, which are processed by an
+administrator through our bank.
 
-## 2. What We Collect
+Nothing is required of you. If you previously verified, or submitted documents
+that were rejected or expired, no further action is needed and your payouts
+are unaffected.
 
-When you choose to verify your identity, we collect the following:
+## 2. What we collected, while the programme ran
 
-- **A photo of your government-issued ID** — MyKad, Malaysian passport, Malaysian driving licence, or international passport for non-Malaysian contributors.
-- **A selfie of you holding the ID** — This confirms you are the owner of the document.
-- **Your legal name** — As it appears on your ID document.
+For contributors who took part, we collected:
 
-We do not collect or store ID numbers, dates of birth, or any other data from your document beyond what is listed above.
+- **A photo of a government-issued ID** — MyKad, Malaysian passport, Malaysian
+  driving licence, or international passport for non-Malaysian contributors.
+- **A selfie holding the ID** — to confirm ownership of the document.
+- **A legal name** — as it appeared on the document.
 
-## 3. Why We Collect It
+We never collected or stored ID numbers, dates of birth, or any other data
+from the document beyond the above.
 
-Our payment partner requires identity verification for all users accessing automated eWallet payouts. This is a regulatory requirement under Malaysian anti-money laundering laws and the payment provider's compliance obligations.
+## 3. What happened to those documents
 
-Verification is a one-time process. Once approved, you will not need to verify again unless your account circumstances change significantly.
+**Every ID photo and selfie has been deleted, or is scheduled for deletion
+under the retention rules in section 5.** Deletion is permanent — there is no
+soft-delete or recycle bin — and an automated cleanup process continues to run
+to enforce it.
 
-## 4. Who Has Access
+What we retain is the **outcome** of a verification (approved, rejected or
+expired), the legal name given at the time, and the reviewer audit log. These
+are kept as a compliance record of a decision we made, which we committed to
+retaining when the documents were collected.
 
-Your submitted documents are reviewed by **one authorised team member** during the verification process. Access to verification documents is restricted to administrators with a legitimate review purpose.
+## 4. Who had access
 
-All access is logged in an audit trail that records: who reviewed the submission, what action was taken, and when — but never the document contents.
+Submissions were reviewed by **one authorised team member**. Access to
+documents was restricted to administrators with a legitimate review purpose,
+and every access was logged in an audit trail recording who looked, what
+action was taken, and when — never the document contents. That audit trail is
+retained.
 
-## 5. How Your Data Is Protected
-
-- **In transit:** All uploads are transmitted over HTTPS (TLS encryption).
-- **At rest:** Documents are stored in an isolated, private storage system with no public access.
-- **EXIF metadata:** All image metadata (location data, device info, etc.) is automatically stripped from your photos before storage.
-- **Access control:** Document storage is accessible only by the review system — not by the general application.
-
-## 6. Retention Period
+## 5. Retention
 
 | Data | Retention |
 |---|---|
-| Uploaded ID photo | Deleted within 48 hours of review decision |
-| Selfie photo | Deleted within 48 hours of review decision |
-| Unreviewed submissions | Auto-expire and are deleted after 7 days |
+| Uploaded ID photo | Deleted within 48 hours of a review decision |
+| Selfie photo | Deleted within 48 hours of a review decision |
+| Unreviewed submissions | Expired and deleted after 7 days |
 | Verification result (approved/rejected) | Retained for compliance purposes |
-| Your legal name | Retained while your account is active |
+| Legal name | Retained while your account is active |
 | Reviewer audit log | Retained for compliance purposes |
-| Document contents or ID numbers | Never stored beyond the review session |
+| Document contents or ID numbers | Never stored |
 
-An automated cleanup process runs regularly to enforce these retention limits. Deletion is permanent — there is no soft-delete or recycle bin.
+## 6. How the data was protected
 
-## 7. Your Rights
+- **In transit:** all uploads were transmitted over HTTPS (TLS encryption).
+- **At rest:** documents were held in isolated, private storage with no public
+  access.
+- **EXIF metadata:** image metadata (location, device information) was stripped
+  before storage.
+- **Access control:** document storage was reachable only by the review
+  system, never by the general application.
+
+## 7. Your rights
 
 You have the right to:
 
-- **Opt out at any time.** You can disable automatic payouts in your settings. Your payouts will then be processed manually by an administrator. KYC is never required for manual payouts.
-- **Request information.** You can ask us what verification data we hold about you.
-- **Request deletion.** You can request deletion of your verification record. Note that this will disable automatic payouts and you would need to re-verify to enable them again.
+- **Request information.** You can ask what verification data we still hold
+  about you.
+- **Request deletion.** You can request deletion of your verification record.
+  Because verification no longer gates anything, this has no effect on your
+  payouts.
 
-## 8. Verification Process
+## 8. Contact
 
-1. You select an eWallet payment method and choose to enable automatic payouts.
-2. You upload a photo of your government ID and a selfie holding the document.
-3. An authorised team member reviews your submission (typically within 1-2 business days).
-4. You are notified of the result via email and in your settings.
-   - **Approved:** Automatic payouts are unlocked. Documents are deleted within 48 hours.
-   - **Rejected:** You are given a reason and may resubmit corrected documents.
+If you have questions about this policy or about verification data we may
+still hold, please contact your team administrator through the platform.
 
-## 9. Contact
+## 9. Changes to this policy
 
-If you have questions about this policy or your verification data, please contact your team administrator through the platform.
-
-## 10. Changes to This Policy
-
-We may update this policy from time to time. Significant changes will be communicated through the platform. The "Last updated" date at the top of this page reflects the most recent revision.
+We may update this policy from time to time. Significant changes will be
+communicated through the platform. The "Last updated" date at the top of this
+page reflects the most recent revision.

@@ -49,11 +49,9 @@ flowchart TD
     F -->|Bank account| G{Bank supported<br/>by Billplz?}
     G -->|Yes| H[Billplz FPX<br/>disbursement]
     G -->|No| E
-    F -->|eWallet| K{Auto-payout<br/>enabled & KYC<br/>approved?}
-    K -->|Yes| L[Xendit eWallet<br/>disbursement]
-    K -->|No| E
+    F -->|eWallet| E
+    F -->|DuitNow ID| E
     H --> M[Paid]
-    L --> M
     D --> M
     E --> N[Admin processes<br/>manually]
     N --> M
@@ -64,47 +62,30 @@ flowchart TD
 | Provider | Currency | Methods | Type |
 |---|---|---|---|
 | **Billplz** | MYR | FPX bank transfers (20 supported banks) | Automatic |
-| **Xendit** | MYR | eWallets only (TnG, GrabPay, Boost, etc.) — requires KYC | Automatic |
 | **Roblox** | ROBUX | Roblox group payout | Automatic |
 | **Manual** | Any | Admin processes via bank transfer, PayPal, etc. | Manual |
 
-### eWallet automatic payouts
+### eWallet and DuitNow ID payouts
 
-eWallet payouts (TnG E-Wallet, GrabPay, Boost, etc.) through Xendit require:
+Payouts to an eWallet institution, or to a DuitNow ID (mobile number, NRIC,
+passport, business registration or army/police number), are processed by an
+administrator through our bank. They are not automated, and they never require
+identity verification.
 
-1. **Identity verification (KYC)** — a one-time process where you upload your government ID and a selfie
-2. **Auto-payout opt-in** — you must explicitly enable automatic payouts in your settings
+## Identity verification (KYC)
 
-Without these, your eWallet payouts are processed manually by an administrator. See our [AML/KYC Policy](/policy/aml-kyc) for details on the verification process.
+**DevHub no longer collects identity documents.** Verification previously
+existed only to satisfy a payment partner that offered automated eWallet
+disbursement; that partnership did not go ahead, so the requirement no longer
+applies to anyone.
 
-## KYC Verification Flow
-
-If you choose to enable automatic eWallet payouts, here is the verification process:
-
-```mermaid
-flowchart TD
-    A[User selects eWallet<br/>payment method] --> B[Saves payment<br/>settings]
-    B --> C[Tries to enable<br/>auto-payout toggle]
-    C --> D{KYC status?}
-    D -->|Not started| E[Start Verification<br/>button shown]
-    D -->|Approved| F[Toggle enabled<br/>auto-payouts active]
-    D -->|Rejected| G[Rejection reason shown<br/>Resubmit button]
-    D -->|Pending| H[Under review message<br/>toggle disabled]
-    D -->|Expired| I[Expiry message<br/>Resubmit button]
-    E --> J[User uploads<br/>ID + selfie]
-    G --> J
-    I --> J
-    J --> K[Admin reviews<br/>within 1-2 days]
-    K --> L{Decision}
-    L -->|Approve| M[Email notification<br/>toggle unlocked]
-    L -->|Reject| N[Email with reason<br/>user can resubmit]
-    M --> F
-    N --> G
-```
+If you submitted documents while the programme was running, see our
+[AML/KYC Policy](/policy/aml-kyc) for what is still held, what was deleted,
+and your rights over it.
 
 ### Key points
 
-- **KYC is optional** — it is only needed if you want automatic eWallet payouts
-- **One-time process** — once approved, verification does not need to be repeated
-- **Documents deleted quickly** — your ID and selfie are deleted within 48 hours of review
-- **You can opt out** — disable automatic payouts at any time to revert to manual processing
+- **No verification is required to be paid** — not for bank transfers, eWallets, DuitNow IDs, PayPal or Robux
+- **Nothing is collected any more** — the upload form has been removed
+- **Documents already submitted were deleted** — within 48 hours of review, as promised at the time
+- **Results are retained** — approved/rejected outcomes and the reviewer audit log are kept as a compliance record

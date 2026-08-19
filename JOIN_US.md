@@ -16,7 +16,7 @@ Every task you pick up on our **Linear** workspace has a DevHub complexity level
 - **Highly Competitive Rates:**
   - **RM20.00** per complexity level (e.g., level 3 = **RM60.00**, level 5/XL = **RM100.00**).
   - **1,200 Robux** per complexity level (e.g., level 3 = **3,600 Robux**, level 5/XL = **6,000 Robux**).
-- **Automatic Weekly Approvals:** Completed PPT tasks are automatically compiled, processed, and paid out weekly through our integrated providers (Billplz, Xendit, FinSys).
+- **Automatic Weekly Approvals:** Completed PPT tasks are automatically compiled, processed, and paid out weekly through our integrated providers (Billplz, FinSys).
 - **Professional Accounting:** View and download transaction slips as PDFs directly from your dashboard for easy record-keeping.
 
 ---
@@ -67,7 +67,7 @@ We want you to spend your time writing code, not wrestling with access permissio
 - **One-Click Account Linking:** Instantly connect your Linear, Discord, and Roblox accounts.
 - **Automated Access Sync:** Our automated sync engine grants you appropriate Discord roles and Roblox Group ranks based on your project assignments.
 - **Paperless Compliance:** Read, review, and digitally sign your NDA and Conflict of Interest (COI) documents directly inside the portal.
-- **Secure KYC Verification:** Fast-tracked, secure identity verification guarantees that we can handle your payouts legally, cleanly, and safely.
+- **No Identity Documents Needed:** Getting paid never requires uploading an ID — payouts run through our bank or Roblox directly.
 
 ---
 

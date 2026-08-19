@@ -85,14 +85,14 @@ to diagnose:
 `pnpm dev:mock` runs the full app with **zero real dependencies** — an
 embedded local Postgres (`prisma dev`, no Docker), seeded data, real
 better-auth sessions, and all external HTTP (Linear, Resend, Upstash,
-Discord, Roblox, FinSys, Billplz, Xendit, Vercel Blob) answered by mocks in
+Discord, Roblox, FinSys, Billplz, Vercel Blob) answered by mocks in
 `src/dev/`. Use it for visual/logic testing and browser automation. Full
 runbook: `.claude/skills/dev-mode/SKILL.md`.
 
 - Login by URL: `/api/dev/login?as=developer|admin|fresh`. Password for the
   sign-in form: `devhub-mock-password`.
 - `pnpm dev:mock:reset` wipes and re-seeds; `pnpm simulate
-  linear|billplz|xendit|cron` fires signed webhooks/crons that exercise the
+  linear|billplz|cron` fires signed webhooks/crons that exercise the
   real verification code paths.
 - `pnpm visual` (script: `scripts/dev/visual.ts`) drives Playwright Chromium
   over every key page at mobile/tablet/laptop/desktop widths, writes
@@ -131,7 +131,7 @@ DevHub is a developer payment and operations dashboard for MYSverse. It handles:
 
 - PPT payouts for Linear tasks labeled `PPT`, paid from Linear estimate points.
 - Non-guaranteed monthly bonus payouts for eligible assigned non-PPT Linear work.
-- Payment routing through manual admin processing, Billplz, Xendit, and Roblox/FinSys.
+- Payment routing through manual admin processing, Billplz, and Roblox/FinSys.
 - Developer onboarding, linked accounts, KYC, document signing, access sync, and welcome pack administration.
 
 ## Key Patterns
@@ -410,8 +410,8 @@ src/app/
 ├── api/
 │   ├── auth/[...all]/route.ts       # better-auth Next handler
 │   ├── bonuses/notifications/       # bonus notification polling/read API
-│   ├── cron/                        # Billplz/Xendit/KYC/incentive/campaign crons
-│   ├── webhooks/                    # Linear, Billplz, Xendit webhooks
+│   ├── cron/                        # Billplz/KYC/incentive/campaign crons
+│   ├── webhooks/                    # Linear, Billplz webhooks
 │   ├── transactions/[id]/pdf/       # payment slip PDF
 │   └── kyc/, documents/, welcome-pack/
 └── dashboard/

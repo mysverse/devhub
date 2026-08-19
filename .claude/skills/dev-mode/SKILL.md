@@ -8,7 +8,7 @@ description: Run DevHub in mock mode (no real DB/auth/external services) for vis
 Boots the full app with zero real dependencies: an embedded local Postgres
 (`prisma dev`), real better-auth sessions from seeded personas, and every
 external service (Linear, Resend, Upstash, Discord, Roblox, FinSys, Billplz,
-Xendit, Vercel Blob) answered by in-process mocks.
+Vercel Blob) answered by in-process mocks.
 
 ## Boot
 
@@ -34,7 +34,7 @@ dev:mock` is cheap (~5s warm).
 
 | URL | Lands on | Who |
 |---|---|---|
-| `/api/dev/login?as=developer` | `/dashboard` | Alex Developer — rich history: active PPTs, bonuses, incentives, KYC approved, auto-payout on |
+| `/api/dev/login?as=developer` | `/dashboard` | Alex Developer — rich history: active PPTs, bonuses, incentives |
 | `/api/dev/login?as=admin` | `/dashboard` | Aina Admin — ADMIN role, all `/dashboard/admin/*` pages |
 | `/api/dev/login?as=fresh` | `/onboarding` | Farah Fresh — no profile, exercises onboarding |
 
@@ -48,8 +48,7 @@ pnpm simulate linear --issue MYS-201 --action complete   # Linear webhook (Issue
 pnpm simulate linear --issue MYS-201 --action comment    # proof comment webhook
 pnpm simulate linear --issue MYS-220 --action reopen     # reopen a paid issue
 pnpm simulate billplz [--status completed|failed]        # provider webhook → latest PROCESSING payout
-pnpm simulate xendit  [--status COMPLETED|FAILED]
-pnpm simulate cron <billplz-poll|xendit-poll|kyc-cleanup|incentives-weekly|incentives-release|ppt-admin-digest|ppt-eligibility|ppt-assignment-watch>
+pnpm simulate cron <billplz-poll|kyc-cleanup|incentives-weekly|incentives-release|ppt-admin-digest|ppt-eligibility|ppt-assignment-watch>
 ```
 
 Full PPT payout lifecycle (verified working): `complete` → `comment` (proof)

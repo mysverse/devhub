@@ -2,9 +2,8 @@
  * Payouts that no automated path can resolve, and that therefore need a human.
  *
  * Deliberately alert-only. "Did the money actually move?" is unanswerable
- * inside DevHub today: roblox.ts exposes no disbursement read at all,
- * xendit.ts's getDisbursement takes a Xendit id rather than our external_id,
- * and billplz.ts's getPaymentOrder takes a Billplz id — there is no lookup by
+ * inside DevHub today: roblox.ts exposes no disbursement read at all, and
+ * billplz.ts's getPaymentOrder takes a Billplz id — there is no lookup by
  * our own reference. Until a provider gives us a read or accepts an
  * idempotency key, the only safe action on an unknown payout is to tell an
  * admin. It must never be "send it again".

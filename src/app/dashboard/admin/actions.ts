@@ -16,11 +16,7 @@ import {
 } from "@/lib/incentives";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { sendPaymentConfirmation } from "@/lib/payment-confirmation";
-import {
-  initiateBillplzPayout,
-  initiateRobloxPayout,
-  initiateXenditPayout,
-} from "@/lib/payout";
+import { initiateBillplzPayout, initiateRobloxPayout } from "@/lib/payout";
 import { revertCampaignApplicationsForTransaction } from "@/lib/payout-campaign-server";
 import {
   canConfirmManualPayment,
@@ -33,7 +29,6 @@ import { checkFinSysHealth, refreshFinSysCookie } from "@/lib/roblox";
 import { generateTransactionSlipBuffer } from "@/lib/transaction-slip-pdf";
 import { getBaseUrl } from "@/lib/url";
 import { getUserEmailAndName } from "@/lib/user-contact";
-import { isXenditEnabled } from "@/lib/xendit";
 
 export async function markTransactionAsPaid(transactionId: string) {
   await requireAdmin();
@@ -66,7 +61,6 @@ export async function markTransactionAsPaid(transactionId: string) {
       bankAccountName: transaction.user.bankAccountName,
       robloxId: transaction.user.robloxId,
       payout: transaction.payout,
-      xenditEnabled: isXenditEnabled(),
     });
     if (!canConfirmManualPayment(route)) {
       return { error: route.reason };
@@ -370,23 +364,6 @@ export async function getBillplzCollectionId() {
   const redisId = await getKV(BILLPLZ_COLLECTION_ID_KEY);
   const envId = process.env.BILLPLZ_PAYMENT_ORDER_COLLECTION_ID || null;
   return { redisId, envId };
-}
-
-export async function payViaXendit(transactionId: string) {
-  await requireAdmin();
-
-  try {
-    const result = await initiateXenditPayout(transactionId);
-    if (!result) {
-      return { error: "Transaction is not eligible for Xendit payout" };
-    }
-
-    revalidatePath("/dashboard/admin");
-    return { success: true };
-  } catch (error) {
-    const err = error as Error;
-    return { error: err.message || "Failed to process Xendit payout" };
-  }
 }
 
 export async function payViaRoblox(transactionId: string) {

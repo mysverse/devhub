@@ -4,14 +4,9 @@ import { createPaymentOrder } from "@/lib/billplz";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { ADMIN_ACCESS_WHERE } from "@/lib/developer-access";
 import { runBatch, runFollowUps } from "@/lib/fault-isolation";
-import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import { sendPaymentConfirmation } from "@/lib/payment-confirmation";
-import {
-  getXenditBankCode,
-  isBillplzSupported,
-  isXenditSupported,
-} from "@/lib/payment-validation";
+import { isBillplzSupported } from "@/lib/payment-validation";
 import {
   describePayoutReconcileReason,
   PAYOUT_STALE_MS,
@@ -20,7 +15,6 @@ import {
 import { canInitiateProviderPayout } from "@/lib/payout-routing";
 import prisma from "@/lib/prisma";
 import { createFinSysPayout, verifyGroupMembership } from "@/lib/roblox";
-import { createDisbursement, isXenditEnabled } from "@/lib/xendit";
 
 function getTransactionPayoutDescription(transaction: {
   source?: string | null;
@@ -42,7 +36,7 @@ function getTransactionPayoutDescription(transaction: {
 
 /**
  * Shared helper: mark a payout as completed and its transaction as paid.
- * Used by Billplz webhook, Xendit webhook, Roblox payout, and polling crons.
+ * Used by the Billplz webhook, Roblox payout, and polling crons.
  */
 export async function handlePayoutCompletion(
   payoutId: string,
@@ -283,110 +277,6 @@ export async function initiateBillplzPayout(transactionId: string) {
 }
 
 /**
- * Initiate a Xendit disbursement for a transaction.
- * Follows the same pattern as initiateBillplzPayout.
- * Amount is in whole MYR (not cents) — Xendit uses whole currency units.
- */
-export async function initiateXenditPayout(transactionId: string) {
-  if (!isXenditEnabled()) return null;
-
-  const transaction = await prisma.transaction.findUnique({
-    where: { id: transactionId },
-    include: { user: true, payout: true },
-  });
-
-  if (!transaction) throw new Error("Transaction not found");
-  if (transaction.status !== "PENDING") return null;
-  if (transaction.currency !== "MYR") return null;
-
-  const { user } = transaction;
-  if (!user.bankName || !user.bankAccountNumber || !user.bankAccountName) {
-    return null;
-  }
-  if (!isXenditSupported(user.bankName)) return null;
-
-  const xenditBankCode = getXenditBankCode(user.bankName);
-  if (!xenditBankCode) return null;
-
-  // Skip if there's already an active payout
-  if (transaction.payout) {
-    const reattempt = canInitiateProviderPayout(transaction.payout);
-    if (!reattempt.allowed) {
-      console.log(
-        `[payout] Not re-initiating payout ${transaction.payout.id}: ${reattempt.reason}`,
-      );
-      return null;
-    }
-    // Only reached when the previous attempt never reached the provider, so
-    // the row carries no provider id and replacing it cannot lose evidence.
-    await prisma.payout.delete({ where: { id: transaction.payout.id } });
-  }
-
-  const description = getTransactionPayoutDescription(transaction);
-
-  const payout = await prisma.payout.create({
-    data: {
-      transactionId,
-      provider: "XENDIT",
-      status: "PENDING",
-      providerData: {
-        bankCode: xenditBankCode,
-        bankAccountNumber: user.bankAccountNumber,
-        accountName: user.bankAccountName,
-        description,
-        amount: transaction.amount,
-      },
-    },
-  });
-
-  console.log(
-    `[payout] Calling Xendit API for payout ${payout.id} (tx: ${transactionId})`,
-  );
-  try {
-    const result = await createDisbursement({
-      externalId: transactionId,
-      bankCode: xenditBankCode,
-      accountHolderName: user.bankAccountName,
-      accountNumber: user.bankAccountNumber,
-      amount: transaction.amount,
-      description,
-    });
-    console.log(
-      `[payout] Xendit API returned id=${result.id} status=${result.status}`,
-    );
-
-    await prisma.payout.update({
-      where: { id: payout.id },
-      data: {
-        providerPayoutId: result.id,
-        status: "PROCESSING",
-      },
-    });
-
-    return payout;
-  } catch (apiError) {
-    const errorMsg =
-      apiError instanceof Error ? apiError.message : String(apiError);
-    console.error(
-      `[payout] Xendit API failed for payout ${payout.id}:`,
-      apiError,
-    );
-    try {
-      await prisma.payout.update({
-        where: { id: payout.id },
-        data: { status: "FAILED", errorMessage: errorMsg },
-      });
-    } catch (dbError) {
-      console.error(
-        `[payout] Failed to update payout ${payout.id} to FAILED:`,
-        dbError,
-      );
-    }
-    throw new Error(`Xendit payout failed: ${errorMsg}`);
-  }
-}
-
-/**
  * Initiate a Roblox group payout for a ROBUX transaction.
  * Synchronous — succeeds or fails immediately (no webhook/polling needed).
  */
@@ -535,8 +425,8 @@ export async function initiateRobloxPayout(transactionId: string) {
 /**
  * Route to the best available payout provider for a transaction.
  * MYR bank transfers: Billplz only.
- * MYR eWallets: Xendit (requires KYC + auto-payout opt-in).
  * ROBUX: Roblox group payout.
+ * Everything else, including every eWallet institution: manual confirmation.
  */
 export async function initiateAutoPayout(transactionId: string) {
   const transaction = await prisma.transaction.findUnique({
@@ -560,29 +450,11 @@ export async function initiateAutoPayout(transactionId: string) {
       return null;
     }
 
-    // eWallet methods route to Xendit (requires auto-payout opt-in + KYC)
-    if (requiresKycForAutoPayout(user.bankName)) {
-      if (!user.autoPayoutEnabled) {
-        console.log(
-          `[payout] Auto-payout not enabled for user ${transaction.userId}, skipping`,
-        );
-        return null;
-      }
-      const kycOk = await isKycApproved(transaction.userId);
-      if (!kycOk) {
-        console.log(
-          `[payout] KYC required but not approved for user ${transaction.userId}, skipping auto-payout`,
-        );
-        return null;
-      }
-      // Xendit handles eWallet disbursements only
-      if (isXenditSupported(user.bankName)) {
-        return initiateXenditPayout(transactionId);
-      }
-      return null;
-    }
-
-    // Bank transfers route to Billplz only
+    // Billplz is the only automated MYR route. eWallet institutions and
+    // Billplz-unsupported banks fall through to manual confirmation, which is
+    // where they already ended up: the Xendit eWallet branch that used to sit
+    // here could never fire, because no BIC was both KYC-gated and
+    // Xendit-disbursable.
     if (isBillplzSupported(user.bankName)) {
       return initiateBillplzPayout(transactionId);
     }

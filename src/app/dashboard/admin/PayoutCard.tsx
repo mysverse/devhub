@@ -37,8 +37,6 @@ import {
   getBankDisplayName,
   getPaymentMethodLabel,
   isBillplzSupported,
-  isXenditSupported,
-  requiresKycForAutoPayout,
 } from "@/lib/payment-validation";
 import {
   canConfirmManualPayment,
@@ -49,7 +47,6 @@ import {
   markTransactionAsPaid,
   payViaBillplz,
   payViaRoblox,
-  payViaXendit,
   rejectTransaction,
   resendPaymentConfirmation,
 } from "./actions";
@@ -194,7 +191,6 @@ function renderPaymentDetails(
 function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   const [loading, setLoading] = useState(false);
   const [billplzLoading, setBillplzLoading] = useState(false);
-  const [xenditLoading, setXenditLoading] = useState(false);
   const [robloxLoading, setRobloxLoading] = useState(false);
   const [lookupBusy, setLookupBusy] = useState<
     "resolved" | "NOT_FOUND" | "NAME_MISMATCH" | null
@@ -232,18 +228,6 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     tx.currency === "MYR" &&
     tx.paymentMethod === "DUITNOW" &&
     isBillplzSupported(tx.paymentDetails?.bankName) &&
-    !!tx.paymentDetails?.bankAccountNumber &&
-    !!tx.paymentDetails?.bankAccountName &&
-    (!tx.payout || tx.payout.status === "FAILED");
-
-  // Xendit eligibility: eWallet only + enabled + MYR + Xendit-supported + bank details + no active payout
-  const xenditEligible =
-    !!tx.xenditEnabled &&
-    isPending &&
-    tx.currency === "MYR" &&
-    tx.paymentMethod === "DUITNOW" &&
-    requiresKycForAutoPayout(tx.paymentDetails?.bankName) &&
-    isXenditSupported(tx.paymentDetails?.bankName) &&
     !!tx.paymentDetails?.bankAccountNumber &&
     !!tx.paymentDetails?.bankAccountName &&
     (!tx.payout || tx.payout.status === "FAILED");
@@ -319,7 +303,6 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
     bankAccountName: tx.paymentDetails?.bankAccountName,
     robloxId: tx.paymentDetails?.robloxId,
     payout: tx.payout,
-    xenditEnabled: tx.xenditEnabled,
   });
   const manualPaymentEligible = canConfirmManualPayment(payoutRoute);
 
@@ -366,18 +349,6 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
       toast.success("Billplz payout initiated");
     }
     setBillplzLoading(false);
-  }
-
-  async function handlePayViaXendit() {
-    setXenditLoading(true);
-    setError("");
-    const res = await payViaXendit(tx.id);
-    if (res?.error) {
-      setError(res.error);
-    } else {
-      toast.success("Xendit payout initiated");
-    }
-    setXenditLoading(false);
   }
 
   async function handlePayViaRoblox() {
@@ -760,30 +731,6 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                     mt={robloxEligible ? "xs" : undefined}
                   >
                     {payoutFailed ? "Retry via Billplz" : "Pay via Billplz"}
-                  </Button>
-                )}
-                {xenditEligible && !billplzEligible && (
-                  <Button
-                    fullWidth
-                    onClick={handlePayViaXendit}
-                    loading={xenditLoading}
-                    variant="filled"
-                    color="green"
-                    mt={robloxEligible ? "xs" : undefined}
-                  >
-                    {payoutFailed ? "Retry via Xendit" : "Pay via Xendit"}
-                  </Button>
-                )}
-                {xenditEligible && billplzEligible && (
-                  <Button
-                    fullWidth
-                    onClick={handlePayViaXendit}
-                    loading={xenditLoading}
-                    variant="light"
-                    color="green"
-                    mt="xs"
-                  >
-                    {payoutFailed ? "Retry via Xendit" : "Pay via Xendit"}
                   </Button>
                 )}
                 {payoutProcessing ? (

@@ -101,5 +101,4 @@ export type PayoutTransaction = {
     limit: number;
     remaining: number;
   } | null;
-  xenditEnabled?: boolean;
 };

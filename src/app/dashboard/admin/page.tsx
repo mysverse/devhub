@@ -43,7 +43,6 @@ import {
 import { loadSection, sectionData, sectionDetail } from "@/lib/section-result";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import { getBaseUrl } from "@/lib/url";
-import { isXenditEnabled } from "@/lib/xendit";
 import type { BonusReviewCandidate } from "./AdminBonusesTab";
 import type {
   AdminIncentiveAwardData,
@@ -416,7 +415,6 @@ function buildPayoutTransaction(
         }
       : null,
     creditLimitUsage: creditLimitUsage ?? null,
-    xenditEnabled: isXenditEnabled(),
   };
 }
 

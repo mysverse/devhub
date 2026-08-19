@@ -2,15 +2,13 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { z } from "zod";
 import {
+  DUITNOW_BANK_MAP,
   getBankDisplayName,
   isBillplzSupported,
-  isXenditSupported,
   normalizeMalaysianPhone,
   paymentSuperRefine,
-  requiresKycForAutoPayout,
   validateBankAccountNumber,
   validateDuitNowId,
-  XENDIT_EWALLET_CODES,
 } from "@/lib/payment-validation";
 
 const Schema = z
@@ -159,34 +157,34 @@ describe("paymentSuperRefine — international bank transfer", () => {
 });
 
 describe("routing helpers", () => {
-  it("separates Billplz banks from KYC-gated eWallets", () => {
+  it("marks the Billplz-supported banks and nothing else", () => {
     assert.ok(isBillplzSupported("MBBEMYKL"));
-    assert.ok(!isBillplzSupported("TNGDMYNB"));
-    assert.ok(requiresKycForAutoPayout("TNGDMYNB"));
-    assert.ok(!requiresKycForAutoPayout("MBBEMYKL"));
     assert.ok(!isBillplzSupported(null));
   });
 
   /**
-   * Pins a live contradiction rather than endorsing it.
+   * eWallet institutions stay selectable and payable — manually.
    *
-   * `requiresKycForAutoPayout` is true only for the eight eWallet BICs, but
-   * `BIC_TO_XENDIT_BANK_CODE` — which backs `isXenditSupported` — contains
-   * only banks. So no BIC satisfies both, and the eWallet branch in
-   * `initiateAutoPayout` (payout.ts:563-583) and in `classifyPayoutRoute`
-   * (payout-routing.ts:178-188) cannot fire: an eWallet developer is asked to
-   * enable auto-payout and pass KYC, and then hits `return null`.
-   *
-   * If Xendit eWallet disbursement is meant to work, the eWallet BICs need
-   * Xendit channel codes. If it is not, the KYC gate should stop asking people
-   * for government ID and a selfie. Either way this assertion should change.
+   * They were never automatically payable: the Xendit eWallet branch that
+   * claimed to handle them required a BIC to be both KYC-gated and
+   * Xendit-disbursable, and those two sets were disjoint, so it could not
+   * fire. Xendit is gone; this pins that the institutions themselves remain,
+   * because removing them would strand anyone already paid to one.
    */
-  it("has no BIC that is both KYC-gated and Xendit-disbursable", () => {
-    const gatedAndSupported = [...XENDIT_EWALLET_CODES].filter((code) =>
-      isXenditSupported(code),
-    );
-    assert.deepEqual(gatedAndSupported, []);
-    assert.ok(!isXenditSupported("TNGDMYNB"));
+  it("keeps eWallet institutions selectable, on the manual path", () => {
+    for (const code of [
+      "TNGDMYNB",
+      "BOSTMYNB",
+      "ARPYMYNB",
+      "BGPYMYNB",
+      "SVSBMYNB",
+      "MASBMYNB",
+      "FSPYMYNB",
+      "FNXSMYNB",
+    ]) {
+      assert.ok(DUITNOW_BANK_MAP[code], `${code} must stay in the map`);
+      assert.ok(!isBillplzSupported(code), `${code} is not auto-payable`);
+    }
   });
 
   it("falls back to the stored string for legacy free-text bank names", () => {

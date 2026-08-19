@@ -1,8 +1,4 @@
-import {
-  isBillplzSupported,
-  isXenditSupported,
-  requiresKycForAutoPayout,
-} from "@/lib/payment-validation";
+import { isBillplzSupported } from "@/lib/payment-validation";
 
 export type PayoutRouteStatus =
   | "provider_processing"
@@ -11,7 +7,7 @@ export type PayoutRouteStatus =
   | "missing_details"
   | "unsupported";
 
-export type PayoutRouteProvider = "BILLPLZ" | "XENDIT" | "ROBLOX" | null;
+export type PayoutRouteProvider = "BILLPLZ" | "ROBLOX" | null;
 
 export type PayoutRouteInput = {
   transactionStatus: string;
@@ -24,7 +20,6 @@ export type PayoutRouteInput = {
   bankAccountName?: string | null;
   robloxId?: string | null;
   payout?: { status: string; provider?: string | null } | null;
-  xenditEnabled?: boolean | null;
 };
 
 export type PayoutRouteClassification = {
@@ -172,18 +167,6 @@ export function classifyPayoutRoute(
         status: "provider_eligible",
         provider: "BILLPLZ",
         reason: "This bank transfer should be routed through Billplz.",
-      };
-    }
-
-    if (
-      input.xenditEnabled &&
-      requiresKycForAutoPayout(input.bankName) &&
-      isXenditSupported(input.bankName)
-    ) {
-      return {
-        status: "provider_eligible",
-        provider: "XENDIT",
-        reason: "This eWallet payout should be routed through Xendit.",
       };
     }
 

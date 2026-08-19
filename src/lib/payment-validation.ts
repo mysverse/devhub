@@ -1,6 +1,14 @@
 import type { z } from "zod";
+import { isValidNricDate, normalizeMalaysianPhone } from "@/lib/duitnow-id";
 
-// Malaysian phone number with country code: +60 followed by 9-10 digits
+// Re-exported so existing callers keep importing it from here. The single
+// implementation lives in duitnow-id.ts alongside the per-type rules.
+export { normalizeMalaysianPhone };
+
+// Malaysian phone number with country code: +60 followed by 9-10 digits.
+// Deliberately lenient: this is shared with welcome-pack shipping, where a
+// landline is a perfectly good courier contact number. DuitNow mobile
+// proxies use MY_MOBILE_REGEX in duitnow-id.ts, which excludes landlines.
 export const MY_PHONE_REGEX = /^\+60\d{9,10}$/;
 
 // Malaysian NRIC: exactly 12 digits (YYMMDD-SS-NNNG)
@@ -263,24 +271,6 @@ export function getBankDisplayName(
 ): string {
   if (!bankName) return "";
   return DUITNOW_BANK_MAP[bankName] ?? bankName;
-}
-
-function isValidNricDate(yymmdd: string): boolean {
-  const mm = Number.parseInt(yymmdd.slice(2, 4), 10);
-  const dd = Number.parseInt(yymmdd.slice(4, 6), 10);
-  return mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31;
-}
-
-/** Normalize a Malaysian phone number to +60 format. Handles 01X, 601X, and +601X inputs. */
-export function normalizeMalaysianPhone(value: string): string {
-  const cleaned = value.replace(/[-\s]/g, "");
-  // Already in correct format
-  if (/^\+60\d{9,10}$/.test(cleaned)) return cleaned;
-  // Has 60 prefix without +
-  if (/^60\d{9,10}$/.test(cleaned)) return `+${cleaned}`;
-  // Local format 01X...
-  if (/^0\d{9,10}$/.test(cleaned)) return `+6${cleaned}`;
-  return cleaned;
 }
 
 export function validateDuitNowId(value: string): string | null {

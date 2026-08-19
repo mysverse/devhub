@@ -8,7 +8,7 @@ import {
   uploadWelcomePackItemImage,
   uploadWelcomePackSizeChart,
 } from "@/lib/blob-storage";
-import { detectImageMimeType } from "@/lib/kyc";
+import { detectImageMimeType } from "@/lib/image-magic";
 import prisma from "@/lib/prisma";
 import {
   WELCOME_PACK_ASSET_KINDS,

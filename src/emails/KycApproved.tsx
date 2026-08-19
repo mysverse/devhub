@@ -13,9 +13,9 @@ export default function KycApproved({ userName }: { userName: string }) {
         Hi {userName},
       </Text>
       <Text style={{ color: "#c1c2c5", fontSize: "14px", lineHeight: "24px" }}>
-        Your identity verification has been approved. You can now enable
-        automatic payouts for eWallet payment methods (TnG, GrabPay, etc.) in
-        your settings.
+        Your identity verification has been approved and recorded. Nothing
+        further is needed from you — your payouts are unaffected, and the
+        documents you submitted have been deleted.
       </Text>
       <Button
         href={`${appUrl}/dashboard/settings`}

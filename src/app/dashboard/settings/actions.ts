@@ -5,12 +5,10 @@ import { z } from "zod";
 import { getSession } from "@/lib/auth-utils";
 import { DUITNOW_ID_TYPE_VALUES } from "@/lib/duitnow-id";
 import { getRobuxPayoutAvailability } from "@/lib/integration-availability";
-import { isKycApproved, requiresKycForAutoPayout } from "@/lib/kyc";
 import { configurablePreferenceKeys } from "@/lib/notifications/catalog";
 import { buildDuitNowWrite } from "@/lib/payment-profile";
 import { paymentSuperRefine } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
-import { withIdempotentWrite } from "@/lib/prisma-retry";
 
 // Derived from the catalog, never restated here: the settings UI renders a
 // toggle for every configurable entry, so anything this set doesn't cover is a
@@ -139,58 +137,6 @@ export async function updateProfileSettings(formData: FormData) {
     const err = error as Error;
     return { error: err.message || "Failed to update profile" };
   }
-}
-
-export async function updateAutoPayoutSetting(enabled: boolean) {
-  const { userId } = await getSession();
-  if (!userId) throw new Error("Unauthorized");
-
-  if (enabled) {
-    // Verify user's payment method requires KYC and KYC is approved
-    const profile = await prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { bankName: true },
-    });
-
-    if (!profile || !requiresKycForAutoPayout(profile.bankName)) {
-      return {
-        error:
-          "Automatic payouts are not available for your current payment method.",
-      };
-    }
-
-    const approved = await isKycApproved(userId);
-    if (!approved) {
-      return {
-        error:
-          "Identity verification must be completed before enabling automatic payouts.",
-      };
-    }
-  }
-
-  // Sets an absolute value, so repeating it is repeating it once — and this
-  // switch routes real money, so leaving it visually ON while the column says
-  // false is the worst of the three outcomes.
-  try {
-    await withIdempotentWrite(
-      "absolute-value-update",
-      "updateAutoPayoutSetting",
-      () =>
-        prisma.userProfile.update({
-          where: { id: userId },
-          data: { autoPayoutEnabled: enabled },
-        }),
-    );
-  } catch (error) {
-    // Every sibling action in this module reports failure as { error }. This
-    // one threw, so the caller's `await` rejected and its handler never ran —
-    // leaving the Switch stuck ON and disabled against a false column.
-    console.error("[settings] Failed to update auto-payout setting:", error);
-    return { error: "Could not save that setting. Please try again." };
-  }
-
-  revalidatePath("/dashboard/settings");
-  return { success: true };
 }
 
 export async function updateNotificationPreference(input: {

@@ -27,28 +27,6 @@ export async function deleteTransactionPdf(blobUrl: string): Promise<void> {
  * Upload a KYC document (ID photo or selfie) to Vercel Blob storage.
  * Uses a deterministic path under kyc-documents/.
  */
-export async function uploadKycDocument(
-  verificationId: string,
-  type: "id-document" | "selfie",
-  buffer: Buffer,
-  contentType: string,
-): Promise<string> {
-  const ext = contentType === "image/png" ? "png" : "jpg";
-  const { url } = await put(
-    `kyc-documents/${verificationId}/${type}.${ext}`,
-    buffer,
-    {
-      access: "private",
-      addRandomSuffix: false,
-      contentType,
-    },
-  );
-  return url;
-}
-
-/**
- * Delete KYC documents from Vercel Blob storage.
- */
 export async function deleteKycDocuments(blobUrls: string[]): Promise<void> {
   await Promise.all(blobUrls.filter(Boolean).map((url) => del(url)));
 }

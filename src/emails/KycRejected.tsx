@@ -56,9 +56,10 @@ export default function KycRejected({
         </Section>
       )}
       <Text style={{ color: "#c1c2c5", fontSize: "14px", lineHeight: "24px" }}>
-        You can resubmit your documents from the settings page. Please ensure
-        your ID photo is clear and fully visible, and that your selfie clearly
-        shows you holding the document.
+        Nothing further is needed from you. DevHub no longer collects identity
+        documents, and your payouts do not require verification — they are
+        processed by an administrator or through our bank as normal. Any
+        documents you submitted have been deleted.
       </Text>
       <Button
         href={`${appUrl}/dashboard/settings`}

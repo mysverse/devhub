@@ -12,11 +12,9 @@ import {
   getRobuxPayoutAvailability,
   getSetupIntegrationAvailability,
 } from "@/lib/integration-availability";
-import { requiresKycForAutoPayout } from "@/lib/kyc";
 import prisma from "@/lib/prisma";
 import { buildSocialMetadata } from "@/lib/social-previews";
 import InviteGenerator from "./InviteGenerator";
-import KycStatus from "./KycStatus";
 import LinkedAccounts from "./LinkedAccounts";
 import NotificationPreferences from "./NotificationPreferences";
 import SettingsForm from "./SettingsForm";
@@ -44,7 +42,7 @@ async function SettingsContent() {
     redirect("/");
   }
 
-  const [userProfile, linkedAccounts, latestKyc, notificationPreferences] =
+  const [userProfile, linkedAccounts, notificationPreferences] =
     await Promise.all([
       // Explicit select, not the whole row: this object is handed straight to
       // a client component, so every column added to UserProfile would
@@ -71,17 +69,11 @@ async function SettingsContent() {
           bankAccountNumber: true,
           bankAccountName: true,
           robuxUsername: true,
-          autoPayoutEnabled: true,
         },
       }),
       prisma.account.findMany({
         where: { userId },
         select: { providerId: true, accountId: true },
-      }),
-      prisma.kycVerification.findFirst({
-        where: { userId },
-        orderBy: { submittedAt: "desc" },
-        select: { status: true, rejectionReason: true },
       }),
       prisma.notificationPreference.findMany({
         where: {
@@ -130,17 +122,6 @@ async function SettingsContent() {
             isAdmin={hasAdminAccess(userProfile)}
           />
         </StaggerItem>
-
-        {requiresKycForAutoPayout(userProfile.bankName) && (
-          <StaggerItem>
-            <KycStatus
-              kycStatus={latestKyc?.status ?? null}
-              kycRejectionReason={latestKyc?.rejectionReason ?? null}
-              legalName={userProfile.legalName}
-              autoPayoutEnabled={userProfile.autoPayoutEnabled}
-            />
-          </StaggerItem>
-        )}
 
         {hasAdminAccess(userProfile) && (
           <>

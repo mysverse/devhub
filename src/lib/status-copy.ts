@@ -258,28 +258,36 @@ export const WELCOME_PACK_ORDER_STATUS: Record<
   },
 };
 
+/**
+ * Historical states only — DevHub stopped collecting identity documents when
+ * the Xendit integration was removed. None of these may tell anyone to
+ * resubmit or promise automated payouts: there is no form to resubmit on, and
+ * no payout route an approval unlocks. Every payout is manual or Billplz now,
+ * and neither ever required verification.
+ */
 export const KYC_STATUS: Record<KycStatus, StatusCopy> = {
   PENDING: {
     label: "Pending",
     color: "yellow",
     description:
-      "Your documents are being reviewed. You'll be notified when verification completes.",
+      "Submitted before identity verification was retired. It will expire on its own; nothing is needed from you.",
   },
   APPROVED: {
     label: "Approved",
     color: "green",
-    description: "Your identity is verified. Automated payouts are available.",
+    description:
+      "Identity was verified. The result is kept as a compliance record; documents were deleted after review.",
   },
   REJECTED: {
     label: "Rejected",
     color: "red",
     description:
-      "Verification failed — check the reason shown and resubmit your documents.",
+      "Verification did not pass. Nothing is needed from you — payouts no longer require it.",
   },
   EXPIRED: {
     label: "Expired",
     color: "orange",
     description:
-      "Your verification lapsed. Resubmit your documents to keep automated payouts.",
+      "Verification lapsed before it was reviewed. Nothing is needed from you — payouts no longer require it.",
   },
 };

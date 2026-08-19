@@ -219,7 +219,6 @@ export async function seed() {
       bankName: "MBBEMYKL",
       bankAccountNumber: "514812345678",
       bankAccountName: "Alexander Tan Wei Ming",
-      autoPayoutEnabled: true,
     },
   });
 

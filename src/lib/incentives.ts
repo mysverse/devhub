@@ -2562,10 +2562,14 @@ export async function getUserWeeklyIncentiveProgress(
     events: award.events,
   });
 
+  // Journeys that have ended, whatever they ended as. CLAWBACK_REQUESTED
+  // belongs here rather than in the in-flight list: that money is being taken
+  // back, so counting it toward "on the way" would be a promise in reverse.
   const SETTLED_STATUSES: IncentiveAwardStatus[] = [
     "PAID",
     "CANCELLED",
     "SETTLED_BY_CLAWBACK",
+    "CLAWBACK_REQUESTED",
   ];
   const inFlight = awards.filter(
     (award) => !SETTLED_STATUSES.includes(award.status),

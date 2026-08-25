@@ -255,7 +255,7 @@ export default function AdminIncentivesTab({
       toast.error(result.error);
       return;
     }
-    toast.success("Award approved");
+    toast.success("Approved — pays out on the next release run");
   }
 
   function requestAction(awardId: string, kind: "cancel" | "clawback") {

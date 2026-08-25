@@ -149,6 +149,37 @@ export function incentiveHeldReasonCopy(
   }
 }
 
+export type IncentiveHeldDeveloperCopy = {
+  /** What is happening, in the second person. */
+  headline: string;
+  /** Whether the developer has anything to do about it. */
+  owner: "admin" | "developer";
+};
+
+/**
+ * The same hold, told to the person waiting on the money.
+ *
+ * `incentiveHeldReasonCopy` is written for an admin deciding what to do ("would
+ * push the developer past the cap"); repeating that to the developer explains a
+ * budget they cannot see and cannot act on. This says who is holding it and
+ * whether they need to do anything, which is the only part they can use.
+ */
+export function incentiveHeldDeveloperCopy(
+  reason: string | null | undefined,
+): IncentiveHeldDeveloperCopy {
+  if (reason === "issue_invalidated") {
+    return {
+      headline:
+        "A task counted toward this award changed after it was earned — it was reopened, cancelled, or reassigned.",
+      owner: "developer",
+    };
+  }
+  return {
+    headline: "An admin is checking this one before it is paid.",
+    owner: "admin",
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Earning potential
 // ---------------------------------------------------------------------------
@@ -550,7 +581,7 @@ export function incentiveActionConsequence(
   },
 ): string {
   if (kind === "approve") {
-    return `Releases this held award (${award.amountFormatted}) back into the normal payout flow. It pays out after the review window.`;
+    return `Pays this award (${award.amountFormatted}) on the next release run, within the hour. The review window has already been served, so it does not restart, and caps and budgets will not hold this award again. Its counted issues are still re-checked at release.`;
   }
   if (kind === "cancel") {
     return `Cancels this award (${award.amountFormatted}). It will not be paid, and the developer is notified that it was disputed.`;

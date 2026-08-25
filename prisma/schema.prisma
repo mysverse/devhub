@@ -137,6 +137,7 @@ model UserProfile {
   issueCompletions        IssueCompletion[]           @relation("IssueCompletionUser")
   incentiveAwards         IncentiveAward[]            @relation("IncentiveAwardUser")
   incentiveAwardsDisputed IncentiveAward[]            @relation("IncentiveAwardDisputer")
+  incentiveAwardsApproved IncentiveAward[]            @relation("IncentiveAwardApprover")
   incentiveActivityDays   UserActivityDay[]
   incentiveClawbackDebts  IncentiveClawbackDebt[]     @relation("IncentiveClawbackDebtUser")
   invites                 Invite[]
@@ -1162,6 +1163,12 @@ model IncentiveAward {
   releaseAt          DateTime?
   claimedAt          DateTime?
   releaseClaimId     String?
+  /// An admin cleared this award past a guardrail hold. The release path skips
+  /// caps and budgets for it — approval waives the check on this award, never
+  /// the accounting of it — but still re-checks that its counted issues stand.
+  approvedAt         DateTime?
+  approvedById       String?
+  approvedBy         UserProfile?            @relation("IncentiveAwardApprover", fields: [approvedById], references: [id], onDelete: SetNull)
   disputedById       String?
   disputedBy         UserProfile?            @relation("IncentiveAwardDisputer", fields: [disputedById], references: [id], onDelete: SetNull)
   disputedAt         DateTime?
@@ -1195,6 +1202,9 @@ model IncentiveEvent {
   awardId   String?
   award     IncentiveAward? @relation(fields: [awardId], references: [id], onDelete: SetNull)
   userId    String?
+  /// The admin behind an admin-driven event. No relation: an event must outlive
+  /// the account that caused it, the way ActivationEvent.userId does.
+  actorId   String?
   type      String
   period    String?
   message   String?

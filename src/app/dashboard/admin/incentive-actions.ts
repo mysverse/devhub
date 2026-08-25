@@ -3,6 +3,7 @@
 import { revalidatePath, updateTag } from "next/cache";
 import { requireAdmin } from "@/lib/authz";
 import { TAGS } from "@/lib/cache-tags";
+import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   evaluateWeeklyIncentives,
   formatAwardType,
@@ -74,6 +75,21 @@ function parseMilestones(text?: string) {
 function revalidateIncentivePaths() {
   revalidatePath("/dashboard");
   revalidatePath("/dashboard/admin");
+}
+
+/**
+ * The developer's incentive card is `"use cache"` with a five-minute revalidate,
+ * keyed on this tag. Without the explicit bust, an admin decision takes up to
+ * five minutes (and up to an hour past `expire`) to reach the person it is
+ * about — which is most of the reason a status looked stuck.
+ */
+function revalidateDeveloperIncentives(userId: string) {
+  try {
+    updateTag(TAGS.incentiveProgress(userId));
+  } catch (error) {
+    // Never let a cache bust take down the write that already committed.
+    console.error("[incentives] Failed to revalidate progress tag:", error);
+  }
 }
 
 export async function updateIncentiveConfig(input: IncentiveConfigInput) {
@@ -156,24 +172,81 @@ export async function updateIncentiveConfig(input: IncentiveConfigInput) {
 }
 
 export async function approveHeldIncentiveAward(awardId: string) {
-  await requireAdmin();
+  const adminUserId = await requireAdmin();
 
-  const config = await getIncentiveConfig();
+  const award = await prisma.incentiveAward.findUnique({
+    where: { id: awardId },
+    select: {
+      status: true,
+      heldReason: true,
+      userId: true,
+      period: true,
+      type: true,
+      amount: true,
+      currency: true,
+    },
+  });
+  if (!award) return { error: "Award not found" };
+  if (award.status !== "HELD") return { error: "Award is not held" };
+  // Approving cannot rescue this one. The release path re-checks the counted
+  // issues for every award, approved or not, so an award whose issues no longer
+  // stand would be approved, released, and held again an hour later — the same
+  // loop this change exists to end, just running faster.
+  if (award.heldReason === "issue_invalidated") {
+    return {
+      error:
+        "The counted issues are no longer valid (reopened, cancelled, or reassigned). Fix the issue in Linear or cancel this award — approving cannot release it.",
+    };
+  }
+
+  const now = new Date();
+  // The compare-and-set on HELD is the idempotency key: a double-click, a
+  // retry, or two admins clicking at once all produce exactly one approval.
+  // Deliberately not guarded on `approvedAt: null` — an award that was approved,
+  // released, and later re-held is a legitimate second approval.
   const result = await prisma.incentiveAward.updateMany({
     where: { id: awardId, status: "HELD", transactionId: null },
     data: {
       status: "PENDING",
       heldReason: null,
-      releaseAt: new Date(
-        Date.now() + Math.max(0, config.disputeWindowHours) * 60 * 60_000,
-      ),
+      approvedAt: now,
+      approvedById: adminUserId,
+      // Not now + disputeWindowHours. The review window is what the hold was
+      // for, and this award has already served it; restarting it made an
+      // approval look, to the developer, exactly like nothing happening.
+      releaseAt: now,
+      claimedAt: null,
+      releaseClaimId: null,
     },
   });
 
-  if (result.count === 0) return { error: "Award is not held" };
+  if (result.count === 0) return { error: "Award is no longer held" };
+
   await prisma.incentiveEvent.create({
-    data: { awardId, type: "HELD_APPROVED", message: "Approved by admin" },
+    data: {
+      awardId,
+      userId: award.userId,
+      actorId: adminUserId,
+      type: "HELD_APPROVED",
+      period: award.period,
+      message: award.heldReason,
+      metadata: { previousHeldReason: award.heldReason },
+    },
   });
+  await notify({
+    userId: award.userId,
+    actorId: adminUserId,
+    domain: "incentive",
+    type: "INCENTIVE_APPROVED",
+    title: formatAwardType(award.type),
+    message: `${formatAmount(award.amount, award.currency as CurrencyCode)} was approved and pays out on the next release run.`,
+    href: "/dashboard",
+    entityType: "incentive_award",
+    entityId: awardId,
+    dedupeKey: `incentive:INCENTIVE_APPROVED:${award.userId}:${awardId}`,
+    channels: [IN_APP_CHANNEL],
+  });
+  revalidateDeveloperIncentives(award.userId);
   revalidateIncentivePaths();
   return { success: true };
 }
@@ -192,6 +265,7 @@ export async function disputeIncentiveAward(awardId: string, reason?: string) {
       adminUserId,
       reason?.trim() || undefined,
     );
+    revalidateDeveloperIncentives(award.userId);
     revalidateIncentivePaths();
     return result;
   }
@@ -251,6 +325,7 @@ export async function disputeIncentiveAward(awardId: string, reason?: string) {
     dedupeKey: `incentive:INCENTIVE_DISPUTED:${award.userId}:${awardId}`,
     channels: [IN_APP_CHANNEL],
   });
+  revalidateDeveloperIncentives(award.userId);
   revalidateIncentivePaths();
   return { success: true };
 }

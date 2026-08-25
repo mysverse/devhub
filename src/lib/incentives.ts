@@ -33,6 +33,7 @@ import {
   type IncentiveQualificationSummary,
   type IncentiveStatusCopy,
   type IncentiveSuggestion,
+  incentiveHeldDeveloperCopy,
   incentiveStatusCopy,
 } from "@/lib/incentive-copy";
 import {
@@ -435,6 +436,35 @@ async function notifyDeveloperAward(awardId: string) {
           }),
         }
       : undefined,
+  });
+}
+
+/**
+ * Tells the developer their award stopped moving, and why, in their terms.
+ *
+ * Keyed on the reason as well as the award: a second hold for a different
+ * reason is a different thing to say, and would otherwise dedupe into silence.
+ */
+async function notifyDeveloperHold(award: IncentiveAward, reason: string) {
+  const copy = incentiveHeldDeveloperCopy(reason);
+  await notify({
+    userId: award.userId,
+    domain: "incentive",
+    type: "INCENTIVE_HELD",
+    title: formatAwardType(award.type),
+    message: `${formatAmount(award.amount, award.currency as CurrencyCode)} is paused. ${copy.headline}`,
+    href: "/dashboard",
+    entityType: "incentive_award",
+    entityId: award.id,
+    payload: {
+      awardId: award.id,
+      awardType: award.type,
+      period: award.period,
+      reason,
+      owner: copy.owner,
+    },
+    dedupeKey: `incentive:INCENTIVE_HELD:${award.userId}:${award.id}:${reason}`,
+    channels: [IN_APP_CHANNEL],
   });
 }
 
@@ -1613,6 +1643,23 @@ async function holdClaimedAwards(
       message: reason,
     })),
   });
+
+  // A hold applied at release time used to tell nobody: not the developer whose
+  // award silently stopped moving, and not the admins who are the only ones who
+  // can clear it. Only the hold applied at creation ever raised an alert.
+  await runFollowUps(
+    "incentive-release-hold",
+    awards.flatMap((award) => [
+      {
+        name: `held-developer-notification:${award.id}`,
+        run: () => notifyDeveloperHold(award, reason),
+      },
+      {
+        name: `held-admin-alert:${award.id}`,
+        run: () => notifyAdminsForAward(award.id, reason),
+      },
+    ]),
+  );
 }
 
 async function releaseAwardGroup(

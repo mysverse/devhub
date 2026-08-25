@@ -188,6 +188,30 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     configurable: false,
     emailRetry: "sweep",
   },
+  {
+    domain: "incentive",
+    type: "INCENTIVE_HELD",
+    audience: "developer",
+    title: "Incentive paused for a check",
+    description:
+      "One of your awards was paused for an admin to look at before payout.",
+    defaults: { in_app: true, email: false },
+    configurable: false,
+    emailRetry: "sweep",
+  },
+  {
+    domain: "incentive",
+    type: "INCENTIVE_APPROVED",
+    audience: "developer",
+    title: "Incentive approved",
+    // In-app only on purpose: an approved award releases on the next hourly
+    // run, so the payment notification is minutes behind this one.
+    description:
+      "An admin approved a paused award; it releases on the next run.",
+    defaults: { in_app: true, email: false },
+    configurable: false,
+    emailRetry: "sweep",
+  },
   // ── KYC (always sent — compliance) ───────────────────────────────────────
   {
     domain: "kyc",
@@ -459,6 +483,31 @@ export const NOTIFICATION_CATALOG: NotificationCatalogEntry[] = [
     description:
       "An incentive award or release needs attention — a cap, an anomaly, or a failed run.",
     defaults: { in_app: true, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
+  // Both of these were already being emitted by src/lib/incentives.ts without a
+  // catalog entry, which put them in exactly the blind spot the comment above
+  // describes: unknown to the retry sweep, so a dropped send stayed dropped.
+  {
+    domain: "incentive",
+    type: "ACTIVATION",
+    audience: "admin",
+    title: "Incentive program enabled",
+    description:
+      "The incentive program was switched on, with the activation watermark that decides which work counts.",
+    defaults: { in_app: false, email: true },
+    configurable: false,
+    emailRetry: "sweep",
+  },
+  {
+    domain: "incentive",
+    type: "ADMIN_DIGEST",
+    audience: "admin",
+    title: "Incentive weekly digest",
+    description:
+      "The weekly summary of awards created, held, released and paid.",
+    defaults: { in_app: false, email: true },
     configurable: false,
     emailRetry: "sweep",
   },

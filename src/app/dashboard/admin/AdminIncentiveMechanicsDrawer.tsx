@@ -27,6 +27,13 @@ const LIFECYCLE = [
   "PAID",
 ] as const;
 
+// HELD is not a step on the line — it is any of the first two stopping — so it
+// is described beside the chain rather than inside it. Leaving it out entirely
+// (as this drawer did) made a held award look like a state the program does not
+// have.
+const HELD_NOTE =
+  "A guardrail can hold an award at either of the first two steps. Approving it clears the caps and budgets for that award for good and releases it on the next hourly run — the review window has already been served, so it does not restart. Approval never skips the check that its counted issues still stand.";
+
 export default function AdminIncentiveMechanicsDrawer({ summary }: Props) {
   const [opened, { open, close }] = useDisclosure(false);
 
@@ -103,6 +110,9 @@ export default function AdminIncentiveMechanicsDrawer({ summary }: Props) {
                 New awards stay <strong>Pending release</strong> for the{" "}
                 <strong>{summary.disputeWindowHours}-hour</strong> review
                 window, then move through processing to payout:
+              </Text>
+              <Text fz="xs" c="dimmed">
+                {HELD_NOTE}
               </Text>
               <Group gap="xs" wrap="wrap">
                 {LIFECYCLE.map((status, index) => {

@@ -53,7 +53,9 @@ const ROUTES_BY_PERSONA: Record<string, string[]> = {
     "/dashboard/welcome-pack",
     "/dashboard/notifications",
   ],
-  admin: ["/dashboard", "/dashboard/admin"],
+  // The incentives tab is only the default when every earlier tab is empty,
+  // so it needs naming explicitly or it is never checked.
+  admin: ["/dashboard", "/dashboard/admin", "/dashboard/admin?tab=incentives"],
   fresh: ["/onboarding"],
   // Proxy-only payment details, so the DuitNow ID fields actually render.
   // Every other persona carries a bank account number, which opens the
@@ -149,7 +151,7 @@ async function verifyPersona(
 
         const problems = await collectLayoutProblems(page);
 
-        const fileName = `${persona}${route.replaceAll("/", "-")}-${viewport.name}.png`;
+        const fileName = `${persona}${route.replaceAll(/[^a-zA-Z0-9]+/g, "-")}-${viewport.name}.png`;
         await page.screenshot({
           path: path.join(OUT_DIR, fileName),
           fullPage: true,

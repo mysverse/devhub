@@ -12,6 +12,7 @@ import {
   Group,
   Modal,
   NumberInput,
+  Progress,
   Select,
   SimpleGrid,
   Stack,
@@ -98,13 +99,87 @@ export type AdminIncentiveAwardData = {
   heldReason: string | null;
   releaseAt: string | null;
   createdAt: string;
+  approvedAt: string | null;
+  approvedByName: string | null;
   transactionId: string | null;
+  events: {
+    id: string;
+    type: string;
+    message: string | null;
+    metadata: Record<string, unknown> | null;
+    createdAt: string;
+  }[];
   issues: {
     id: string;
     identifier: string | null;
     title: string | null;
     url: string | null;
   }[];
+};
+
+/** The cap arithmetic holdClaimedAwards records on a HELD event. */
+type HoldSnapshot = {
+  bucket: string;
+  used: number;
+  limit: number;
+  amount: number;
+  currency: string;
+};
+
+function readHoldSnapshot(award: AdminIncentiveAwardData): HoldSnapshot | null {
+  const held = award.events.find(
+    (event) => event.type === "HELD" && event.metadata,
+  );
+  const metadata = held?.metadata;
+  if (!metadata) return null;
+  const { bucket, used, limit, amount, currency } = metadata as Record<
+    string,
+    unknown
+  >;
+  if (
+    typeof bucket !== "string" ||
+    typeof used !== "number" ||
+    typeof limit !== "number" ||
+    typeof amount !== "number" ||
+    typeof currency !== "string"
+  ) {
+    return null;
+  }
+  return { bucket, used, limit, amount, currency };
+}
+
+const EVENT_LABEL: Record<string, { label: string; color: string }> = {
+  AWARD_CREATED: { label: "Created", color: "blue" },
+  HELD: { label: "Held", color: "orange" },
+  HELD_APPROVED: { label: "Approved", color: "green" },
+  TX_CREATED: { label: "Payout created", color: "blue" },
+  AUTO_PAYOUT_STARTED: { label: "Auto-payout", color: "blue" },
+  PAID: { label: "Paid", color: "green" },
+  CANCELLED: { label: "Cancelled", color: "red" },
+  CLAWBACK_REQUESTED: { label: "Clawback", color: "orange" },
+  SETTLED_BY_CLAWBACK: { label: "Netted", color: "green" },
+  ADMIN_ALERT_SENT: { label: "Admin alerted", color: "gray" },
+};
+
+function formatStamp(iso: string) {
+  return new Date(iso).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+const ACTION_TITLE: Record<"approve" | "cancel" | "clawback", string> = {
+  approve: "Approve & release",
+  cancel: "Cancel award",
+  clawback: "Request clawback",
+};
+
+const ACTION_COLOR: Record<"approve" | "cancel" | "clawback", string> = {
+  approve: "green",
+  cancel: "red",
+  clawback: "orange",
 };
 
 function formatType(type: string) {
@@ -131,9 +206,9 @@ export default function AdminIncentivesTab({
   const [running, setRunning] = useState(false);
   const [releasing, setReleasing] = useState(false);
   const [actionAwardId, setActionAwardId] = useState<string | null>(null);
-  const [actionKind, setActionKind] = useState<"cancel" | "clawback" | null>(
-    null,
-  );
+  const [actionKind, setActionKind] = useState<
+    "approve" | "cancel" | "clawback" | null
+  >(null);
   const [actionReason, setActionReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
   const [modalOpened, { open: openModal, close: closeModal }] =
@@ -144,6 +219,7 @@ export default function AdminIncentivesTab({
   const [expandedAwardId, setExpandedAwardId] = useState<string | null>(null);
   const [lastReleaseResult, setLastReleaseResult] = useState<{
     released: number;
+    held: number;
     skipped: number;
   } | null>(null);
   const [lastRunResult, setLastRunResult] = useState<{
@@ -184,6 +260,12 @@ export default function AdminIncentivesTab({
           label: period,
         }),
       ),
+    [awards],
+  );
+  // The one number an admin acts on: awards that will not move until somebody
+  // decides. It was previously only findable by reading every card.
+  const heldCount = useMemo(
+    () => awards.filter((award) => award.status === "HELD").length,
     [awards],
   );
   const filteredAwards = useMemo(
@@ -249,16 +331,10 @@ export default function AdminIncentivesTab({
     );
   }
 
-  async function handleApproveHeld(awardId: string) {
-    const result = await approveHeldIncentiveAward(awardId);
-    if (result.error) {
-      toast.error(result.error);
-      return;
-    }
-    toast.success("Approved — pays out on the next release run");
-  }
-
-  function requestAction(awardId: string, kind: "cancel" | "clawback") {
+  function requestAction(
+    awardId: string,
+    kind: "approve" | "cancel" | "clawback",
+  ) {
     setActionAwardId(awardId);
     setActionKind(kind);
     setActionReason("");
@@ -269,15 +345,17 @@ export default function AdminIncentivesTab({
     if (!actionAwardId || !actionKind) return;
     setActionLoading(true);
     const result =
-      actionKind === "clawback"
-        ? await requestIncentiveClawback(
-            actionAwardId,
-            actionReason.trim() || undefined,
-          )
-        : await disputeIncentiveAward(
-            actionAwardId,
-            actionReason.trim() || undefined,
-          );
+      actionKind === "approve"
+        ? await approveHeldIncentiveAward(actionAwardId)
+        : actionKind === "clawback"
+          ? await requestIncentiveClawback(
+              actionAwardId,
+              actionReason.trim() || undefined,
+            )
+          : await disputeIncentiveAward(
+              actionAwardId,
+              actionReason.trim() || undefined,
+            );
     setActionLoading(false);
 
     if (result.error) {
@@ -286,7 +364,11 @@ export default function AdminIncentivesTab({
     }
 
     toast.success(
-      actionKind === "clawback" ? "Clawback queued" : "Award cancelled",
+      actionKind === "approve"
+        ? "Approved — pays out on the next release run"
+        : actionKind === "clawback"
+          ? "Clawback queued"
+          : "Award cancelled",
     );
     closeModal();
   }
@@ -816,19 +898,34 @@ export default function AdminIncentivesTab({
             {lastReleaseResult && (
               <Alert
                 variant="light"
-                color={lastReleaseResult.released > 0 ? "green" : "gray"}
+                color={
+                  lastReleaseResult.released > 0
+                    ? "green"
+                    : lastReleaseResult.held > 0
+                      ? "orange"
+                      : "gray"
+                }
               >
+                {/* Held is reported alongside released: a run that pays some
+                    awards and quietly holds others reads as a clean run
+                    otherwise. */}
                 {lastReleaseResult.released > 0
                   ? `Released ${lastReleaseResult.released} award${lastReleaseResult.released === 1 ? "" : "s"}${
+                      lastReleaseResult.held > 0
+                        ? `, held ${lastReleaseResult.held}`
+                        : ""
+                    }${
                       lastReleaseResult.skipped > 0
                         ? `, ${lastReleaseResult.skipped} group${lastReleaseResult.skipped === 1 ? "" : "s"} skipped`
                         : ""
                     }.`
-                  : `No awards were due for release${
-                      lastReleaseResult.skipped > 0
-                        ? ` (${lastReleaseResult.skipped} group${lastReleaseResult.skipped === 1 ? "" : "s"} skipped)`
-                        : ""
-                    }.`}
+                  : lastReleaseResult.held > 0
+                    ? `No awards released — ${lastReleaseResult.held} held for review.`
+                    : `No awards were due for release${
+                        lastReleaseResult.skipped > 0
+                          ? ` (${lastReleaseResult.skipped} group${lastReleaseResult.skipped === 1 ? "" : "s"} skipped)`
+                          : ""
+                      }.`}
               </Alert>
             )}
             <Group align="flex-end">
@@ -899,6 +996,19 @@ export default function AdminIncentivesTab({
                 data={weekOptions}
                 onChange={setWeekFilter}
               />
+              {heldCount > 0 && (
+                <Button
+                  size="xs"
+                  variant={statusFilter === "HELD" ? "filled" : "light"}
+                  color="orange"
+                  mb={4}
+                  onClick={() =>
+                    setStatusFilter(statusFilter === "HELD" ? null : "HELD")
+                  }
+                >
+                  Needs review ({heldCount})
+                </Button>
+              )}
               <Text size="sm" c="dimmed" pb={6}>
                 Showing {filteredAwards.length} of {awards.length}
               </Text>
@@ -927,10 +1037,17 @@ export default function AdminIncentivesTab({
           ) : (
             filteredAwards.map((award) => {
               const statusCopy = incentiveStatusCopy(award.status);
+              // Only while it is actually held. Keyed on heldReason as well,
+              // this banner stayed on the card after the award had moved on,
+              // still explaining a hold that had been cleared.
               const heldCopy =
-                award.status === "HELD" || award.heldReason
+                award.status === "HELD"
                   ? incentiveHeldReasonCopy(award.heldReason)
                   : null;
+              const holdSnapshot = heldCopy ? readHoldSnapshot(award) : null;
+              const heldSince = award.events.find(
+                (event) => event.type === "HELD",
+              )?.createdAt;
               const expanded = expandedAwardId === award.id;
               return (
                 <Card key={award.id} withBorder radius="md" padding="lg">
@@ -951,12 +1068,27 @@ export default function AdminIncentivesTab({
                           {formatType(award.type)} - {award.period} - threshold{" "}
                           {award.thresholdMet}
                         </Text>
+                        {/* Created / held / approved, not just "Releases".
+                            With only the release time on the card, an award
+                            whose window had been restarted looked exactly like
+                            one that had just been created. */}
+                        <Text size="xs" c="dimmed">
+                          Created {formatStamp(award.createdAt)}
+                          {heldSince &&
+                            award.status === "HELD" &&
+                            ` · held since ${formatStamp(heldSince)}`}
+                          {award.approvedAt &&
+                            ` · approved ${formatStamp(award.approvedAt)}${
+                              award.approvedByName
+                                ? ` by ${award.approvedByName}`
+                                : ""
+                            }`}
+                        </Text>
                         {award.releaseAt &&
                           (award.status === "PENDING" ||
                             award.status === "HELD") && (
                             <Text size="xs" c="dimmed">
-                              Releases{" "}
-                              {new Date(award.releaseAt).toLocaleString()}
+                              Releases {formatStamp(award.releaseAt)}
                             </Text>
                           )}
                       </Stack>
@@ -991,6 +1123,50 @@ export default function AdminIncentivesTab({
                         <Text size="xs" c="dimmed">
                           {heldCopy.explanation}
                         </Text>
+                        {/* The arithmetic that held it, recorded at the time.
+                            An admin deciding whether to approve should not have
+                            to take "over the cap" on trust. */}
+                        {holdSnapshot && (
+                          <Stack gap={4} mt="xs">
+                            <Text size="xs">
+                              Paying it puts {award.developerName} at{" "}
+                              <Text span fw={700}>
+                                {formatAmount(
+                                  holdSnapshot.used + holdSnapshot.amount,
+                                  holdSnapshot.currency as CurrencyCode,
+                                )}
+                              </Text>{" "}
+                              of the{" "}
+                              {formatAmount(
+                                holdSnapshot.limit,
+                                holdSnapshot.currency as CurrencyCode,
+                              )}{" "}
+                              limit for {holdSnapshot.bucket}.
+                            </Text>
+                            <Progress.Root size="sm">
+                              <Progress.Section
+                                value={Math.min(
+                                  100,
+                                  (holdSnapshot.used / holdSnapshot.limit) *
+                                    100,
+                                )}
+                                color="blue"
+                              />
+                              <Progress.Section
+                                value={Math.min(
+                                  100,
+                                  (holdSnapshot.amount / holdSnapshot.limit) *
+                                    100,
+                                )}
+                                color="orange"
+                              />
+                            </Progress.Root>
+                            <Text size="10px" c="dimmed">
+                              Blue: already committed in that window. Orange:
+                              this award.
+                            </Text>
+                          </Stack>
+                        )}
                       </Box>
                     )}
 
@@ -1042,6 +1218,58 @@ export default function AdminIncentivesTab({
                       </Stack>
                     )}
 
+                    {award.events.length > 0 && (
+                      <Accordion variant="contained" chevronPosition="left">
+                        <Accordion.Item value="history">
+                          <Accordion.Control>
+                            <Text size="xs" c="dimmed">
+                              History ({award.events.length})
+                            </Text>
+                          </Accordion.Control>
+                          <Accordion.Panel>
+                            <Stack gap={6}>
+                              {award.events.map((event) => {
+                                const label = EVENT_LABEL[event.type] ?? {
+                                  label: event.type.replaceAll("_", " "),
+                                  color: "gray",
+                                };
+                                return (
+                                  <Group
+                                    key={event.id}
+                                    gap="xs"
+                                    wrap="nowrap"
+                                    align="baseline"
+                                  >
+                                    <Text
+                                      size="xs"
+                                      c="dimmed"
+                                      style={{
+                                        width: 110,
+                                        flexShrink: 0,
+                                        whiteSpace: "nowrap",
+                                      }}
+                                    >
+                                      {formatStamp(event.createdAt)}
+                                    </Text>
+                                    <Badge
+                                      size="xs"
+                                      variant="light"
+                                      color={label.color}
+                                    >
+                                      {label.label}
+                                    </Badge>
+                                    <Text size="xs" c="dimmed" lineClamp={2}>
+                                      {event.message}
+                                    </Text>
+                                  </Group>
+                                );
+                              })}
+                            </Stack>
+                          </Accordion.Panel>
+                        </Accordion.Item>
+                      </Accordion>
+                    )}
+
                     <Group justify="flex-end">
                       {award.status === "HELD" && (
                         <Button
@@ -1049,9 +1277,9 @@ export default function AdminIncentivesTab({
                           variant="light"
                           color="green"
                           leftSection={<Check size={14} />}
-                          onClick={() => handleApproveHeld(award.id)}
+                          onClick={() => requestAction(award.id, "approve")}
                         >
-                          Approve Held
+                          Approve &amp; release
                         </Button>
                       )}
                       {["PENDING", "HELD"].includes(award.status) && (
@@ -1088,7 +1316,7 @@ export default function AdminIncentivesTab({
       <Modal
         opened={modalOpened}
         onClose={actionLoading ? () => {} : closeModal}
-        title={actionKind === "clawback" ? "Request clawback" : "Cancel award"}
+        title={ACTION_TITLE[actionKind ?? "cancel"]}
         centered
         radius="md"
         transitionProps={MODAL_TRANSITION}
@@ -1096,10 +1324,7 @@ export default function AdminIncentivesTab({
       >
         <Stack gap="md">
           {actionAward && actionKind && (
-            <Alert
-              variant="light"
-              color={actionKind === "clawback" ? "orange" : "red"}
-            >
+            <Alert variant="light" color={ACTION_COLOR[actionKind]}>
               {incentiveActionConsequence(actionKind, {
                 amountFormatted: formatAmount(
                   actionAward.netAmount ?? actionAward.amount,
@@ -1109,11 +1334,16 @@ export default function AdminIncentivesTab({
               })}
             </Alert>
           )}
-          <Textarea
-            label="Reason"
-            value={actionReason}
-            onChange={(event) => setActionReason(event.currentTarget.value)}
-          />
+          {/* Approving takes no reason: it clears a guardrail rather than
+              making a decision about the developer, and the hold reason it
+              clears is already on the event. */}
+          {actionKind !== "approve" && (
+            <Textarea
+              label="Reason"
+              value={actionReason}
+              onChange={(event) => setActionReason(event.currentTarget.value)}
+            />
+          )}
           <Group justify="flex-end">
             <Button
               variant="default"
@@ -1123,11 +1353,11 @@ export default function AdminIncentivesTab({
               Back
             </Button>
             <Button
-              color={actionKind === "clawback" ? "orange" : "red"}
+              color={ACTION_COLOR[actionKind ?? "cancel"]}
               loading={actionLoading}
               onClick={handleAction}
             >
-              {actionKind === "clawback" ? "Request clawback" : "Cancel award"}
+              {ACTION_TITLE[actionKind ?? "cancel"]}
             </Button>
           </Group>
         </Stack>

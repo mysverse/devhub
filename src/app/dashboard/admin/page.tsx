@@ -225,8 +225,23 @@ const INCENTIVE_AWARD_BOARD_SELECT = {
   heldReason: true,
   releaseAt: true,
   createdAt: true,
+  approvedAt: true,
+  approvedBy: { select: PROFILE_DISPLAY_SELECT },
   transactionId: true,
   user: { select: PROFILE_DISPLAY_SELECT },
+  // The award's own history. Nothing read it before, so a restarted review
+  // window was indistinguishable from a fresh award.
+  events: {
+    select: {
+      id: true,
+      type: true,
+      message: true,
+      metadata: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "desc" },
+    take: 10,
+  },
   awardIssues: {
     select: {
       issueCompletion: {
@@ -899,7 +914,18 @@ async function AdminPageContent() {
       heldReason: award.heldReason,
       releaseAt: award.releaseAt?.toISOString() ?? null,
       createdAt: award.createdAt.toISOString(),
+      approvedAt: award.approvedAt?.toISOString() ?? null,
+      approvedByName: award.approvedBy
+        ? resolveDisplayName({ profile: award.approvedBy })
+        : null,
       transactionId: award.transactionId,
+      events: award.events.map((event) => ({
+        id: event.id,
+        type: event.type,
+        message: event.message,
+        metadata: event.metadata as Record<string, unknown> | null,
+        createdAt: event.createdAt.toISOString(),
+      })),
       issues: award.awardIssues.map(({ issueCompletion }) => ({
         id: issueCompletion.id,
         identifier: issueCompletion.linearIssueIdentifier,

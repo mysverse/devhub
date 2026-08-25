@@ -69,7 +69,8 @@ test("a pending award whose window has passed is waiting on the run, not the clo
     NOW,
   );
   assert.equal(explanation.releasesAt, null);
-  assert.match(explanation.headline, /next payout run/i);
+  assert.match(explanation.headline, /ready to send/i);
+  assert.match(explanation.detail ?? "", /next payout run/i);
 });
 
 test("an award with no release window at all still explains itself", () => {

@@ -1356,7 +1356,9 @@ export async function seed() {
       amount: 50,
       currency: "MYR",
       status: "HELD",
-      heldReason: "Anomaly check: completion velocity above weekly baseline.",
+      // The reason strings the runtime actually writes — free text here fell
+      // through incentiveHeldReasonCopy to the generic "Held for review".
+      heldReason: "anomaly",
       createdAt: daysAgo(8),
     },
   });

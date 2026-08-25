@@ -98,11 +98,12 @@ export function explainIncentiveAward(
       const due = !releaseAt || releaseAt <= now;
       return {
         ...base,
-        headline: due
-          ? "Sending on the next payout run"
-          : "Waiting out the review window",
+        // "Ready to send" rather than "Sending": the tracker still shows
+        // Review as the current step, and a line claiming otherwise
+        // contradicts the picture directly above it.
+        headline: due ? "Ready to send" : "Waiting out the review window",
         detail: due
-          ? "Payout runs go out every hour."
+          ? "It goes out on the next payout run — those happen every hour."
           : "It releases on its own — nothing needed from you.",
         tone: "info",
         owner: "automatic",

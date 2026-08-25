@@ -1,17 +1,11 @@
 "use client";
 
-import { Box, Group, Stack, Text } from "@mantine/core";
+import { Group, Stack, Text } from "@mantine/core";
 import type { WelcomePackOrderStatus } from "@prisma/client";
-import {
-  Check,
-  CircleDashed,
-  Inbox,
-  PackageCheck,
-  Truck,
-  X,
-} from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { Check, Inbox, PackageCheck, Truck, X } from "lucide-react";
+import { motion } from "motion/react";
 import type { ComponentType } from "react";
+import StatusStepper from "@/components/StatusStepper";
 
 const ACTIVE_STEPS: {
   key: WelcomePackOrderStatus;
@@ -38,10 +32,6 @@ export default function OrderStatusTimeline({
 }: {
   status: WelcomePackOrderStatus;
 }) {
-  // The infinite pulse animates opacity too, which MotionConfig's
-  // reducedMotion="user" does NOT suppress — gate it explicitly so reduced
-  // motion gets only the static halo.
-  const reducedMotion = useReducedMotion();
   const isTerminal = status === "CANCELLED" || status === "REJECTED";
 
   if (isTerminal) {
@@ -76,112 +66,5 @@ export default function OrderStatusTimeline({
 
   const currentIndex = STATUS_INDEX[status];
 
-  return (
-    <Box>
-      <Group gap={0} wrap="nowrap" align="flex-start">
-        {ACTIVE_STEPS.map((step, idx) => {
-          const isComplete = idx <= currentIndex;
-          const isCurrent = idx === currentIndex;
-          const isLast = idx === ACTIVE_STEPS.length - 1;
-          const Icon = step.icon;
-          return (
-            <Box key={step.key} style={{ flex: isLast ? 0 : 1, minWidth: 0 }}>
-              <Group gap="xs" wrap="nowrap" align="center">
-                <motion.div
-                  initial={false}
-                  animate={
-                    isComplete
-                      ? { scale: 1, opacity: 1 }
-                      : { scale: 0.95, opacity: 0.6 }
-                  }
-                  transition={{ type: "spring", stiffness: 240, damping: 22 }}
-                  style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: "50%",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor: isComplete
-                      ? "var(--mantine-color-blue-6)"
-                      : "var(--mantine-color-dark-5)",
-                    color: "white",
-                    flexShrink: 0,
-                    position: "relative",
-                    boxShadow: isCurrent
-                      ? "0 0 0 4px rgba(34, 139, 230, 0.18)"
-                      : "none",
-                  }}
-                >
-                  {isCurrent && !reducedMotion && (
-                    <motion.div
-                      aria-hidden
-                      animate={{ scale: [1, 1.4], opacity: [0.5, 0] }}
-                      transition={{
-                        duration: 1.6,
-                        repeat: Infinity,
-                        ease: "easeOut",
-                      }}
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        borderRadius: "50%",
-                        backgroundColor: "var(--mantine-color-blue-6)",
-                      }}
-                    />
-                  )}
-                  {isComplete ? (
-                    isCurrent ? (
-                      <Icon size={16} strokeWidth={2.4} />
-                    ) : (
-                      <Check size={16} strokeWidth={3} />
-                    )
-                  ) : (
-                    <CircleDashed size={16} />
-                  )}
-                </motion.div>
-                {!isLast && (
-                  <Box
-                    style={{
-                      flex: 1,
-                      height: 2,
-                      backgroundColor: "var(--mantine-color-dark-5)",
-                      position: "relative",
-                      overflow: "hidden",
-                      minWidth: 12,
-                    }}
-                  >
-                    <motion.div
-                      initial={{ width: 0 }}
-                      animate={{
-                        width: idx < currentIndex ? "100%" : "0%",
-                      }}
-                      transition={{
-                        duration: 0.55,
-                        ease: "easeOut",
-                        delay: idx * 0.06,
-                      }}
-                      style={{
-                        height: "100%",
-                        backgroundColor: "var(--mantine-color-blue-6)",
-                      }}
-                    />
-                  </Box>
-                )}
-              </Group>
-              <Text
-                size="xs"
-                fw={isCurrent ? 600 : 400}
-                c={isComplete ? undefined : "dimmed"}
-                mt={8}
-                style={{ whiteSpace: "nowrap" }}
-              >
-                {step.label}
-              </Text>
-            </Box>
-          );
-        })}
-      </Group>
-    </Box>
-  );
+  return <StatusStepper steps={ACTIVE_STEPS} currentIndex={currentIndex} />;
 }

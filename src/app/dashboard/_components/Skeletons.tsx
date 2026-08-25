@@ -171,6 +171,18 @@ export function IncentiveProgressSkeleton() {
           <Skeleton height={14} width={220} />
         </Stack>
         <Skeleton height={6} radius="xl" />
+        <Group gap={6}>
+          {[...Array(5)].map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
+            <Skeleton key={i} height={34} width={34} radius="sm" />
+          ))}
+        </Group>
+        <Stack gap="xs">
+          {[...Array(2)].map((_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list
+            <Skeleton key={i} height={104} radius="md" />
+          ))}
+        </Stack>
         <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
           {[...Array(3)].map((_, i) => (
             // biome-ignore lint/suspicious/noArrayIndexKey: static skeleton list

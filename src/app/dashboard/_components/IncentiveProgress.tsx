@@ -1,13 +1,13 @@
 import { Badge, Card, Group, SimpleGrid, Stack, Text } from "@mantine/core";
 import { Flame, Gauge, Sparkles, Trophy } from "lucide-react";
-import { type CurrencyCode, formatAmount } from "@/lib/currency";
+import RelativeCountdown from "@/components/RelativeCountdown";
 import type { IncentiveNextTarget } from "@/lib/incentive-copy";
-import {
-  formatAwardType,
-  getUserWeeklyIncentiveProgress,
-} from "@/lib/incentives";
+import { getWeekBoundsFor } from "@/lib/incentive-period";
+import { getUserWeeklyIncentiveProgress } from "@/lib/incentives";
 import AnimatedProgressBar from "./AnimatedProgressBar";
 import DashboardSectionHeader from "./DashboardSectionHeader";
+import IncentiveRewardRow from "./IncentiveRewardRow";
+import IncentiveStreakStrip from "./IncentiveStreakStrip";
 import IncentivesHelpDrawer from "./IncentivesHelpDrawer";
 
 function nextTargetIcon(kind: IncentiveNextTarget["kind"]) {
@@ -67,11 +67,26 @@ export default async function IncentiveProgress({
     (suggestion) => !(suggestion.id === "complete-more" && hasWeeklyTarget),
   );
 
+  const { weekEnd } = getWeekBoundsFor(progress.weekKey);
+  const streakTarget = progress.nextTargets.find(
+    (target) => target.kind === "streak",
+  );
+  const streakCaption =
+    progress.currentStreakWeeks > 0
+      ? `${progress.currentStreakWeeks} ${progress.currentStreakWeeks === 1 ? "week" : "weeks"} in a row${
+          streakTarget
+            ? ` · ${streakTarget.remaining} more for ${streakTarget.amountFormatted}`
+            : ""
+        }`
+      : streakTarget
+        ? `Hit your weekly target ${streakTarget.remaining} weeks running for ${streakTarget.amountFormatted}`
+        : "Hit your weekly target to start a streak";
+
   return (
     <section>
       <DashboardSectionHeader
         title="Incentives"
-        subtitle={`${progress.weekKey} activity progress`}
+        subtitle={progress.weekLabel}
         icon={<Sparkles size={16} />}
         badge={
           <Badge variant="light" color="green">
@@ -84,21 +99,36 @@ export default async function IncentiveProgress({
       <Card withBorder radius="md" padding="lg">
         <Stack gap="lg">
           <Stack gap="xs">
-            <Text size="xs" tt="uppercase" fw={700} c="dimmed">
-              Next reward
-            </Text>
-            {progress.atThreshold && !hasWeeklyTarget && (
-              <Group gap="xs">
-                <Badge variant="light" color="green">
-                  Weekly target hit
-                </Badge>
-                <Text size="sm" c="dimmed">
-                  You have cleared this week&apos;s threshold.
-                </Text>
-              </Group>
-            )}
+            <Group justify="space-between" align="baseline">
+              <Text size="xs" tt="uppercase" fw={700} c="dimmed">
+                This week
+              </Text>
+              <RelativeCountdown
+                target={weekEnd.toISOString()}
+                fallback="Week closing"
+                prefix="Ends"
+                size="xs"
+                c="dimmed"
+              />
+            </Group>
+            <Group justify="space-between">
+              <Text fw={700}>
+                {progress.completedThisWeek}/{progress.threshold} qualifying
+                tasks
+              </Text>
+              <Text size="sm" c="dimmed">
+                {progress.remaining === 0
+                  ? "Threshold reached"
+                  : `${progress.remaining} to go`}
+              </Text>
+            </Group>
+            <AnimatedProgressBar
+              completedPct={completedPct}
+              inProgressPct={0}
+              delay={0}
+            />
             {progress.nextTargets.length > 0 ? (
-              <Stack gap={6}>
+              <Stack gap={6} mt={4}>
                 {progress.nextTargets.map((target) => (
                   <Group
                     key={target.kind}
@@ -132,24 +162,47 @@ export default async function IncentiveProgress({
             </Text>
           </Stack>
 
-          <Stack gap="xs">
-            <Group justify="space-between">
-              <Text fw={700}>
-                {progress.completedThisWeek}/{progress.threshold} qualifying
-                tasks
-              </Text>
-              <Text size="sm" c="dimmed">
-                {progress.remaining === 0
-                  ? "Threshold reached"
-                  : `${progress.remaining} to go`}
-              </Text>
-            </Group>
-            <AnimatedProgressBar
-              completedPct={completedPct}
-              inProgressPct={0}
-              delay={0}
-            />
-          </Stack>
+          <IncentiveStreakStrip
+            chips={progress.streakStrip}
+            caption={streakCaption}
+          />
+
+          {progress.rewards.length > 0 && (
+            <Stack gap="xs">
+              <Group justify="space-between" align="baseline">
+                <Text size="xs" tt="uppercase" fw={700} c="dimmed">
+                  Your rewards
+                </Text>
+                {progress.inFlightFormatted && (
+                  <Text size="sm" fw={700} c="green.4">
+                    {progress.inFlightFormatted} on the way
+                  </Text>
+                )}
+              </Group>
+              {progress.rewards.map((reward) => (
+                <IncentiveRewardRow key={reward.id} reward={reward} />
+              ))}
+            </Stack>
+          )}
+
+          {progress.settledRewards.length > 0 && (
+            <details>
+              <summary
+                style={{
+                  cursor: "pointer",
+                  color: "var(--mantine-color-dimmed)",
+                  fontSize: "var(--mantine-font-size-xs)",
+                }}
+              >
+                Earlier rewards ({progress.settledRewards.length})
+              </summary>
+              <Stack gap="xs" mt="xs">
+                {progress.settledRewards.map((reward) => (
+                  <IncentiveRewardRow key={reward.id} reward={reward} />
+                ))}
+              </Stack>
+            </details>
+          )}
 
           <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="md">
             <Group gap="sm" wrap="nowrap">
@@ -189,36 +242,21 @@ export default async function IncentiveProgress({
             </Group>
           </SimpleGrid>
 
-          {progress.earnedThisWeek.length > 0 && (
-            <Stack gap="xs">
-              <Text size="sm" fw={700}>
-                Earned this week
-              </Text>
-              {progress.earnedThisWeek.map((award) => (
-                <Group key={award.id} justify="space-between">
-                  <Group gap="xs">
-                    <Text size="sm">{formatAwardType(award.type)}</Text>
-                    <Badge
-                      size="xs"
-                      variant="light"
-                      color={award.statusCopy.color}
-                    >
-                      {award.statusCopy.label}
-                    </Badge>
-                  </Group>
-                  <Text size="sm" fw={700}>
-                    {formatAmount(award.amount, award.currency as CurrencyCode)}
-                  </Text>
-                </Group>
-              ))}
-            </Stack>
-          )}
-
           {suggestions.length > 0 && (
             <Stack gap={6}>
               {suggestions.map((suggestion) => (
                 <Text key={suggestion.id} size="xs" c="dimmed">
-                  <Text span fw={600}>
+                  <Text
+                    span
+                    fw={600}
+                    c={
+                      suggestion.tone === "streak"
+                        ? "orange.4"
+                        : suggestion.tone === "pending"
+                          ? "blue.4"
+                          : undefined
+                    }
+                  >
                     {suggestion.title}.
                   </Text>{" "}
                   {suggestion.detail}

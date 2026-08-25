@@ -53,6 +53,7 @@ import {
   getMonthBounds,
   getWeekBoundsFor,
   getWeekKey,
+  isWeeklyPeriod,
   recentWeekKeys,
   shiftWeekKey,
 } from "@/lib/incentive-period";
@@ -1837,8 +1838,10 @@ async function releaseAwardGroup(
     userId,
     currency,
     windows: collectBucketWindows(guardrailAwards),
-    // The whole claimed set, not just what survives: an award must never
-    // appear in the totals its own check is measured against.
+    // The awards under evaluation, and only those: one must never appear in
+    // the totals its own check is measured against. The ones just held for
+    // invalid issues are deliberately NOT excluded — HELD is payable spend
+    // until it is approved or cancelled, so it keeps occupying its bucket.
     excludeAwardIds: valid.map((award) => award.id),
   });
   const decision = evaluateIncentiveGuardrails({
@@ -2353,6 +2356,30 @@ export type EarnedIncentiveAwardView = {
   statusCopy: IncentiveStatusCopy;
 };
 
+/**
+ * One reward, with everything a surface needs to tell its story — deliberately
+ * facts only. The derivation (`explainIncentiveAward`) reads the clock to decide
+ * whether a release window has passed, and this view model is `"use cache"`d for
+ * five minutes, so it must not bake that judgement in.
+ */
+export type IncentiveRewardView = {
+  id: string;
+  type: IncentiveType;
+  typeLabel: string;
+  period: string;
+  /** "Week of Aug 17", or "Lifetime milestone" for a non-weekly period. */
+  periodLabel: string;
+  amount: number;
+  currency: string;
+  amountFormatted: string;
+  status: IncentiveAwardStatus;
+  heldReason: string | null;
+  releaseAt: Date | null;
+  transactionId: string | null;
+  /** Newest first; rendered through the INCENTIVE_EVENT_COPY whitelist. */
+  events: { id: string; type: string; createdAt: Date }[];
+};
+
 export interface UserWeeklyIncentiveProgress {
   enabled: boolean;
   weekKey: string;
@@ -2381,6 +2408,12 @@ export interface UserWeeklyIncentiveProgress {
   qualification: IncentiveQualificationSummary;
   suggestions: IncentiveSuggestion[];
   earnedThisWeek: EarnedIncentiveAwardView[];
+  /** Every award still on its way, oldest period first — not just this week's. */
+  rewards: IncentiveRewardView[];
+  /** The last few that finished, for the collapsed history row. */
+  settledRewards: IncentiveRewardView[];
+  /** Total still owed across `rewards`, already formatted. */
+  inFlightFormatted: string | null;
   badges: string[];
 }
 
@@ -2407,12 +2440,16 @@ export async function getUserWeeklyIncentiveProgress(
       getStreakWeeks(userId, weekKey, config, activatedAt),
       getLifetimeQualifyingCount(userId, config, activatedAt),
       prisma.incentiveAward.findMany({
-        where: {
-          userId,
-          status: { not: "CANCELLED" },
-        },
+        where: { userId },
         orderBy: { createdAt: "desc" },
         take: 30,
+        include: {
+          events: {
+            select: { id: true, type: true, createdAt: true },
+            orderBy: { createdAt: "desc" },
+            take: 6,
+          },
+        },
       }),
       prisma.userProfile.findUnique({
         where: { id: userId },
@@ -2489,7 +2526,7 @@ export async function getUserWeeklyIncentiveProgress(
   });
 
   const earnedThisWeek: EarnedIncentiveAwardView[] = awards
-    .filter((award) => award.period === weekKey)
+    .filter((award) => award.period === weekKey && award.status !== "CANCELLED")
     .map((award) => ({
       id: award.id,
       type: award.type,
@@ -2498,12 +2535,71 @@ export async function getUserWeeklyIncentiveProgress(
       status: award.status,
       statusCopy: incentiveStatusCopy(award.status),
     }));
+
+  // Every award still on its way, whatever week it came from. The card used to
+  // list only the current week's, so a developer with four awards waiting from
+  // the two weeks before saw an empty card and no sign of the money at all.
+  const toRewardView = (
+    award: (typeof awards)[number],
+  ): IncentiveRewardView => ({
+    id: award.id,
+    type: award.type,
+    typeLabel: formatAwardType(award.type),
+    period: award.period,
+    periodLabel: isWeeklyPeriod(award.period)
+      ? formatWeekLabel(award.period)
+      : "Lifetime milestone",
+    amount: award.netAmount ?? award.amount,
+    currency: award.currency,
+    amountFormatted: formatAmount(
+      award.netAmount ?? award.amount,
+      award.currency as CurrencyCode,
+    ),
+    status: award.status,
+    heldReason: award.heldReason,
+    releaseAt: award.releaseAt,
+    transactionId: award.transactionId,
+    events: award.events,
+  });
+
+  const SETTLED_STATUSES: IncentiveAwardStatus[] = [
+    "PAID",
+    "CANCELLED",
+    "SETTLED_BY_CLAWBACK",
+  ];
+  const inFlight = awards.filter(
+    (award) => !SETTLED_STATUSES.includes(award.status),
+  );
+  const rewards = inFlight
+    .map(toRewardView)
+    // Oldest first: the award that has been waiting longest is the one the
+    // developer is wondering about.
+    .sort((a, b) => a.period.localeCompare(b.period));
+  const settledRewards = awards
+    .filter((award) => SETTLED_STATUSES.includes(award.status))
+    .slice(0, 5)
+    .map(toRewardView);
+  const inFlightTotal = inFlight.reduce(
+    (sum, award) => sum + (award.netAmount ?? award.amount),
+    0,
+  );
+  // Cancelled awards are excluded: a badge is a thing you did, and the query
+  // behind `awards` now returns cancelled rows so the rewards list can show
+  // them.
+  const earnedAwards = awards.filter((award) => award.status !== "CANCELLED");
   const badges = [
-    ...awards
+    ...earnedAwards
       .filter((award) => award.type === "MILESTONE")
       .map((award) => `Milestone ${award.period.replace("lifetime:", "")}`),
-    ...(currentStreakWeeks > 0 ? [`${currentStreakWeeks}-week streak`] : []),
-    ...awards
+    ...(currentStreakWeeks > 0
+      ? [
+          `${currentStreakWeeks}-week streak`.replace(
+            "1-week streak",
+            "1 qualifying week",
+          ),
+        ]
+      : []),
+    ...earnedAwards
       .filter((award) => award.type === "LEADERBOARD")
       .slice(0, 3)
       .map(() => "Leaderboard finisher"),
@@ -2586,6 +2682,10 @@ export async function getUserWeeklyIncentiveProgress(
     qualification,
     suggestions,
     earnedThisWeek,
+    rewards,
+    settledRewards,
+    inFlightFormatted:
+      inFlightTotal > 0 ? formatAmount(inFlightTotal, currency) : null,
     badges,
   };
 }

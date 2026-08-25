@@ -104,3 +104,52 @@ export function formatWeekChip(weekKey: string) {
   const match = /^\d{4}-W(\d{2})$/.exec(weekKey);
   return match ? `W${match[1]}` : weekKey;
 }
+
+// ---------------------------------------------------------------------------
+// Months and the accounting instant
+// ---------------------------------------------------------------------------
+
+/** "2026-08-25" — the UTC calendar day, used as an activity-day key. */
+export function dateOnlyUtc(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+/** First and last instant of a date's UTC calendar month. */
+export function getMonthBounds(date = new Date()) {
+  const monthStart = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1),
+  );
+  const monthEnd = new Date(
+    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) - 1,
+  );
+  return { monthStart, monthEnd };
+}
+
+/** "2026-08" — the UTC month a date falls in. */
+export function getMonthKey(date: Date) {
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * The instant an award is charged to a cap or a budget — deliberately not
+ * `createdAt`.
+ *
+ * An award for 2026-W34 is written by the Monday 01:00 UTC cron, which runs in
+ * W35. Bucketing that spend by when the row appeared charged it to the wrong
+ * week: the per-user weekly cap compared a W34 award against W33's spend, and
+ * the three awards one run creates for the same week (throughput, streak,
+ * leaderboard) never counted toward each other at all. Deriving the bucket from
+ * the award's own period makes it a property of the award rather than of
+ * whenever the cron happened to fire.
+ *
+ * Milestones carry "lifetime:25" and belong to no period, so they are charged
+ * when they were earned, which is when they were recorded.
+ *
+ * A week that straddles two months (2026-W31 is 27 Jul to 2 Aug) charges to the
+ * month its END falls in — the same rule `campaignClockForPeriod` already uses
+ * to decide which campaign covers an award.
+ */
+export function awardAccountingInstant(period: string, createdAt: Date): Date {
+  if (!isWeeklyPeriod(period)) return createdAt;
+  return getWeekBoundsFor(period).weekEnd;
+}

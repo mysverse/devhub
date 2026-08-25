@@ -7,7 +7,7 @@ import type {
   IncentiveType,
   Prisma,
 } from "@prisma/client";
-import { cacheLife, cacheTag } from "next/cache";
+import { cacheLife, cacheTag, revalidateTag } from "next/cache";
 import { cache, createElement } from "react";
 import IncentiveAdminDigest from "@/emails/IncentiveAdminDigest";
 import IncentiveEarned from "@/emails/IncentiveEarned";
@@ -37,8 +37,20 @@ import {
   incentiveStatusCopy,
 } from "@/lib/incentive-copy";
 import {
+  bucketsFor,
+  collectBucketWindows,
+  evaluateIncentiveGuardrails,
+  type GuardrailAward,
+  type GuardrailLimits,
+  type GuardrailUsage,
+  type GuardrailWindows,
+} from "@/lib/incentive-guardrails";
+import {
+  awardAccountingInstant,
+  dateOnlyUtc,
   formatWeekLabel,
   getJustClosedWeekKey,
+  getMonthBounds,
   getWeekBoundsFor,
   getWeekKey,
   recentWeekKeys,
@@ -286,24 +298,10 @@ function isUniqueConstraintError(error: unknown) {
   );
 }
 
-function dateOnlyUtc(date = new Date()) {
-  return date.toISOString().slice(0, 10);
-}
-
-// Week-key helpers live in `@/lib/incentive-period` so client components can name
-// a week without importing this (prisma-bound, server-only) module. Re-exported
-// here because callers already import them from the engine.
+// Week and month helpers live in `@/lib/incentive-period` so client components
+// can name a period without importing this (prisma-bound, server-only) module.
+// Re-exported here because callers already import them from the engine.
 export { getWeekBoundsFor, getWeekKey };
-
-function getMonthBounds(date = new Date()) {
-  const monthStart = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1),
-  );
-  const monthEnd = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1) - 1,
-  );
-  return { monthStart, monthEnd };
-}
 
 async function findAssigneeUser(input: LinearIncentiveIssueInput) {
   const assigneeLinearId = input.assignee?.id?.trim() || null;
@@ -315,6 +313,24 @@ async function findAssigneeUser(input: LinearIncentiveIssueInput) {
 
   if (whereOr.length === 0) return null;
   return prisma.userProfile.findFirst({ where: { OR: whereOr } });
+}
+
+/**
+ * Drop a developer's cached incentive card.
+ *
+ * getUserWeeklyIncentiveProgress is `"use cache"` with a five-minute revalidate
+ * and an hour-long expire, and this tag was only ever busted by the Linear
+ * webhook. Every status the engine moved an award through — released, paid,
+ * held — was therefore invisible to the person it belonged to for minutes at a
+ * time, which is a fair part of why a reward looked stuck.
+ */
+function revalidateDeveloperIncentives(userId: string) {
+  try {
+    revalidateTag(TAGS.incentiveProgress(userId), { expire: 0 });
+  } catch (error) {
+    // A cache bust must never take down the money path that just committed.
+    console.error("[incentives] Failed to revalidate progress tag:", error);
+  }
 }
 
 async function appendIncentiveEvent({
@@ -992,12 +1008,67 @@ async function aggregateAwardUsage({
       ...(userId ? { userId } : {}),
       currency,
       status: { in: PAYABLE_AWARD_STATUSES },
-      createdAt: { gte: start, lte: end },
+      // accountedAt, not createdAt: an award belongs to the week it was earned
+      // in, not to the Monday the cron wrote it. `lte` stays inclusive because
+      // every weekly award sits exactly on its week's last millisecond.
+      accountedAt: { gte: start, lte: end },
       ...(excludeAwardIds.length > 0 ? { id: { notIn: excludeAwardIds } } : {}),
     },
     _sum: { amount: true },
   });
   return result._sum.amount ?? 0;
+}
+
+/**
+ * Committed spend for every bucket a set of awards touches, in one round of
+ * aggregates. `excludeAwardIds` must name the whole set under evaluation — an
+ * award may not appear in the totals its own check is measured against.
+ */
+async function loadGuardrailUsage({
+  userId,
+  currency,
+  windows,
+  excludeAwardIds,
+}: {
+  userId: string;
+  currency: CurrencyCode;
+  windows: GuardrailWindows;
+  excludeAwardIds: string[];
+}): Promise<GuardrailUsage> {
+  const usage: GuardrailUsage = {
+    userWeekly: {},
+    userMonthly: {},
+    programWeekly: {},
+    programMonthly: {},
+  };
+
+  const reads = [
+    ...windows.weeks.flatMap((window) => [
+      { scope: "userWeekly" as const, window, userId },
+      { scope: "programWeekly" as const, window, userId: undefined },
+    ]),
+    ...windows.months.flatMap((window) => [
+      { scope: "userMonthly" as const, window, userId },
+      { scope: "programMonthly" as const, window, userId: undefined },
+    ]),
+  ];
+
+  const totals = await Promise.all(
+    reads.map((read) =>
+      aggregateAwardUsage({
+        userId: read.userId,
+        currency,
+        start: read.window.start,
+        end: read.window.end,
+        excludeAwardIds,
+      }),
+    ),
+  );
+
+  reads.forEach((read, index) => {
+    usage[read.scope][read.window.key] = totals[index];
+  });
+  return usage;
 }
 
 async function openDebtAmount(userId: string, currency: CurrencyCode) {
@@ -1008,6 +1079,11 @@ async function openDebtAmount(userId: string, currency: CurrencyCode) {
   return result._sum.remainingAmount ?? 0;
 }
 
+/**
+ * Spend and headroom for the developer's current week or month. Reads the same
+ * accountedAt buckets the guardrails do, so a number shown here and a hold
+ * applied by the engine can never tell different stories.
+ */
 export async function getUserIncentiveUsage(
   userId: string,
   currency: CurrencyCode,
@@ -1037,6 +1113,7 @@ async function guardrailHoldReason({
   currency,
   amount,
   weekKey,
+  accountedAt,
   issueCount,
   config,
   activatedAt,
@@ -1045,38 +1122,23 @@ async function guardrailHoldReason({
   currency: CurrencyCode;
   amount: number;
   weekKey: string;
+  /** The award's own bucket. Passed in so the check and the row it becomes
+   * cannot disagree about which week this spend belongs to. */
+  accountedAt: Date;
   issueCount: number;
   config: IncentiveConfig;
   activatedAt: Date;
 }) {
-  const { weekStart, weekEnd } = getWeekBoundsFor(weekKey);
-  const { monthStart, monthEnd } = getMonthBounds(weekStart);
-  const weeklyCap = getCapForCurrency(config, currency, "week");
-  const monthlyCap = getCapForCurrency(config, currency, "month");
-  const programWeeklyBudget = getProgramBudgetForCurrency(
-    config,
-    currency,
-    "week",
-  );
-  const programMonthlyBudget = getProgramBudgetForCurrency(
-    config,
-    currency,
-    "month",
-  );
+  const candidate: GuardrailAward = {
+    id: "pending",
+    amount,
+    accountedAt,
+    approved: false,
+  };
+  const windows = collectBucketWindows([candidate]);
 
-  const [
-    userWeeklyUsed,
-    userMonthlyUsed,
-    programWeeklyUsed,
-    programMonthlyUsed,
-    debt,
-    noEstimateFlag,
-    anomalyFlag,
-  ] = await Promise.all([
-    aggregateAwardUsage({ userId, currency, start: weekStart, end: weekEnd }),
-    aggregateAwardUsage({ userId, currency, start: monthStart, end: monthEnd }),
-    aggregateAwardUsage({ currency, start: weekStart, end: weekEnd }),
-    aggregateAwardUsage({ currency, start: monthStart, end: monthEnd }),
+  const [usage, debt, noEstimateFlag, anomalyFlag] = await Promise.all([
+    loadGuardrailUsage({ userId, currency, windows, excludeAwardIds: [] }),
     openDebtAmount(userId, currency),
     countNoEstimateRatioFlag(
       userId,
@@ -1087,28 +1149,43 @@ async function guardrailHoldReason({
     anomalyTriggered(userId, weekKey, issueCount, config, activatedAt),
   ]);
 
-  if (weeklyCap > 0 && userWeeklyUsed + debt + amount > weeklyCap) {
-    return "over_weekly_cap";
-  }
-  if (monthlyCap > 0 && userMonthlyUsed + debt + amount > monthlyCap) {
-    return "over_monthly_cap";
-  }
-  if (
-    programWeeklyBudget > 0 &&
-    programWeeklyUsed + amount > programWeeklyBudget
-  ) {
-    return "over_weekly_budget";
-  }
-  if (
-    programMonthlyBudget > 0 &&
-    programMonthlyUsed + amount > programMonthlyBudget
-  ) {
-    return "over_monthly_budget";
-  }
+  // Open clawback debt is money this developer already owes back, so it eats
+  // their own headroom — but not the program's, which never lent it.
+  const { week, month } = bucketsFor(accountedAt);
+  usage.userWeekly[week] = (usage.userWeekly[week] ?? 0) + debt;
+  usage.userMonthly[month] = (usage.userMonthly[month] ?? 0) + debt;
+
+  const { hold } = evaluateIncentiveGuardrails({
+    awards: [candidate],
+    limits: guardrailLimits(config, currency),
+    usage,
+    currency,
+  });
+  if (hold[0]) return hold[0].reason;
+
+  // Creation-only checks. Neither is re-run at release — there is nothing about
+  // a week's shape that changes once it has closed — so an approved award never
+  // has to bypass them.
   if (anomalyFlag) return "anomaly";
   if (noEstimateFlag) return "no_estimate_ratio";
 
   return null;
+}
+
+function guardrailLimits(
+  config: IncentiveConfig,
+  currency: CurrencyCode,
+): GuardrailLimits {
+  return {
+    userWeeklyCap: getCapForCurrency(config, currency, "week"),
+    userMonthlyCap: getCapForCurrency(config, currency, "month"),
+    programWeeklyBudget: getProgramBudgetForCurrency(config, currency, "week"),
+    programMonthlyBudget: getProgramBudgetForCurrency(
+      config,
+      currency,
+      "month",
+    ),
+  };
 }
 
 /**
@@ -1171,6 +1248,9 @@ async function createIncentiveAward({
   const normalizedAmount = campaign?.finalAmount ?? baseAmount;
 
   const issueCount = issueIds.length || thresholdMet;
+  // Computed once and written to the row, so the bucket the guardrail measured
+  // and the bucket every later aggregate reads are the same value.
+  const accountedAt = awardAccountingInstant(period, new Date());
   const heldReason =
     period.includes("-W") && issueCount > 0
       ? await guardrailHoldReason({
@@ -1178,6 +1258,7 @@ async function createIncentiveAward({
           currency,
           amount: normalizedAmount,
           weekKey: period,
+          accountedAt,
           issueCount,
           config,
           activatedAt,
@@ -1204,6 +1285,7 @@ async function createIncentiveAward({
           userId,
           type,
           period,
+          accountedAt,
           thresholdMet,
           detail,
           amount: normalizedAmount,
@@ -1262,6 +1344,10 @@ async function createIncentiveAward({
   // Follow-ups on an award that is already committed. None of them may take
   // the award down with them.
   await runFollowUps("incentive-award-created", [
+    {
+      name: "progress-cache",
+      run: async () => revalidateDeveloperIncentives(userId),
+    },
     {
       name: "award-notification",
       run: () => createAwardNotification(award.id, userId),
@@ -1618,31 +1704,56 @@ async function applyClawbackDebt({
   return { netAmount: remainingGroupAmount };
 }
 
-async function holdClaimedAwards(
-  awards: IncentiveAward[],
-  reason: string,
-  claimId: string,
-) {
-  if (awards.length === 0) return;
-  const ids = awards.map((award) => award.id);
-  await prisma.incentiveAward.updateMany({
-    where: { id: { in: ids }, status: "RELEASING", releaseClaimId: claimId },
-    data: {
-      status: "HELD",
-      heldReason: reason,
-      claimedAt: null,
-      releaseClaimId: null,
-    },
-  });
+type ClaimedHold = {
+  award: IncentiveAward;
+  reason: string;
+  /** The arithmetic behind a cap or budget hold, for the admin card to show. */
+  snapshot?: Prisma.InputJsonValue;
+};
+
+/**
+ * Move part of a claimed group to HELD.
+ *
+ * Per-award reasons rather than one reason for the group: a release can now
+ * hold the two awards that breached a cap and pay the other three, where it
+ * used to hold whatever it was handed under a single label.
+ */
+async function holdClaimedAwards(holds: ClaimedHold[], claimId: string) {
+  if (holds.length === 0) return;
+
+  const byReason = new Map<string, ClaimedHold[]>();
+  for (const hold of holds) {
+    byReason.set(hold.reason, [...(byReason.get(hold.reason) ?? []), hold]);
+  }
+  for (const [reason, group] of byReason) {
+    await prisma.incentiveAward.updateMany({
+      where: {
+        id: { in: group.map((hold) => hold.award.id) },
+        status: "RELEASING",
+        releaseClaimId: claimId,
+      },
+      data: {
+        status: "HELD",
+        heldReason: reason,
+        claimedAt: null,
+        releaseClaimId: null,
+      },
+    });
+  }
+
   await prisma.incentiveEvent.createMany({
-    data: awards.map((award) => ({
-      awardId: award.id,
-      userId: award.userId,
+    data: holds.map((hold) => ({
+      awardId: hold.award.id,
+      userId: hold.award.userId,
       type: "HELD",
-      period: award.period,
-      message: reason,
+      period: hold.award.period,
+      message: hold.reason,
+      ...(hold.snapshot ? { metadata: hold.snapshot } : {}),
     })),
   });
+
+  const awards = holds.map((hold) => hold.award);
+  const reasonFor = new Map(holds.map((hold) => [hold.award.id, hold.reason]));
 
   // A hold applied at release time used to tell nobody: not the developer whose
   // award silently stopped moving, and not the admins who are the only ones who
@@ -1652,11 +1763,13 @@ async function holdClaimedAwards(
     awards.flatMap((award) => [
       {
         name: `held-developer-notification:${award.id}`,
-        run: () => notifyDeveloperHold(award, reason),
+        run: () =>
+          notifyDeveloperHold(award, reasonFor.get(award.id) ?? "held"),
       },
       {
         name: `held-admin-alert:${award.id}`,
-        run: () => notifyAdminsForAward(award.id, reason),
+        run: () =>
+          notifyAdminsForAward(award.id, reasonFor.get(award.id) ?? "held"),
       },
     ]),
   );
@@ -1684,7 +1797,7 @@ async function releaseAwardGroup(
       where: { id: { in: ids }, status: "RELEASING", releaseClaimId: claimId },
       data: { status: "PENDING", claimedAt: null, releaseClaimId: null },
     });
-    return { released: 0, skipped: true };
+    return { released: 0, held: 0, skipped: true };
   }
 
   const claimed = await prisma.incentiveAward.findMany({
@@ -1693,79 +1806,88 @@ async function releaseAwardGroup(
   });
   const invalid = claimed.filter(awardIssuesInvalid);
   if (invalid.length > 0) {
-    await holdClaimedAwards(invalid, "issue_invalidated", claimId);
+    // Applies to approved awards too. Approval waives the caps, never the
+    // question of whether the work it paid for still stands.
+    await holdClaimedAwards(
+      invalid.map((award) => ({ award, reason: "issue_invalidated" })),
+      claimId,
+    );
   }
   const valid = claimed.filter(
     (award) => !invalid.some((item) => item.id === award.id),
   );
-  if (valid.length === 0) return { released: 0, skipped: false };
+  if (valid.length === 0) {
+    return { released: 0, held: invalid.length, skipped: false };
+  }
 
   const currency = valid[0].currency as CurrencyCode;
   const userId = valid[0].userId;
-  const grossAmount = normalizeAmount(
-    valid.reduce((sum, award) => sum + award.amount, 0),
-    currency,
-  );
-  const { weekStart, weekEnd } = getWeekBoundsFor(getWeekKey(now));
-  const { monthStart, monthEnd } = getMonthBounds(now);
-  const excludeAwardIds = valid.map((award) => award.id);
-  const [weeklyUsed, monthlyUsed, weeklyProgramUsed, monthlyProgramUsed] =
-    await Promise.all([
-      aggregateAwardUsage({
-        userId,
-        currency,
-        start: weekStart,
-        end: weekEnd,
-        excludeAwardIds,
-      }),
-      aggregateAwardUsage({
-        userId,
-        currency,
-        start: monthStart,
-        end: monthEnd,
-        excludeAwardIds,
-      }),
-      aggregateAwardUsage({
-        currency,
-        start: weekStart,
-        end: weekEnd,
-        excludeAwardIds,
-      }),
-      aggregateAwardUsage({
-        currency,
-        start: monthStart,
-        end: monthEnd,
-        excludeAwardIds,
-      }),
-    ]);
 
-  const weeklyCap = getCapForCurrency(config, currency, "week");
-  const monthlyCap = getCapForCurrency(config, currency, "month");
-  const weeklyBudget = getProgramBudgetForCurrency(config, currency, "week");
-  const monthlyBudget = getProgramBudgetForCurrency(config, currency, "month");
-  if (weeklyCap > 0 && weeklyUsed + grossAmount > weeklyCap) {
-    await holdClaimedAwards(valid, "over_weekly_cap", claimId);
-    return { released: 0, skipped: false };
+  // Each award is charged to its own week and month. The group used to be
+  // summed and tested against the cap for whichever week the cron ran in, so a
+  // developer with two weeks of due awards had both weeks charged to one cap —
+  // and a single breach held every award in the group.
+  const guardrailAwards: GuardrailAward[] = valid.map((award) => ({
+    id: award.id,
+    amount: award.amount,
+    accountedAt: award.accountedAt,
+    approved: award.approvedAt !== null,
+  }));
+  const usage = await loadGuardrailUsage({
+    userId,
+    currency,
+    windows: collectBucketWindows(guardrailAwards),
+    // The whole claimed set, not just what survives: an award must never
+    // appear in the totals its own check is measured against.
+    excludeAwardIds: valid.map((award) => award.id),
+  });
+  const decision = evaluateIncentiveGuardrails({
+    awards: guardrailAwards,
+    limits: guardrailLimits(config, currency),
+    usage,
+    currency,
+  });
+
+  const awardById = new Map(valid.map((award) => [award.id, award]));
+  if (decision.hold.length > 0) {
+    await holdClaimedAwards(
+      decision.hold.flatMap((hold) => {
+        const award = awardById.get(hold.award.id);
+        if (!award) return [];
+        return [
+          {
+            award,
+            reason: hold.reason,
+            snapshot: {
+              reason: hold.reason,
+              bucket: hold.bucket,
+              used: hold.used,
+              limit: hold.limit,
+              amount: hold.award.amount,
+              currency,
+            },
+          },
+        ];
+      }),
+      claimId,
+    );
   }
-  if (monthlyCap > 0 && monthlyUsed + grossAmount > monthlyCap) {
-    await holdClaimedAwards(valid, "over_monthly_cap", claimId);
-    return { released: 0, skipped: false };
-  }
-  if (weeklyBudget > 0 && weeklyProgramUsed + grossAmount > weeklyBudget) {
-    await holdClaimedAwards(valid, "over_weekly_budget", claimId);
-    return { released: 0, skipped: false };
-  }
-  if (monthlyBudget > 0 && monthlyProgramUsed + grossAmount > monthlyBudget) {
-    await holdClaimedAwards(valid, "over_monthly_budget", claimId);
-    return { released: 0, skipped: false };
+
+  const releasable = decision.release.flatMap((item) => {
+    const award = awardById.get(item.id);
+    return award ? [award] : [];
+  });
+  const heldCount = invalid.length + decision.hold.length;
+  if (releasable.length === 0) {
+    return { released: 0, held: heldCount, skipped: false };
   }
 
   const { netAmount } = await applyClawbackDebt({
     userId,
     currency,
-    awards: valid,
+    awards: releasable,
   });
-  const validIds = valid.map((award) => award.id);
+  const validIds = releasable.map((award) => award.id);
   if (netAmount <= 0) {
     await prisma.incentiveAward.updateMany({
       where: {
@@ -1780,7 +1902,7 @@ async function releaseAwardGroup(
       },
     });
     await prisma.incentiveEvent.createMany({
-      data: valid.map((award) => ({
+      data: releasable.map((award) => ({
         awardId: award.id,
         userId,
         type: "SETTLED_BY_CLAWBACK",
@@ -1788,22 +1910,25 @@ async function releaseAwardGroup(
         message: "Award fully netted against open clawback debt",
       })),
     });
-    return { released: valid.length, skipped: false };
+    return { released: releasable.length, held: heldCount, skipped: false };
   }
 
   // A release groups several awards, which may or may not share a campaign;
   // only attribute the transaction when they agree. baseAmount is the sum of
   // the pre-multiplier award amounts, so the payout slip can explain itself.
   const campaignIds = new Set(
-    valid.map((award) => award.campaignId).filter(Boolean),
+    releasable.map((award) => award.campaignId).filter(Boolean),
   );
   const sharedCampaignId = campaignIds.size === 1 ? [...campaignIds][0] : null;
   const sharedMultiplier = sharedCampaignId
-    ? (valid.find((award) => award.campaignId === sharedCampaignId)
+    ? (releasable.find((award) => award.campaignId === sharedCampaignId)
         ?.campaignMultiplier ?? null)
     : null;
   const baseTotal = normalizeAmount(
-    valid.reduce((sum, award) => sum + (award.baseAmount ?? award.amount), 0),
+    releasable.reduce(
+      (sum, award) => sum + (award.baseAmount ?? award.amount),
+      0,
+    ),
     currency,
   );
 
@@ -1832,7 +1957,7 @@ async function releaseAwardGroup(
         status: "PENDING",
         autoApproved: config.autoPayout,
         linearIssueIdentifier: `INCENTIVE-${dateOnlyUtc(now)}`,
-        linearIssueTitle: `Incentive Awards - ${valid.length} item${valid.length === 1 ? "" : "s"}`,
+        linearIssueTitle: `Incentive Awards - ${releasable.length} item${releasable.length === 1 ? "" : "s"}`,
       },
     });
 
@@ -1869,7 +1994,7 @@ async function releaseAwardGroup(
     }
 
     await tx.incentiveEvent.createMany({
-      data: valid.map((award) => ({
+      data: releasable.map((award) => ({
         awardId: award.id,
         userId,
         type: "TX_CREATED",
@@ -1886,7 +2011,7 @@ async function releaseAwardGroup(
       const { initiateAutoPayout } = await import("@/lib/payout");
       const payout = await initiateAutoPayout(transaction.id);
       await prisma.incentiveEvent.createMany({
-        data: valid.map((award) => ({
+        data: releasable.map((award) => ({
           awardId: award.id,
           userId,
           type: "AUTO_PAYOUT_STARTED",
@@ -1899,7 +2024,7 @@ async function releaseAwardGroup(
     }
   }
 
-  return { released: valid.length, skipped: false };
+  return { released: releasable.length, held: heldCount, skipped: false };
 }
 
 export async function releaseDueIncentives() {
@@ -1920,7 +2045,9 @@ export async function releaseDueIncentives() {
   }
 
   let released = 0;
+  let held = 0;
   let skipped = 0;
+  const touchedUserIds = new Set<string>();
   // Per-group isolation: one developer's release failing must not stop every
   // other developer from being paid. Without this a single bad group held the
   // whole hourly release, and nothing recorded that the rest were skipped.
@@ -1931,11 +2058,21 @@ export async function releaseDueIncentives() {
     run: async (group) => {
       const result = await releaseAwardGroup(group, config);
       released += result.released;
+      // Counted, not silent: a partial hold that nothing reports reads exactly
+      // like a clean run in the cron's response.
+      held += result.held;
       if (result.skipped) skipped++;
+      if (group[0] && (result.released > 0 || result.held > 0)) {
+        touchedUserIds.add(group[0].userId);
+      }
     },
   });
 
-  return { released, skipped, failed: batch.failed };
+  for (const userId of touchedUserIds) {
+    revalidateDeveloperIncentives(userId);
+  }
+
+  return { released, held, skipped, failed: batch.failed };
 }
 
 export async function recordUserActivityDay(userId: string) {
@@ -1976,6 +2113,9 @@ export async function markIncentiveAwardsPaidForTransaction(
       message: transactionId,
     })),
   });
+  for (const userId of new Set(awards.map((award) => award.userId))) {
+    revalidateDeveloperIncentives(userId);
+  }
 }
 
 export async function cancelIncentiveAwardsForTransaction(
@@ -2005,6 +2145,9 @@ export async function cancelIncentiveAwardsForTransaction(
       message: reason ?? "Linked transaction rejected",
     })),
   });
+  for (const userId of new Set(awards.map((award) => award.userId))) {
+    revalidateDeveloperIncentives(userId);
+  }
 }
 
 export async function requestIncentiveClawback(

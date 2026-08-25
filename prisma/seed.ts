@@ -34,7 +34,7 @@ import {
 } from "@/lib/currency";
 import { assertDevModeSafety, DEV_PASSWORD } from "@/lib/dev-mode";
 import { getDocumentTemplate } from "@/lib/documents";
-import { getWeekKey } from "@/lib/incentives";
+import { awardAccountingInstant, getWeekKey } from "@/lib/incentive-period";
 import prisma from "@/lib/prisma";
 
 const now = new Date();
@@ -1291,6 +1291,7 @@ export async function seed() {
       userId: devId,
       type: "WEEKLY_THROUGHPUT",
       period: prevWeekKey,
+      accountedAt: awardAccountingInstant(prevWeekKey, daysAgo(9)),
       thresholdMet: 5,
       amount: 30,
       netAmount: 30,
@@ -1315,6 +1316,7 @@ export async function seed() {
       userId: devId,
       type: "STREAK",
       period: prevWeekKey,
+      accountedAt: awardAccountingInstant(prevWeekKey, daysAgo(8)),
       thresholdMet: 4,
       amount: 50,
       currency: "MYR",
@@ -1330,8 +1332,11 @@ export async function seed() {
   await prisma.incentiveAward.create({
     data: {
       userId: devId,
+      // Milestones are lifetime, not weekly — the runtime writes
+      // `lifetime:N` — and are charged to when they were earned.
       type: "MILESTONE",
-      period: prevWeekKey,
+      period: "lifetime:10",
+      accountedAt: daysAgo(7),
       thresholdMet: 10,
       detail: { milestone: 10 },
       amount: 25,
@@ -1347,6 +1352,7 @@ export async function seed() {
       userId: devId,
       type: "LEADERBOARD",
       period: currentWeekKey,
+      accountedAt: awardAccountingInstant(currentWeekKey, daysAgo(1)),
       thresholdMet: 1,
       detail: { rank: 1 },
       amount: 40,

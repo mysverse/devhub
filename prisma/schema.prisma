@@ -1146,6 +1146,12 @@ model IncentiveAward {
   user               UserProfile             @relation("IncentiveAwardUser", fields: [userId], references: [id], onDelete: Cascade)
   type               IncentiveType
   period             String
+  /// The instant this award is charged to a cap or budget — deliberately NOT
+  /// createdAt. "YYYY-Www" periods use the last millisecond of that ISO week;
+  /// "lifetime:N" milestones use createdAt. Always written explicitly by
+  /// createIncentiveAward via awardAccountingInstant(); the default only exists
+  /// so the old code can keep inserting during a deploy's migrate-then-serve gap.
+  accountedAt        DateTime                @default(now())
   thresholdMet       Int
   detail             Json?
   amount             Float
@@ -1183,6 +1189,8 @@ model IncentiveAward {
   @@index([userId, status])
   @@index([status, releaseAt])
   @@index([transactionId])
+  @@index([currency, accountedAt])
+  @@index([userId, currency, accountedAt])
 }
 
 model IncentiveAwardIssue {

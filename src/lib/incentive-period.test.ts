@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  awardAccountingInstant,
   formatWeekChip,
   formatWeekLabel,
   formatWeekRange,
   getJustClosedWeekKey,
+  getMonthKey,
   getWeekBoundsFor,
   getWeekKey,
   isWeeklyPeriod,
@@ -81,4 +83,64 @@ test("non-weekly periods are passed through untouched", () => {
   assert.equal(isWeeklyPeriod("lifetime:25"), false);
   assert.equal(formatWeekLabel("lifetime:25"), "lifetime:25");
   assert.equal(formatWeekRange("lifetime:25"), "lifetime:25");
+});
+
+test("an award is charged to the end of its own week, not to when it was written", () => {
+  // The Monday cron writes a W34 award while standing in W35. Bucketing on
+  // createdAt charged it to the wrong week — the whole of the cap bug.
+  const createdAt = new Date("2026-08-24T01:00:00.000Z");
+  assert.equal(
+    awardAccountingInstant("2026-W34", createdAt).toISOString(),
+    "2026-08-23T23:59:59.999Z",
+  );
+  assert.equal(
+    getWeekKey(awardAccountingInstant("2026-W34", createdAt)),
+    "2026-W34",
+  );
+});
+
+test("a lifetime milestone is charged to when it was recorded", () => {
+  const createdAt = new Date("2026-08-24T01:00:00.000Z");
+  assert.equal(
+    awardAccountingInstant("lifetime:25", createdAt).getTime(),
+    createdAt.getTime(),
+  );
+  // An unrecognised period must fall back rather than throw: this runs inside
+  // award creation, and money must not depend on parsing a label.
+  assert.equal(
+    awardAccountingInstant("nonsense", createdAt).getTime(),
+    createdAt.getTime(),
+  );
+});
+
+test("the accounting instant matches the migration's backfill, exactly", () => {
+  // The backfill computes
+  //   (to_date(period || '-1', 'IYYY-"W"IW-ID'))::timestamp
+  //     + interval '7 days' - interval '1 millisecond'
+  // Verified against Postgres; these are the values it returned. If this test
+  // changes, the SQL in 20260825074500_incentive_award_accounting is wrong for
+  // every row already in the table.
+  const cases: [string, string][] = [
+    ["2026-W34", "2026-08-23T23:59:59.999Z"],
+    ["2026-W35", "2026-08-30T23:59:59.999Z"],
+    ["2026-W01", "2026-01-04T23:59:59.999Z"],
+    ["2020-W53", "2021-01-03T23:59:59.999Z"],
+    ["2026-W31", "2026-08-02T23:59:59.999Z"],
+  ];
+  for (const [period, expected] of cases) {
+    assert.equal(
+      awardAccountingInstant(period, new Date(0)).toISOString(),
+      expected,
+      period,
+    );
+  }
+});
+
+test("a week that ends in the next month is charged to that month", () => {
+  // 2026-W31 runs 27 Jul to 2 Aug: August's budget, matching the rule
+  // campaignClockForPeriod already uses to pick an award's campaign.
+  assert.equal(
+    getMonthKey(awardAccountingInstant("2026-W31", new Date(0))),
+    "2026-08",
+  );
 });

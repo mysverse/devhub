@@ -1268,6 +1268,41 @@ export async function seed() {
     completionIdByIssueId.set(fixtureIssue.id, completion.id);
   }
 
+  // Two qualifying weeks in a row, then a gap, then two more — enough history
+  // for the streak strip on the dashboard to show a real run, a real break, and
+  // a week still in progress. The Linear fixtures only span the last ten days,
+  // so these are synthetic completions: the incentive engine counts
+  // IssueCompletion rows and never reaches back to Linear for them.
+  const streakWeekOffsets = [1, 2, 4, 5];
+  for (const weekOffset of streakWeekOffsets) {
+    const weekKey = getWeekKey(daysAgo(weekOffset * 7));
+    for (let index = 0; index < 5; index++) {
+      const completedAt = daysAgo(weekOffset * 7 - index);
+      await prisma.issueCompletion.create({
+        data: {
+          linearIssueId: `seed-streak-${weekKey}-${index}`,
+          linearIssueIdentifier: `MYS-9${weekOffset}${index}`,
+          linearIssueTitle: `Seeded qualifying task ${index + 1} (${weekKey})`,
+          userId: devId,
+          assigneeLinearId: PERSONAS.developer.linearId,
+          assigneeName: PERSONAS.developer.name,
+          assigneeAtCompletion: PERSONAS.developer.linearId,
+          estimate: 3,
+          labels: [],
+          completed: true,
+          observedCompletedAt: completedAt,
+          linearCompletedAt: completedAt,
+          completionEpisode: 1,
+          weekKey,
+          countedInWeek: weekKey,
+          latestLinearStateType: "completed",
+          latestLinearStateName: "Done",
+          latestLinearUpdatedAt: completedAt,
+        },
+      });
+    }
+  }
+
   const activityOffsets = [0, 1, 2, 3, 6, 8, 9, 10];
   await prisma.userActivityDay.createMany({
     data: activityOffsets.map((offset) => ({
@@ -1358,7 +1393,97 @@ export async function seed() {
       amount: 40,
       currency: "MYR",
       status: "PENDING",
+      // Still inside its review window, so the dashboard has a live countdown
+      // to render rather than an award that is merely late.
+      releaseAt: new Date(now.getTime() + 30 * 60 * 60 * 1000),
       createdAt: daysAgo(1),
+    },
+  });
+
+  // The rest of the lifecycle, one award per state the surfaces have to draw.
+  const twoWeeksAgoKey = getWeekKey(daysAgo(14));
+  const threeWeeksAgoKey = getWeekKey(daysAgo(21));
+
+  // Held by a cap, with the arithmetic that held it — this is what the admin
+  // card turns into a meter, and what "Approve & release" clears.
+  const cappedAward = await prisma.incentiveAward.create({
+    data: {
+      userId: devId,
+      type: "WEEKLY_THROUGHPUT",
+      period: twoWeeksAgoKey,
+      accountedAt: awardAccountingInstant(twoWeeksAgoKey, daysAgo(13)),
+      thresholdMet: 7,
+      amount: 45,
+      currency: "MYR",
+      status: "HELD",
+      heldReason: "over_weekly_cap",
+      createdAt: daysAgo(13),
+    },
+  });
+
+  // Already cleared by an admin and due: `pnpm simulate cron
+  // incentives-release` pays this one out and must NOT hold it again, whatever
+  // the caps say.
+  await prisma.incentiveAward.create({
+    data: {
+      userId: devId,
+      type: "LEADERBOARD",
+      period: twoWeeksAgoKey,
+      accountedAt: awardAccountingInstant(twoWeeksAgoKey, daysAgo(13)),
+      thresholdMet: 2,
+      detail: { rank: 2 },
+      amount: 40,
+      currency: "MYR",
+      status: "PENDING",
+      approvedAt: daysAgo(1),
+      approvedById: adminId,
+      releaseAt: daysAgo(1),
+      createdAt: daysAgo(13),
+    },
+  });
+
+  const txIncentiveSending = await prisma.transaction.create({
+    data: {
+      userId: devId,
+      linearIssueTitle: "Incentive Awards - 1 item",
+      amount: 50,
+      currency: "MYR",
+      source: "INCENTIVE",
+      status: "PENDING",
+      autoApproved: true,
+      createdAt: daysAgo(2),
+    },
+  });
+  await prisma.incentiveAward.create({
+    data: {
+      userId: devId,
+      type: "STREAK",
+      period: twoWeeksAgoKey,
+      accountedAt: awardAccountingInstant(twoWeeksAgoKey, daysAgo(13)),
+      thresholdMet: 4,
+      detail: { streakWeeks: 4 },
+      amount: 50,
+      currency: "MYR",
+      status: "TRANSACTION_PENDING",
+      transactionId: txIncentiveSending.id,
+      createdAt: daysAgo(13),
+    },
+  });
+
+  await prisma.incentiveAward.create({
+    data: {
+      userId: devId,
+      type: "WEEKLY_THROUGHPUT",
+      period: threeWeeksAgoKey,
+      accountedAt: awardAccountingInstant(threeWeeksAgoKey, daysAgo(20)),
+      thresholdMet: 5,
+      amount: 30,
+      currency: "MYR",
+      status: "CANCELLED",
+      disputedById: adminId,
+      disputedAt: daysAgo(19),
+      disputeReason: "Duplicate of the week before.",
+      createdAt: daysAgo(20),
     },
   });
 
@@ -1393,14 +1518,32 @@ export async function seed() {
       },
     },
   });
+  // Event trails the developer's "what happened" list and the admin history
+  // both read. Types match what the runtime writes — the paid award used to
+  // carry AWARD_PAID, which no code path has ever produced.
   await prisma.incentiveEvent.createMany({
     data: [
       {
         awardId: paidWeeklyAward.id,
         userId: devId,
-        type: "AWARD_PAID",
+        type: "AWARD_CREATED",
         period: prevWeekKey,
-        message: "Weekly throughput award paid out.",
+        createdAt: daysAgo(9),
+      },
+      {
+        awardId: paidWeeklyAward.id,
+        userId: devId,
+        type: "TX_CREATED",
+        period: prevWeekKey,
+        message: txIncentivePaid.id,
+        createdAt: daysAgo(8),
+      },
+      {
+        awardId: paidWeeklyAward.id,
+        userId: devId,
+        type: "PAID",
+        period: prevWeekKey,
+        message: txIncentivePaid.id,
         createdAt: daysAgo(8),
       },
       {
@@ -1408,8 +1551,31 @@ export async function seed() {
         userId: devId,
         type: "AWARD_CREATED",
         period: currentWeekKey,
-        message: "Leaderboard award created for current week.",
         createdAt: daysAgo(1),
+      },
+      {
+        awardId: cappedAward.id,
+        userId: devId,
+        type: "AWARD_CREATED",
+        period: twoWeeksAgoKey,
+        createdAt: daysAgo(13),
+      },
+      {
+        awardId: cappedAward.id,
+        userId: devId,
+        type: "HELD",
+        period: twoWeeksAgoKey,
+        message: "over_weekly_cap",
+        // The snapshot the admin card renders as a meter.
+        metadata: {
+          reason: "over_weekly_cap",
+          bucket: twoWeeksAgoKey,
+          used: 120,
+          limit: 150,
+          amount: 45,
+          currency: "MYR",
+        },
+        createdAt: daysAgo(11),
       },
     ],
   });

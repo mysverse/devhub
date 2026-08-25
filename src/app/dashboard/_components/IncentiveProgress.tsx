@@ -172,7 +172,10 @@ export default async function IncentiveProgress({
                 <Text size="xs" c="dimmed">
                   Streak
                 </Text>
-                <Text fw={700}>{progress.currentStreakWeeks} weeks</Text>
+                <Text fw={700}>
+                  {progress.currentStreakWeeks}{" "}
+                  {progress.currentStreakWeeks === 1 ? "week" : "weeks"}
+                </Text>
               </Stack>
             </Group>
             <Group gap="sm" wrap="nowrap">

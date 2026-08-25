@@ -35,6 +35,20 @@ import {
   type IncentiveSuggestion,
   incentiveStatusCopy,
 } from "@/lib/incentive-copy";
+import {
+  formatWeekLabel,
+  getJustClosedWeekKey,
+  getWeekBoundsFor,
+  getWeekKey,
+  recentWeekKeys,
+  shiftWeekKey,
+} from "@/lib/incentive-period";
+import {
+  buildStreakStrip,
+  computeStreak,
+  type StreakChip,
+  type WeekQualification,
+} from "@/lib/incentive-streak";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
 import {
   linkCampaignApplicationsToTransaction,
@@ -275,49 +289,10 @@ function dateOnlyUtc(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
-export function getWeekKey(date: Date): string {
-  const working = new Date(
-    Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()),
-  );
-  const day = working.getUTCDay() || 7;
-  working.setUTCDate(working.getUTCDate() + 4 - day);
-  const yearStart = new Date(Date.UTC(working.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(
-    ((working.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7,
-  );
-  return `${working.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
-
-export function getWeekBoundsFor(weekKey: string) {
-  const match = /^(\d{4})-W(\d{2})$/.exec(weekKey);
-  if (!match) throw new Error(`Invalid ISO week key: ${weekKey}`);
-
-  const year = Number(match[1]);
-  const week = Number(match[2]);
-  const jan4 = new Date(Date.UTC(year, 0, 4));
-  const jan4Day = jan4.getUTCDay() || 7;
-  const weekStart = new Date(jan4);
-  weekStart.setUTCDate(jan4.getUTCDate() - jan4Day + 1 + (week - 1) * 7);
-  weekStart.setUTCHours(0, 0, 0, 0);
-
-  const weekEnd = new Date(weekStart);
-  weekEnd.setUTCDate(weekStart.getUTCDate() + 6);
-  weekEnd.setUTCHours(23, 59, 59, 999);
-
-  return { weekStart, weekEnd };
-}
-
-function getJustClosedWeekKey(now = new Date()) {
-  const currentWeek = getWeekBoundsFor(getWeekKey(now));
-  return getWeekKey(new Date(currentWeek.weekStart.getTime() - 1));
-}
-
-function shiftWeekKey(weekKey: string, weeks: number) {
-  const { weekStart } = getWeekBoundsFor(weekKey);
-  const shifted = new Date(weekStart);
-  shifted.setUTCDate(shifted.getUTCDate() + weeks * 7);
-  return getWeekKey(shifted);
-}
+// Week-key helpers live in `@/lib/incentive-period` so client components can name
+// a week without importing this (prisma-bound, server-only) module. Re-exported
+// here because callers already import them from the engine.
+export { getWeekBoundsFor, getWeekKey };
 
 function getMonthBounds(date = new Date()) {
   const monthStart = new Date(
@@ -710,20 +685,93 @@ async function getQualifyingIssuesForWeek(
     },
   });
 
-  return issues.filter((issue) => {
-    if (issue.countedInWeek && issue.countedInWeek !== weekKey) return false;
-    if (!issue.estimate || issue.estimate < config.minEstimateToCount) {
-      return false;
-    }
-    if (issueHasExcludedLabel(issue.labels, config)) return false;
-    if (
-      issue.assigneeAtCompletion &&
-      issue.assigneeLinearId !== issue.assigneeAtCompletion
-    ) {
-      return false;
-    }
-    return true;
+  return issues.filter((issue) =>
+    isQualifyingCompletion(issue, config, weekKey),
+  );
+}
+
+/**
+ * The judgement that decides whether a completed issue counts toward a week,
+ * separated from the query so the single-week read and the multi-week streak
+ * history apply exactly the same rules.
+ */
+function isQualifyingCompletion(
+  issue: {
+    estimate: number | null;
+    labels: string[];
+    countedInWeek: string | null;
+    assigneeLinearId: string | null;
+    assigneeAtCompletion: string | null;
+  },
+  config: IncentiveConfig,
+  weekKey: string,
+) {
+  if (issue.countedInWeek && issue.countedInWeek !== weekKey) return false;
+  if (!issue.estimate || issue.estimate < config.minEstimateToCount) {
+    return false;
+  }
+  if (issueHasExcludedLabel(issue.labels, config)) return false;
+  return !(
+    issue.assigneeAtCompletion &&
+    issue.assigneeLinearId !== issue.assigneeAtCompletion
+  );
+}
+
+/**
+ * Qualifying counts for a run of weeks in ONE query.
+ *
+ * The streak used to be walked a week at a time, each step its own round trip
+ * (up to 104 of them). Weeks with nothing in them are returned as zeros so the
+ * caller can tell "no qualifying work" apart from "outside the window I asked
+ * for" — the difference between a broken streak and an unfinished walk.
+ */
+async function getWeekQualificationHistory(
+  userId: string,
+  weekKeys: string[],
+  config: IncentiveConfig,
+  activatedAt: Date,
+  now = new Date(),
+): Promise<WeekQualification[]> {
+  if (weekKeys.length === 0) return [];
+  const stabilityCutoff = new Date(
+    now.getTime() - Math.max(0, config.stabilityMinutes) * 60_000,
+  );
+
+  const issues = await prisma.issueCompletion.findMany({
+    where: {
+      userId,
+      weekKey: { in: weekKeys },
+      completed: true,
+      observedCompletedAt: { gte: activatedAt, lte: stabilityCutoff },
+      archivedAt: null,
+      trashed: false,
+      OR: [
+        { latestLinearStateType: null },
+        { latestLinearStateType: { notIn: ["canceled", "cancelled"] } },
+      ],
+    },
+    select: {
+      estimate: true,
+      labels: true,
+      countedInWeek: true,
+      weekKey: true,
+      assigneeLinearId: true,
+      assigneeAtCompletion: true,
+    },
   });
+
+  const counts = new Map(weekKeys.map((weekKey) => [weekKey, 0]));
+  for (const issue of issues) {
+    const weekKey = issue.weekKey;
+    if (!weekKey || !counts.has(weekKey)) continue;
+    if (!isQualifyingCompletion(issue, config, weekKey)) continue;
+    counts.set(weekKey, (counts.get(weekKey) ?? 0) + 1);
+  }
+
+  return weekKeys.map((weekKey) => ({
+    weekKey,
+    count: counts.get(weekKey) ?? 0,
+  }));
 }
 
 async function countNoEstimateRatioFlag(
@@ -793,29 +841,61 @@ async function getLifetimeQualifyingCount(
   }).length;
 }
 
-async function getCurrentStreakWeeks(
+const STREAK_WINDOW_WEEKS = 12;
+const STREAK_MAX_WEEKS = 104;
+
+/**
+ * Streak ending at `weekKey`, where `weekKey` itself counts only if it has
+ * already met the threshold.
+ *
+ * The weekly cron passes the just-closed week, so a full week that qualified
+ * extends the streak. The dashboard passes the week the developer is standing
+ * in, so a Tuesday with two tasks done neither extends nor breaks it — see
+ * `computeStreak` in `@/lib/incentive-streak`.
+ *
+ * Fetches a window at a time and only widens it when the walk is still
+ * qualifying at the far edge, so the common case is one query rather than one
+ * per week.
+ */
+async function getStreakWeeks(
   userId: string,
-  endingWeekKey: string,
+  weekKey: string,
   config: IncentiveConfig,
   activatedAt: Date,
+  now = new Date(),
 ) {
-  let streak = 0;
-  let weekKey = endingWeekKey;
+  let windowWeeks = STREAK_WINDOW_WEEKS;
 
-  for (let i = 0; i < 104; i++) {
-    const issues = await getQualifyingIssuesForWeek(
+  for (;;) {
+    const weekKeys = recentWeekKeys(weekKey, windowWeeks).filter(
+      (key) => getWeekBoundsFor(key).weekEnd >= activatedAt,
+    );
+    const history = await getWeekQualificationHistory(
       userId,
-      weekKey,
+      weekKeys,
       config,
       activatedAt,
+      now,
     );
-    if (issues.length < config.weeklyThreshold) break;
-    streak++;
-    weekKey = shiftWeekKey(weekKey, -1);
-  }
+    const result = computeStreak({
+      history,
+      threshold: config.weeklyThreshold,
+      currentWeekKey: weekKey,
+    });
 
-  return streak;
+    const clampedByActivation = weekKeys.length < windowWeeks;
+    if (
+      !result.exhausted ||
+      clampedByActivation ||
+      windowWeeks >= STREAK_MAX_WEEKS
+    ) {
+      return { ...result, history };
+    }
+    windowWeeks = Math.min(STREAK_MAX_WEEKS, windowWeeks * 2);
+  }
 }
+
+const ANOMALY_BASELINE_WEEKS = 12;
 
 async function weeklyCountsForUser(
   userId: string,
@@ -823,19 +903,16 @@ async function weeklyCountsForUser(
   config: IncentiveConfig,
   activatedAt: Date,
 ) {
-  const counts: number[] = [];
-  let weekKey = shiftWeekKey(currentWeekKey, -1);
-  for (let i = 0; i < 12; i++) {
-    const issues = await getQualifyingIssuesForWeek(
-      userId,
-      weekKey,
-      config,
-      activatedAt,
-    );
-    if (issues.length > 0) counts.push(issues.length);
-    weekKey = shiftWeekKey(weekKey, -1);
-  }
-  return counts;
+  const history = await getWeekQualificationHistory(
+    userId,
+    recentWeekKeys(shiftWeekKey(currentWeekKey, -1), ANOMALY_BASELINE_WEEKS),
+    config,
+    activatedAt,
+  );
+  // Weeks with nothing in them stay out of the baseline: a developer who was
+  // away for a month should not have their median dragged to zero and every
+  // week after it flagged as an anomaly.
+  return history.map((week) => week.count).filter((count) => count > 0);
 }
 
 function median(numbers: number[]) {
@@ -1336,7 +1413,7 @@ export async function evaluateWeeklyIncentives(
       }
 
       if (config.streakEnabled && config.streakThresholdWeeks > 0) {
-        const streakWeeks = await getCurrentStreakWeeks(
+        const { streakWeeks } = await getStreakWeeks(
           row.userId,
           weekKey,
           config,
@@ -2089,6 +2166,8 @@ export type EarnedIncentiveAwardView = {
 export interface UserWeeklyIncentiveProgress {
   enabled: boolean;
   weekKey: string;
+  /** "Week of 17 Aug" — the week key is the machine name, this is the human one. */
+  weekLabel: string;
   completedThisWeek: number;
   threshold: number;
   remaining: number;
@@ -2097,6 +2176,8 @@ export interface UserWeeklyIncentiveProgress {
   activeDayThreshold: number;
   activeDayKickerEnabled: boolean;
   currentStreakWeeks: number;
+  /** Recent weeks as chips, so "which weeks counted" is visible, not asserted. */
+  streakStrip: StreakChip[];
   lifetimeCompleted: number;
   currency: CurrencyCode;
   rewardFlags: {
@@ -2130,30 +2211,31 @@ export async function getUserWeeklyIncentiveProgress(
     config,
     activatedAt,
   );
-  const [
-    activeDaysThisWeek,
-    currentStreakWeeks,
-    lifetimeCompleted,
-    awards,
-    profile,
-  ] = await Promise.all([
-    getDistinctActiveDaysForWeek(userId, weekKey),
-    getCurrentStreakWeeks(userId, weekKey, config, activatedAt),
-    getLifetimeQualifyingCount(userId, config, activatedAt),
-    prisma.incentiveAward.findMany({
-      where: {
-        userId,
-        status: { not: "CANCELLED" },
-      },
-      orderBy: { createdAt: "desc" },
-      take: 30,
-    }),
-    prisma.userProfile.findUnique({
-      where: { id: userId },
-      select: { paymentMethod: true },
-    }),
-  ]);
+  const [activeDaysThisWeek, streak, lifetimeCompleted, awards, profile] =
+    await Promise.all([
+      getDistinctActiveDaysForWeek(userId, weekKey),
+      getStreakWeeks(userId, weekKey, config, activatedAt),
+      getLifetimeQualifyingCount(userId, config, activatedAt),
+      prisma.incentiveAward.findMany({
+        where: {
+          userId,
+          status: { not: "CANCELLED" },
+        },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      }),
+      prisma.userProfile.findUnique({
+        where: { id: userId },
+        select: { paymentMethod: true },
+      }),
+    ]);
 
+  const currentStreakWeeks = streak.streakWeeks;
+  const streakStrip = buildStreakStrip({
+    history: streak.history,
+    threshold: config.weeklyThreshold,
+    currentWeekKey: weekKey,
+  });
   const currency = getCurrencyForPaymentMethod(
     profile?.paymentMethod ?? "BANK_TRANSFER",
   );
@@ -2291,6 +2373,7 @@ export async function getUserWeeklyIncentiveProgress(
   return {
     enabled: config.enabled,
     weekKey,
+    weekLabel: formatWeekLabel(weekKey),
     completedThisWeek,
     threshold: config.weeklyThreshold,
     remaining,
@@ -2299,6 +2382,7 @@ export async function getUserWeeklyIncentiveProgress(
     activeDayThreshold: config.activeDayThreshold,
     activeDayKickerEnabled: config.activeDayKickerEnabled,
     currentStreakWeeks,
+    streakStrip,
     lifetimeCompleted,
     currency,
     rewardFlags: {

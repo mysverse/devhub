@@ -65,6 +65,8 @@ async function SettingsContent() {
           duitNowIdStatus: true,
           duitNowIdCheckedAt: true,
           duitNowIdIssue: true,
+          duitNowIdCountry: true,
+          duitNowIdInstitution: true,
           bankName: true,
           bankAccountNumber: true,
           bankAccountName: true,

@@ -1,6 +1,8 @@
 import type { z } from "zod";
 import {
   checkDuitNowId,
+  checkDuitNowIdCountry,
+  DUITNOW_INSTITUTION_REQUIRED_MESSAGE,
   isDuitNowIdType,
   isValidNricDate,
   normalizeMalaysianPhone,
@@ -247,6 +249,17 @@ export function validateDuitNowBankName(value: string): string | null {
 }
 
 /**
+ * The app a proxy ID is linked at. Same participant list as the bank branch,
+ * different question — and a different column, because bankName routes
+ * automated payouts and this is a claim about where a proxy lives.
+ */
+export function validateDuitNowInstitution(value: string): string | null {
+  if (!value || !DUITNOW_INSTITUTION_VALUES.includes(value))
+    return DUITNOW_INSTITUTION_REQUIRED_MESSAGE;
+  return null;
+}
+
+/**
  * Shared Zod superRefine for payment fields.
  * Works with both FormData-based (settings) and JSON-based (onboarding) schemas.
  */
@@ -259,6 +272,10 @@ export function paymentSuperRefine(
     duitNowType?: string | null;
     /** Which kind of proxy `duitNowId` is. See duitnow-id.ts. */
     duitNowIdType?: string | null;
+    /** ISO 3166-1 alpha-2 of a passport proxy's issuing country. */
+    duitNowIdCountry?: string | null;
+    /** BIC of the bank or e-wallet the proxy is linked at. */
+    duitNowIdInstitution?: string | null;
     bankName?: string | null;
     bankAccountNumber?: string | null;
     bankAccountName?: string | null;
@@ -289,14 +306,46 @@ export function paymentSuperRefine(
       (!data.duitNowType && !isIdMode && data.bankAccountNumber);
 
     if (isIdMode) {
-      // With an explicit type, all five DuitNow proxy types are reachable.
-      // Without one the submission predates the type field, and the only
-      // values it can hold are the mobile-or-NRIC pair the old rule allowed.
-      const err = isDuitNowIdType(data.duitNowIdType)
-        ? checkDuitNowId(data.duitNowIdType, data.duitNowId || "")?.message
-        : validateDuitNowId(data.duitNowId || "");
-      if (err) {
-        ctx.addIssue({ code: "custom", message: err, path: ["duitNowId"] });
+      // With an explicit type, all five DuitNow proxy types are reachable, and
+      // a typed proxy also has to say where it is linked — and, for a
+      // passport, which country issued it, which the bank asks for before the
+      // number. Without a type the submission predates the type field, and
+      // the only values it can hold are the mobile-or-NRIC pair the old rule
+      // allowed.
+      if (isDuitNowIdType(data.duitNowIdType)) {
+        const country = checkDuitNowIdCountry(
+          data.duitNowIdType,
+          data.duitNowIdCountry,
+        );
+        if (country) {
+          ctx.addIssue({
+            code: "custom",
+            message: country,
+            path: ["duitNowIdCountry"],
+          });
+        }
+        const err = checkDuitNowId(
+          data.duitNowIdType,
+          data.duitNowId || "",
+        )?.message;
+        if (err) {
+          ctx.addIssue({ code: "custom", message: err, path: ["duitNowId"] });
+        }
+        const institution = validateDuitNowInstitution(
+          data.duitNowIdInstitution || "",
+        );
+        if (institution) {
+          ctx.addIssue({
+            code: "custom",
+            message: institution,
+            path: ["duitNowIdInstitution"],
+          });
+        }
+      } else {
+        const err = validateDuitNowId(data.duitNowId || "");
+        if (err) {
+          ctx.addIssue({ code: "custom", message: err, path: ["duitNowId"] });
+        }
       }
     } else if (isBankMode) {
       const bankNameErr = validateDuitNowBankName(data.bankName || "");

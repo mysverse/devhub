@@ -17,6 +17,9 @@ const Schema = z
     paypalEmail: z.string().nullish(),
     duitNowId: z.string().nullish(),
     duitNowType: z.string().nullish(),
+    duitNowIdType: z.string().nullish(),
+    duitNowIdCountry: z.string().nullish(),
+    duitNowIdInstitution: z.string().nullish(),
     bankName: z.string().nullish(),
     bankAccountNumber: z.string().nullish(),
     bankAccountName: z.string().nullish(),
@@ -202,5 +205,84 @@ describe("re-exported helpers keep their single implementation", () => {
   it("still validates DuitNow IDs through payment-validation's export", () => {
     assert.equal(validateDuitNowId("+60123456789"), null);
     assert.ok(validateDuitNowId(""));
+  });
+});
+
+/**
+ * A typed proxy — every submission from the current form — also has to say
+ * where it is linked, and a passport which country issued it. The untyped
+ * path above is what legacy rows re-save through and is left alone.
+ */
+describe("paymentSuperRefine — typed proxy ID", () => {
+  const MOBILE = {
+    paymentMethod: "DUITNOW",
+    duitNowType: "ID",
+    duitNowIdType: "MOBILE",
+    duitNowId: "+60123456789",
+    duitNowIdInstitution: "TNGDMYNB",
+  };
+  const PASSPORT = {
+    ...MOBILE,
+    duitNowIdType: "PASSPORT",
+    duitNowId: "A12345678",
+    duitNowIdCountry: "SG",
+  };
+
+  it("passes a typed proxy that names its linked institution", () => {
+    assert.deepEqual(failedPaths(MOBILE), []);
+    assert.deepEqual(failedPaths(PASSPORT), []);
+  });
+
+  it("requires the linked institution", () => {
+    assert.deepEqual(failedPaths({ ...MOBILE, duitNowIdInstitution: null }), [
+      "duitNowIdInstitution",
+    ]);
+  });
+
+  it("rejects an institution outside the DuitNow participant list", () => {
+    assert.deepEqual(
+      failedPaths({ ...MOBILE, duitNowIdInstitution: "NOPEMYKL" }),
+      ["duitNowIdInstitution"],
+    );
+  });
+
+  it("requires an issuing country for a passport", () => {
+    assert.deepEqual(failedPaths({ ...PASSPORT, duitNowIdCountry: null }), [
+      "duitNowIdCountry",
+    ]);
+  });
+
+  it("rejects an issuing country it does not know", () => {
+    assert.deepEqual(failedPaths({ ...PASSPORT, duitNowIdCountry: "XX" }), [
+      "duitNowIdCountry",
+    ]);
+  });
+
+  it("does not ask a non-passport proxy for a country", () => {
+    assert.deepEqual(failedPaths({ ...MOBILE, duitNowIdCountry: "SG" }), []);
+    assert.deepEqual(failedPaths({ ...MOBILE, duitNowIdCountry: null }), []);
+  });
+
+  it("reports the fields in the order the screen shows them", () => {
+    assert.deepEqual(
+      failedPaths({
+        ...PASSPORT,
+        duitNowIdCountry: null,
+        duitNowId: "A-1",
+        duitNowIdInstitution: null,
+      }),
+      ["duitNowIdCountry", "duitNowId", "duitNowIdInstitution"],
+    );
+  });
+
+  it("leaves an untyped legacy submission alone", () => {
+    assert.deepEqual(
+      failedPaths({
+        paymentMethod: "DUITNOW",
+        duitNowType: "ID",
+        duitNowId: "+60123456789",
+      }),
+      [],
+    );
   });
 });

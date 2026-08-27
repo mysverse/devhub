@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   checkDuitNowId,
+  checkDuitNowIdCountry,
   DUITNOW_ID_TYPES,
   formatDuitNowIdForBank,
   formatDuitNowIdForDisplay,
@@ -9,6 +10,7 @@ import {
   isDuitNowIdType,
   MY_MOBILE_REGEX,
   normalizeDuitNowId,
+  sameDuitNowIdentity,
 } from "@/lib/duitnow-id";
 import {
   MY_PHONE_REGEX,
@@ -214,6 +216,7 @@ describe("type registry", () => {
     assert.equal(DUITNOW_ID_TYPES.length, 5);
     const codes = new Set(DUITNOW_ID_TYPES.map((spec) => spec.paynetCode));
     assert.equal(codes.size, 5);
+    for (const spec of DUITNOW_ID_TYPES) assert.ok(spec.inputHint);
   });
 
   it("guards unknown values at the boundary", () => {
@@ -237,6 +240,73 @@ describe("isDuitNowConfirmationStale", () => {
     );
     assert.equal(
       isDuitNowConfirmationStale(new Date("2025-08-19T00:00:00Z"), now),
+      true,
+    );
+  });
+});
+
+describe("checkDuitNowIdCountry", () => {
+  it("wants a country it knows for a passport", () => {
+    assert.equal(checkDuitNowIdCountry("PASSPORT", "SG"), null);
+    assert.equal(checkDuitNowIdCountry("PASSPORT", "sg"), null);
+    assert.match(checkDuitNowIdCountry("PASSPORT", null) ?? "", /country/);
+    assert.match(checkDuitNowIdCountry("PASSPORT", "XX") ?? "", /country/);
+  });
+
+  it("never asks any other type for one", () => {
+    assert.equal(checkDuitNowIdCountry("MOBILE", null), null);
+    assert.equal(checkDuitNowIdCountry("NRIC", "XX"), null);
+  });
+});
+
+describe("sameDuitNowIdentity", () => {
+  const stored = {
+    duitNowId: "A12345678",
+    duitNowIdType: "PASSPORT" as const,
+    duitNowIdCountry: "SG",
+    duitNowIdInstitution: "TNGDMYNB",
+  };
+
+  it("is the same proxy when nothing that identifies it moved", () => {
+    assert.equal(sameDuitNowIdentity(stored, { ...stored }), true);
+  });
+
+  it("is a different proxy when the value, type or country changes", () => {
+    assert.equal(
+      sameDuitNowIdentity(stored, { ...stored, duitNowId: "B12345678" }),
+      false,
+    );
+    assert.equal(
+      sameDuitNowIdentity(stored, { ...stored, duitNowIdType: "ARMY_POLICE" }),
+      false,
+    );
+    assert.equal(
+      sameDuitNowIdentity(stored, { ...stored, duitNowIdCountry: "ID" }),
+      false,
+    );
+  });
+
+  it("is a different proxy when it moves to, or drops, its institution", () => {
+    assert.equal(
+      sameDuitNowIdentity(stored, {
+        ...stored,
+        duitNowIdInstitution: "MBBEMYKL",
+      }),
+      false,
+    );
+    assert.equal(
+      sameDuitNowIdentity(stored, { ...stored, duitNowIdInstitution: null }),
+      false,
+    );
+  });
+
+  /** Legacy rows have no institution; naming one adds a fact, not a change. */
+  it("is the same proxy when a row with no institution gains one", () => {
+    assert.equal(
+      sameDuitNowIdentity(
+        { ...stored, duitNowIdInstitution: null },
+        { ...stored, duitNowIdInstitution: "MBBEMYKL" },
+      ),
       true,
     );
   });

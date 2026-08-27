@@ -40,6 +40,8 @@
  *    `isValidNricDate` stays at month 1-12 / day 1-31 on purpose.
  */
 
+import { isKnownCountryCode } from "@/lib/countries";
+
 /**
  * The DuitNow proxy types. Comments carry PayNet's own code for each.
  *
@@ -66,6 +68,8 @@ export type DuitNowIdTypeSpec = {
   /** One line of what this actually is. */
   hint: string;
   placeholder: string;
+  /** One line under the input: the format, as the bank's own field words it. */
+  inputHint: string;
 };
 
 /**
@@ -79,6 +83,7 @@ export const DUITNOW_ID_TYPES: readonly DuitNowIdTypeSpec[] = [
     label: "Mobile No.",
     hint: "Your Malaysian mobile number, registered as a DuitNow ID.",
     placeholder: "012-345 6789",
+    inputHint: "Your Malaysian mobile number — 012-345 6789 or +60123456789.",
   },
   {
     value: "NRIC",
@@ -86,6 +91,7 @@ export const DUITNOW_ID_TYPES: readonly DuitNowIdTypeSpec[] = [
     label: "NRIC/FIN",
     hint: "The 12 digits on your MyKad.",
     placeholder: "990101-14-1234",
+    inputHint: "The 12 digits on your MyKad — hyphens optional.",
   },
   {
     value: "BUSINESS_REG",
@@ -93,6 +99,7 @@ export const DUITNOW_ID_TYPES: readonly DuitNowIdTypeSpec[] = [
     label: "Business Registration No.",
     hint: "Your SSM registration number, if you are paid as a business.",
     placeholder: "202001012345",
+    inputHint: "Letters and numbers only — no hyphens or spaces.",
   },
   {
     value: "PASSPORT",
@@ -100,6 +107,7 @@ export const DUITNOW_ID_TYPES: readonly DuitNowIdTypeSpec[] = [
     label: "Passport No.",
     hint: "For non-Malaysians registered by passport.",
     placeholder: "A12345678",
+    inputHint: "Letters and numbers only — no hyphens or spaces.",
   },
   {
     value: "ARMY_POLICE",
@@ -107,6 +115,7 @@ export const DUITNOW_ID_TYPES: readonly DuitNowIdTypeSpec[] = [
     label: "Army / Police No.",
     hint: "For serving personnel registered by service number.",
     placeholder: "T1234567",
+    inputHint: "Letters and numbers only — no hyphens or spaces.",
   },
 ] as const;
 
@@ -374,4 +383,26 @@ export function sameDuitNowIdentity(
   if (stored.duitNowIdCountry !== next.duitNowIdCountry) return false;
   if (stored.duitNowIdInstitution === null) return true;
   return stored.duitNowIdInstitution === next.duitNowIdInstitution;
+}
+
+/** Said by the form and the server alike when a passport has no country. */
+export const DUITNOW_COUNTRY_REQUIRED_MESSAGE =
+  "Choose the country that issued this passport.";
+
+/** Said by the form and the server alike when no linked app is named. */
+export const DUITNOW_INSTITUTION_REQUIRED_MESSAGE =
+  "Choose the bank or e-wallet this ID is linked to.";
+
+/**
+ * A passport proxy needs its issuing country — the bank asks for it before it
+ * asks for the number. No other type has one; a stray value is dropped on
+ * write rather than complained about.
+ */
+export function checkDuitNowIdCountry(
+  type: DuitNowIdType,
+  country: string | null | undefined,
+): string | null {
+  if (type !== "PASSPORT") return null;
+  if (country && isKnownCountryCode(country)) return null;
+  return DUITNOW_COUNTRY_REQUIRED_MESSAGE;
 }

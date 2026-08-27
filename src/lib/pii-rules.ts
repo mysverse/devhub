@@ -74,12 +74,6 @@ export const PII_ALLOWLIST: PiiAllowEntry[] = [
     reason:
       "The shared payment-details editor. The user editing their own rails — it renders only what its host passes in, and both hosts pass the signed-in user's own profile.",
   },
-  {
-    rule: "pii/bank-field-in-client-component",
-    file: "src/components/DuitNowConfirmModal.tsx",
-    reason:
-      "Restates the user's own DuitNow ID back to them before saving it. Displays, never fetches.",
-  },
 ];
 
 // `duitNowId\w*` on purpose: `\bduitNowId\b` does not match duitNowIdType,

@@ -185,6 +185,8 @@ test("flags the columns that sit beside duitNowId, not just duitNowId", () => {
     "duitNowIdStatus",
     "duitNowIdCheckedAt",
     "duitNowIdIssue",
+    "duitNowIdCountry",
+    "duitNowIdInstitution",
   ]) {
     assert.deepEqual(
       rules(

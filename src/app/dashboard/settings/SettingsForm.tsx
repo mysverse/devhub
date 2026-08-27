@@ -10,14 +10,15 @@ import {
   TextInput,
 } from "@mantine/core";
 import { TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import { toast } from "sonner";
 import { StepTransition } from "@/components/animations";
-import DuitNowConfirmModal from "@/components/DuitNowConfirmModal";
 import DuitNowFields from "@/components/DuitNowFields";
 import FormSection from "@/components/FormSection";
 import { duitNowIssueMessage } from "@/lib/duitnow-copy";
 import {
+  applyDuitNowPatch,
+  DUITNOW_FIELD_NAMES,
   type DuitNowFieldName,
   type DuitNowValue,
   duitNowFieldErrors,
@@ -47,6 +48,8 @@ type ProfileProps = {
     duitNowIdStatus: string;
     duitNowIdCheckedAt: Date | null;
     duitNowIdIssue: string | null;
+    duitNowIdCountry: string | null;
+    duitNowIdInstitution: string | null;
     bankName: string | null;
     bankAccountNumber: string | null;
     bankAccountName: string | null;
@@ -67,7 +70,11 @@ export default function SettingsForm({
   const [duitNow, setDuitNow] = useState<DuitNowValue>({
     mode: initialDuitNowMode(profile),
     idType: profile.duitNowIdType,
+    idCountry: profile.duitNowIdCountry,
     duitNowId: profile.duitNowId ?? "",
+    idInstitution: profile.duitNowIdInstitution,
+    linked: false,
+    ownName: false,
     bankName: profile.paymentMethod === "DUITNOW" ? profile.bankName : null,
     bankAccountNumber:
       profile.paymentMethod === "DUITNOW"
@@ -83,21 +90,12 @@ export default function SettingsForm({
   >({});
   const [errors, setErrors] = useState<Record<string, string | null>>({});
 
-  // The confirmation lives outside the <form> (Mantine portals its modal to
-  // document.body), so it cannot submit the form itself. It records consent,
-  // and an effect re-submits through the form so every other field — display
-  // name, legal name, shipping address — is still in the FormData. Building a
-  // partial FormData by hand would null them: the action writes them
-  // unconditionally.
-  const formRef = useRef<HTMLFormElement>(null);
-  const [confirmOpen, setConfirmOpen] = useState(false);
-  const [duitNowConfirmed, setDuitNowConfirmed] = useState(false);
-
-  useEffect(() => {
-    if (duitNowConfirmed) formRef.current?.requestSubmit();
-  }, [duitNowConfirmed]);
-
-  const duitNowErrors = duitNowFieldErrors(duitNow);
+  // An unchanged, already-confirmed ID shows a ✓ line instead of the boxes.
+  // Bringing them back is the developer's call — the "Changed something?"
+  // anchor — which is what makes the stale-confirmation banner actionable.
+  const [reconfirm, setReconfirm] = useState(false);
+  const attest = reconfirm || needsDuitNowConfirmation(duitNow, profile);
+  const duitNowErrors = duitNowFieldErrors(duitNow, { attest });
 
   function setFieldError(field: string, error: string | null) {
     setErrors((prev) => ({ ...prev, [field]: error }));
@@ -129,16 +127,12 @@ export default function SettingsForm({
     }
 
     if (paymentMethod === "DUITNOW") {
-      Object.assign(newErrors, duitNowFieldErrors(duitNow));
+      Object.assign(newErrors, duitNowFieldErrors(duitNow, { attest }));
       // Every DuitNow field is now controlled, so a blocked submit must reveal
       // the errors that were being held back until each field was touched.
-      setDuitNowTouched({
-        duitNowIdType: true,
-        duitNowId: true,
-        bankName: true,
-        bankAccountNumber: true,
-        bankAccountName: true,
-      });
+      setDuitNowTouched(
+        Object.fromEntries(DUITNOW_FIELD_NAMES.map((field) => [field, true])),
+      );
     }
 
     if (paymentMethod === "BANK_TRANSFER") {
@@ -160,17 +154,6 @@ export default function SettingsForm({
   async function action(formData: FormData) {
     if (!validateAllFields(formData)) return;
 
-    // A proxy ID that nobody has confirmed is registered is the failure this
-    // whole flow exists for, so it is asked about before the write, not after.
-    if (
-      paymentMethod === "DUITNOW" &&
-      !duitNowConfirmed &&
-      needsDuitNowConfirmation(duitNow, profile)
-    ) {
-      setConfirmOpen(true);
-      return;
-    }
-
     setLoading(true);
 
     const res = await updateProfileSettings(formData);
@@ -179,15 +162,15 @@ export default function SettingsForm({
       toast.error(res.error);
     } else if (res?.success) {
       toast.success("Settings updated successfully!");
+      // The re-confirmation was for the value just saved, not the next edit.
+      setReconfirm(false);
     }
 
-    // Consent covers the value that was just saved, not the next edit.
-    setDuitNowConfirmed(false);
     setLoading(false);
   }
 
   return (
-    <form ref={formRef} action={action} style={{ maxWidth: "42rem" }}>
+    <form action={action} style={{ maxWidth: "42rem" }}>
       <Stack gap="xl">
         <FormSection title="Personal Information">
           <TextInput
@@ -349,17 +332,18 @@ export default function SettingsForm({
             {paymentMethod === "DUITNOW" && (
               <DuitNowFields
                 value={duitNow}
-                onChange={(patch) => {
-                  setDuitNow((prev) => ({ ...prev, ...patch }));
-                  // Switching branch or identifier invalidates any consent
-                  // already given for the previous value.
-                  setDuitNowConfirmed(false);
-                }}
+                onChange={(patch) =>
+                  setDuitNow((prev) => applyDuitNowPatch(prev, patch))
+                }
                 errors={duitNowErrors}
                 touched={duitNowTouched}
                 onBlur={(field) =>
                   setDuitNowTouched((prev) => ({ ...prev, [field]: true }))
                 }
+                legalName={profile.legalName}
+                attest={attest}
+                confirmedAt={profile.duitNowIdCheckedAt}
+                onReconfirm={() => setReconfirm(true)}
                 withHiddenInputs
               />
             )}
@@ -415,33 +399,20 @@ export default function SettingsForm({
           </StepTransition>
         </FormSection>
 
-        {/* Read by updateProfileSettings; only ever "true" for the exact value
-            the developer just confirmed in the modal. */}
+        {/* Read by updateProfileSettings; "true" only when the form was
+            asking and both boxes are ticked for the value being saved. An
+            unchanged, already-confirmed ID sends nothing, so an unrelated
+            save cannot silently re-confirm it. */}
         <input
           type="hidden"
           name="duitNowConfirmed"
-          value={duitNowConfirmed ? "true" : "false"}
+          value={attest && duitNow.linked && duitNow.ownName ? "true" : "false"}
         />
 
         <Button type="submit" loading={loading}>
           Save Settings
         </Button>
       </Stack>
-
-      {duitNow.idType && (
-        <DuitNowConfirmModal
-          opened={confirmOpen}
-          onClose={() => setConfirmOpen(false)}
-          onConfirm={() => {
-            setConfirmOpen(false);
-            setDuitNowConfirmed(true);
-          }}
-          idType={duitNow.idType}
-          duitNowId={duitNow.duitNowId}
-          legalName={profile.legalName}
-          loading={loading}
-        />
-      )}
     </form>
   );
 }

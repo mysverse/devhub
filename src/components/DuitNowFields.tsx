@@ -14,12 +14,20 @@
  * from React state. `withHiddenInputs` mirrors the controlled state back into
  * the form payload for the former, the way SettingsForm already does for
  * paymentMethod.
+ *
+ * The proxy branch reads in the order the admin's bank asks for the same
+ * facts — type, issuing country, number, then the app it is linked in — and
+ * ends with the claim the developer has to make, inline, before Save works.
+ * That claim used to live in a modal on Save. It sits here so the box can
+ * name the exact ID and the exact app it is under, and so the app's own
+ * "link it here" line appears the moment the app is chosen.
  */
 
 import {
-  Alert,
+  Anchor,
   Badge,
   Box,
+  Checkbox,
   Group,
   Radio,
   RadioGroup,
@@ -28,7 +36,8 @@ import {
   Text,
   TextInput,
 } from "@mantine/core";
-import { TriangleAlert } from "lucide-react";
+import { CircleCheck } from "lucide-react";
+import { countryNameFromCode, countryOptions } from "@/lib/countries";
 import type {
   DuitNowFieldName,
   DuitNowMode,
@@ -40,8 +49,10 @@ import {
   isDuitNowIdType,
   normalizeDuitNowId,
 } from "@/lib/duitnow-id";
+import { linkGuideFor } from "@/lib/duitnow-link-guide";
 import {
   DUITNOW_INSTITUTIONS,
+  getBankDisplayName,
   isBillplzSupported,
 } from "@/lib/payment-validation";
 
@@ -52,6 +63,14 @@ type Props = {
   /** Which fields have been interacted with; errors stay quiet until then. */
   touched: Partial<Record<DuitNowFieldName, boolean>>;
   onBlur: (field: DuitNowFieldName) => void;
+  /** The name the linked account has to be in; null until one is known. */
+  legalName: string | null;
+  /** Whether this value still needs the developer's two-box confirmation. */
+  attest: boolean;
+  /** When the stored value was last confirmed; shown while `attest` is off. */
+  confirmedAt: Date | null;
+  /** The developer wants to confirm an unchanged value again. */
+  onReconfirm: () => void;
   /** Emit hidden inputs so a FormData-based <form> submits this state. */
   withHiddenInputs?: boolean;
 };
@@ -62,6 +81,10 @@ export default function DuitNowFields({
   errors,
   touched,
   onBlur,
+  legalName,
+  attest,
+  confirmedAt,
+  onReconfirm,
   withHiddenInputs = false,
 }: Props) {
   const errorFor = (field: DuitNowFieldName) =>
@@ -71,10 +94,25 @@ export default function DuitNowFields({
     ? DUITNOW_ID_TYPES.find((entry) => entry.value === value.idType)
     : null;
 
-  const preview =
+  const pretty =
     value.idType && value.duitNowId && !errors.duitNowId
       ? formatDuitNowIdForDisplay(value.idType, value.duitNowId)
       : null;
+  const countryName =
+    value.idType === "PASSPORT" && value.idCountry
+      ? countryNameFromCode(value.idCountry)
+      : null;
+  // What the admin will type into the bank, in the words the bank uses.
+  const preview = pretty
+    ? countryName
+      ? `${spec?.label} ${pretty} · ${countryName}`
+      : pretty
+    : null;
+
+  const institutionName = value.idInstitution
+    ? getBankDisplayName(value.idInstitution)
+    : null;
+  const guide = linkGuideFor(value.idInstitution);
 
   return (
     <Stack gap="sm">
@@ -99,7 +137,7 @@ export default function DuitNowFields({
           <Radio
             value="ID"
             label="DuitNow ID (mobile, NRIC, passport…)"
-            description="Released by hand, and only works if you have registered the ID."
+            description="Released by hand, and only works if you have linked the ID in your bank or e-wallet app."
           />
         </Stack>
       </RadioGroup>
@@ -114,8 +152,22 @@ export default function DuitNowFields({
           />
           <input
             type="hidden"
+            name="duitNowIdCountry"
+            value={
+              value.mode === "ID" && value.idType === "PASSPORT"
+                ? (value.idCountry ?? "")
+                : ""
+            }
+          />
+          <input
+            type="hidden"
             name="duitNowId"
             value={value.mode === "ID" ? value.duitNowId : ""}
+          />
+          <input
+            type="hidden"
+            name="duitNowIdInstitution"
+            value={value.mode === "ID" ? (value.idInstitution ?? "") : ""}
           />
           <input
             type="hidden"
@@ -166,14 +218,30 @@ export default function DuitNowFields({
               </Stack>
             </RadioGroup>
 
+            {/* Before the number, because that is the order the bank's own
+                transfer screen asks — the admin copies these two in turn. */}
+            {value.idType === "PASSPORT" && (
+              <Select
+                label="Issuing country"
+                placeholder="Search for a country"
+                data={countryOptions()}
+                value={value.idCountry}
+                onChange={(next) => onChange({ idCountry: next })}
+                onBlur={() => onBlur("duitNowIdCountry")}
+                searchable
+                required
+                error={errorFor("duitNowIdCountry")}
+              />
+            )}
+
             {value.idType && (
               <TextInput
                 label={spec?.label ?? "DuitNow ID"}
                 placeholder={spec?.placeholder}
+                description={spec?.inputHint}
                 value={value.duitNowId}
                 required
                 error={errorFor("duitNowId")}
-                description="Registering this ID is a separate step in your banking or e-wallet app. Having the number on file with them is not the same thing — and they will not tell you if registration failed."
                 onChange={(event) =>
                   onChange({ duitNowId: event.currentTarget.value })
                 }
@@ -192,6 +260,90 @@ export default function DuitNowFields({
                 }}
               />
             )}
+
+            {value.idType && (
+              <Stack gap={4}>
+                <Select
+                  label="Linked to"
+                  placeholder="Search for the bank or e-wallet you linked it in"
+                  data={DUITNOW_INSTITUTIONS}
+                  value={value.idInstitution}
+                  onChange={(next) => onChange({ idInstitution: next })}
+                  onBlur={() => onBlur("duitNowIdInstitution")}
+                  searchable
+                  required
+                  error={errorFor("duitNowIdInstitution")}
+                />
+                {guide && (
+                  <Text size="xs" c="dimmed">
+                    {guide.line}
+                  </Text>
+                )}
+              </Stack>
+            )}
+
+            {/* The claim itself, under the app it is about. The boxes gate
+                Save rather than sit beside it: an acknowledgement nobody has
+                to touch is an acknowledgement nobody reads. Once this exact
+                value has been confirmed they give way to the ✓ line, so the
+                confirmation never becomes a reflex on unrelated saves. */}
+            {institutionName &&
+              (attest ? (
+                <Stack gap="xs">
+                  <Checkbox
+                    checked={value.linked}
+                    onChange={(event) => {
+                      onChange({ linked: event.currentTarget.checked });
+                      onBlur("duitNowLinked");
+                    }}
+                    label={
+                      <>
+                        I’ve linked <strong>{pretty ?? "this ID"}</strong> to my{" "}
+                        {institutionName} account as a DuitNow ID
+                      </>
+                    }
+                    description="If it isn’t linked, our bank finds nothing and your payout waits."
+                    error={errorFor("duitNowLinked")}
+                  />
+                  <Checkbox
+                    checked={value.ownName}
+                    onChange={(event) => {
+                      onChange({ ownName: event.currentTarget.checked });
+                      onBlur("duitNowOwnName");
+                    }}
+                    label={
+                      legalName ? (
+                        <>
+                          That account is in my name,{" "}
+                          <strong>{legalName}</strong>
+                        </>
+                      ) : (
+                        "That account is in my own name"
+                      )
+                    }
+                    error={errorFor("duitNowOwnName")}
+                  />
+                </Stack>
+              ) : (
+                <Group gap={6} align="center">
+                  <CircleCheck size={14} color="var(--mantine-color-teal-5)" />
+                  <Text size="xs" c="dimmed">
+                    Confirmed
+                    {confirmedAt
+                      ? ` ${confirmedAt.toLocaleDateString("en-MY")}`
+                      : ""}{" "}
+                    · linked at {institutionName}
+                  </Text>
+                  <Anchor
+                    component="button"
+                    type="button"
+                    size="xs"
+                    onClick={onReconfirm}
+                  >
+                    Changed something? Re-confirm
+                  </Anchor>
+                </Group>
+              ))}
 
             {preview && (
               <Text size="xs" c="dimmed">
@@ -266,17 +418,6 @@ export default function DuitNowFields({
             />
           </Stack>
         </Box>
-      )}
-
-      {value.mode === "ID" && (
-        <Alert
-          variant="light"
-          color="yellow"
-          icon={<TriangleAlert size={16} />}
-        >
-          We pay DuitNow IDs by searching for them in our bank. An ID that was
-          never registered simply does not come up, and the payout waits.
-        </Alert>
       )}
     </Stack>
   );

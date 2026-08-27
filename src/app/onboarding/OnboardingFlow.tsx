@@ -49,16 +49,16 @@ import {
   SPRING,
   StepTransition,
 } from "@/components/animations";
-import DuitNowConfirmModal from "@/components/DuitNowConfirmModal";
 import DuitNowFields from "@/components/DuitNowFields";
 import { oauth2 } from "@/lib/auth-client";
 import { siteConfig } from "@/lib/config";
 import { formatAmount, getRateMultiplier } from "@/lib/currency";
 import {
+  applyDuitNowPatch,
+  DUITNOW_FIELD_NAMES,
   type DuitNowFieldName,
   type DuitNowValue,
   duitNowFieldErrors,
-  needsDuitNowConfirmation,
 } from "@/lib/duitnow-form";
 import type {
   IntegrationAvailability,
@@ -144,7 +144,11 @@ export default function OnboardingFlow({
   const [duitNow, setDuitNow] = useState<DuitNowValue>({
     mode: "BANK",
     idType: null,
+    idCountry: null,
     duitNowId: "",
+    idInstitution: null,
+    linked: false,
+    ownName: false,
     bankName: null,
     bankAccountNumber: "",
     bankAccountName: "",
@@ -152,8 +156,9 @@ export default function OnboardingFlow({
   const [duitNowTouched, setDuitNowTouched] = useState<
     Partial<Record<DuitNowFieldName, boolean>>
   >({});
-  const [duitNowConfirmOpen, setDuitNowConfirmOpen] = useState(false);
-  const duitNowErrors = duitNowFieldErrors(duitNow);
+  // Nothing is stored yet, so a proxy ID entered here is always confirmed
+  // inline before Complete Setup goes through.
+  const duitNowErrors = duitNowFieldErrors(duitNow, { attest: true });
 
   const discordAvailability = integrationAvailability.discord;
   const robloxAvailability = integrationAvailability.roblox;
@@ -214,12 +219,7 @@ export default function OnboardingFlow({
     setActive((a) => Math.max(a - 1, 0));
   }
 
-  /**
-   * `confirmedNow` is passed by the confirmation modal rather than read from
-   * state: the modal calls straight back into this, and a setState would not
-   * have landed yet.
-   */
-  async function handleSubmit(confirmedNow = false) {
+  async function handleSubmit() {
     if (paymentMethod === "PAYPAL" && !paypalEmail.trim()) {
       toast.error("Please enter your PayPal email.");
       return;
@@ -241,27 +241,14 @@ export default function OnboardingFlow({
       // The same rules HR Settings applies. This step previously checked only
       // that the field was non-empty, so an unusable ID was accepted here and
       // discovered at payout.
-      const firstError = Object.values(duitNowFieldErrors(duitNow))[0];
+      const firstError = Object.values(
+        duitNowFieldErrors(duitNow, { attest: true }),
+      )[0];
       if (firstError) {
-        setDuitNowTouched({
-          duitNowIdType: true,
-          duitNowId: true,
-          bankName: true,
-          bankAccountNumber: true,
-          bankAccountName: true,
-        });
+        setDuitNowTouched(
+          Object.fromEntries(DUITNOW_FIELD_NAMES.map((field) => [field, true])),
+        );
         toast.error(firstError);
-        return;
-      }
-      if (
-        !confirmedNow &&
-        needsDuitNowConfirmation(duitNow, {
-          duitNowId: null,
-          duitNowIdType: null,
-          duitNowIdStatus: "UNCONFIRMED",
-        })
-      ) {
-        setDuitNowConfirmOpen(true);
         return;
       }
     }
@@ -297,7 +284,21 @@ export default function OnboardingFlow({
         paymentMethod === "DUITNOW" && duitNow.mode === "ID"
           ? duitNow.idType
           : null,
-      duitNowConfirmed: confirmedNow,
+      duitNowIdCountry:
+        paymentMethod === "DUITNOW" &&
+        duitNow.mode === "ID" &&
+        duitNow.idType === "PASSPORT"
+          ? duitNow.idCountry
+          : null,
+      duitNowIdInstitution:
+        paymentMethod === "DUITNOW" && duitNow.mode === "ID"
+          ? duitNow.idInstitution
+          : null,
+      duitNowConfirmed:
+        paymentMethod === "DUITNOW" &&
+        duitNow.mode === "ID" &&
+        duitNow.linked &&
+        duitNow.ownName,
       bankName:
         paymentMethod === "DUITNOW"
           ? duitNow.mode === "BANK"
@@ -854,13 +855,17 @@ export default function OnboardingFlow({
                 <DuitNowFields
                   value={duitNow}
                   onChange={(patch) =>
-                    setDuitNow((prev) => ({ ...prev, ...patch }))
+                    setDuitNow((prev) => applyDuitNowPatch(prev, patch))
                   }
                   errors={duitNowErrors}
                   touched={duitNowTouched}
                   onBlur={(field) =>
                     setDuitNowTouched((prev) => ({ ...prev, [field]: true }))
                   }
+                  legalName={legalName.trim() || null}
+                  attest
+                  confirmedAt={null}
+                  onReconfirm={() => {}}
                 />
               )}
 
@@ -923,21 +928,6 @@ export default function OnboardingFlow({
           </Button>
         )}
       </Group>
-
-      {duitNow.idType && (
-        <DuitNowConfirmModal
-          opened={duitNowConfirmOpen}
-          onClose={() => setDuitNowConfirmOpen(false)}
-          onConfirm={() => {
-            setDuitNowConfirmOpen(false);
-            void handleSubmit(true);
-          }}
-          idType={duitNow.idType}
-          duitNowId={duitNow.duitNowId}
-          legalName={legalName.trim() || null}
-          loading={loading}
-        />
-      )}
     </Container>
   );
 }

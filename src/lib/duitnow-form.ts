@@ -1,6 +1,7 @@
 /**
  * The pure half of the DuitNow payment-details form: what counts as an error,
- * which branch opens, and when the registration confirmation is required.
+ * which branch opens, when the linked-account confirmation is required, and
+ * what a field change does to a confirmation already given.
  *
  * Kept out of the component so both hosts — HR Settings and onboarding — and
  * the tests all run the same rules. The component is only the rendering.
@@ -8,13 +9,16 @@
 
 import {
   checkDuitNowId,
+  checkDuitNowIdCountry,
   type DuitNowIdType,
   normalizeDuitNowId,
+  sameDuitNowIdentity,
 } from "@/lib/duitnow-id";
 import {
   validateBankAccountName,
   validateBankAccountNumber,
   validateDuitNowBankName,
+  validateDuitNowInstitution,
 } from "@/lib/payment-validation";
 
 export type DuitNowMode = "ID" | "BANK";
@@ -22,7 +26,15 @@ export type DuitNowMode = "ID" | "BANK";
 export type DuitNowValue = {
   mode: DuitNowMode;
   idType: DuitNowIdType | null;
+  /** ISO 3166-1 alpha-2 of the passport's issuing country. PASSPORT only. */
+  idCountry: string | null;
   duitNowId: string;
+  /** BIC of the bank or e-wallet the developer says the ID is linked at. */
+  idInstitution: string | null;
+  /** "I've linked this ID to my <app> account as a DuitNow ID." */
+  linked: boolean;
+  /** "That account is in my own name." */
+  ownName: boolean;
   bankName: string | null;
   bankAccountNumber: string;
   bankAccountName: string;
@@ -30,10 +42,32 @@ export type DuitNowValue = {
 
 export type DuitNowFieldName =
   | "duitNowIdType"
+  | "duitNowIdCountry"
   | "duitNowId"
+  | "duitNowIdInstitution"
+  | "duitNowLinked"
+  | "duitNowOwnName"
   | "bankName"
   | "bankAccountNumber"
   | "bankAccountName";
+
+/** Every field, for the hosts' "reveal every held-back error on submit" step. */
+export const DUITNOW_FIELD_NAMES: readonly DuitNowFieldName[] = [
+  "duitNowIdType",
+  "duitNowIdCountry",
+  "duitNowId",
+  "duitNowIdInstitution",
+  "duitNowLinked",
+  "duitNowOwnName",
+  "bankName",
+  "bankAccountNumber",
+  "bankAccountName",
+];
+
+export const DUITNOW_LINKED_MESSAGE =
+  "Tick this once it's linked — or the payout waits.";
+export const DUITNOW_OWN_NAME_MESSAGE =
+  "We can only pay an account in your own name.";
 
 /**
  * The stored branch, derived from data and never hard-defaulted.
@@ -59,9 +93,16 @@ export function initialDuitNowMode(profile: {
   return "BANK";
 }
 
-/** One pass over the draft; every inline error reads from this map. */
+/**
+ * One pass over the draft; every inline error reads from this map.
+ *
+ * `attest` is whether the two confirmation boxes are required for this value
+ * — see needsDuitNowConfirmation. The host decides, because only it knows
+ * what is stored; onboarding has nothing stored and always asks.
+ */
 export function duitNowFieldErrors(
   value: DuitNowValue,
+  { attest }: { attest: boolean } = { attest: true },
 ): Partial<Record<DuitNowFieldName, string>> {
   const errors: Partial<Record<DuitNowFieldName, string>> = {};
 
@@ -70,8 +111,17 @@ export function duitNowFieldErrors(
       errors.duitNowIdType = "Choose which kind of DuitNow ID this is.";
       return errors;
     }
+    // Screen order: the bank asks for the issuing country before the number.
+    const country = checkDuitNowIdCountry(value.idType, value.idCountry);
+    if (country) errors.duitNowIdCountry = country;
     const rejection = checkDuitNowId(value.idType, value.duitNowId);
     if (rejection) errors.duitNowId = rejection.message;
+    const institution = validateDuitNowInstitution(value.idInstitution || "");
+    if (institution) errors.duitNowIdInstitution = institution;
+    if (attest) {
+      if (!value.linked) errors.duitNowLinked = DUITNOW_LINKED_MESSAGE;
+      if (!value.ownName) errors.duitNowOwnName = DUITNOW_OWN_NAME_MESSAGE;
+    }
     return errors;
   }
 
@@ -84,25 +134,78 @@ export function duitNowFieldErrors(
   return errors;
 }
 
+/** What the form needs to know about the stored row to decide whether to ask. */
+export type DuitNowStoredView = {
+  duitNowId: string | null;
+  duitNowIdType: string | null;
+  duitNowIdCountry?: string | null;
+  duitNowIdInstitution?: string | null;
+  duitNowIdStatus?: string | null;
+};
+
 /**
- * Whether saving this needs the registration confirmation.
+ * Whether saving this needs the linked-account confirmation.
  *
- * Only proxy IDs, and only when this exact value has not already been
+ * Only proxy IDs, and only when this exact identity has not already been
  * confirmed — re-asking on every save is how a confirmation becomes a reflex
- * click. A stored value still sitting at UNCONFIRMED is asked about once,
- * which is how existing rows get collected after the backfill.
+ * click. It is asked when nothing is stored (onboarding), when the identity
+ * changed (sameDuitNowIdentity — a legacy row naming its institution for the
+ * first time does not count), when the stored value is still UNCONFIRMED
+ * (how the backfill's rows get collected), and when the bank could not reach
+ * it — the banner tells the developer to fix it and save again, and saving
+ * again has to actually re-ask.
  */
 export function needsDuitNowConfirmation(
   value: DuitNowValue,
-  stored: {
-    duitNowId: string | null;
-    duitNowIdType: string | null;
-    duitNowIdStatus?: string | null;
-  },
+  stored: DuitNowStoredView | null,
 ): boolean {
   if (value.mode !== "ID" || !value.idType) return false;
-  const normalized = normalizeDuitNowId(value.idType, value.duitNowId);
-  const unchanged =
-    stored.duitNowId === normalized && stored.duitNowIdType === value.idType;
-  return !(unchanged && stored.duitNowIdStatus !== "UNCONFIRMED");
+  if (!stored) return true;
+  const unchanged = sameDuitNowIdentity(
+    {
+      duitNowId: stored.duitNowId,
+      duitNowIdType: stored.duitNowIdType as DuitNowIdType | null,
+      duitNowIdCountry: stored.duitNowIdCountry ?? null,
+      duitNowIdInstitution: stored.duitNowIdInstitution ?? null,
+    },
+    {
+      duitNowId: normalizeDuitNowId(value.idType, value.duitNowId),
+      duitNowIdType: value.idType,
+      duitNowIdCountry: value.idType === "PASSPORT" ? value.idCountry : null,
+      duitNowIdInstitution: value.idInstitution,
+    },
+  );
+  const status = stored.duitNowIdStatus ?? "UNCONFIRMED";
+  return !unchanged || status === "UNCONFIRMED" || status === "UNREACHABLE";
+}
+
+/** The keys that make the value a different proxy from the one confirmed. */
+const IDENTITY_KEYS = [
+  "mode",
+  "idType",
+  "duitNowId",
+  "idCountry",
+  "idInstitution",
+] as const;
+
+/**
+ * How a field change lands on the draft. A confirmation is about one exact
+ * proxy, so touching any part of the identity un-ticks both boxes — a box
+ * ticked for A must not carry over to B. Toggling a box changes nothing
+ * else. A country only belongs to a passport, so it goes when the type does.
+ */
+export function applyDuitNowPatch(
+  prev: DuitNowValue,
+  patch: Partial<DuitNowValue>,
+): DuitNowValue {
+  const next: DuitNowValue = { ...prev, ...patch };
+  const identityChanged = IDENTITY_KEYS.some(
+    (key) => key in patch && patch[key] !== prev[key],
+  );
+  if (next.idType !== "PASSPORT") next.idCountry = null;
+  if (identityChanged) {
+    next.linked = false;
+    next.ownName = false;
+  }
+  return next;
 }

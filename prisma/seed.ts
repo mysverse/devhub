@@ -186,6 +186,7 @@ export async function seed() {
       duitNowIdType: "MOBILE",
       duitNowIdStatus: "RESOLVED",
       duitNowIdCheckedAt: daysAgo(20),
+      duitNowIdInstitution: "MBBEMYKL",
       bankName: "MBBEMYKL",
       bankAccountNumber: "512345678901",
       bankAccountName: "Nurul Aina binti Ahmad",
@@ -213,6 +214,7 @@ export async function seed() {
       duitNowIdType: "MOBILE",
       duitNowIdStatus: "CONFIRMED",
       duitNowIdCheckedAt: daysAgo(45),
+      duitNowIdInstitution: "TNGDMYNB",
       bankName: "MBBEMYKL",
       bankAccountNumber: "514812345678",
       bankAccountName: "Alexander Tan Wei Ming",
@@ -222,7 +224,10 @@ export async function seed() {
   // Proxy-only: a DuitNow ID and no bank triple at all. classifyPayoutRoute
   // sends this one down the manual path, which is the path the admin bank
   // lookup exists to serve. PASSPORT is the proxy type the old validator
-  // rejected outright, so this fixture also proves it now saves.
+  // rejected outright, so this fixture also proves it now saves — and it is
+  // the one fixture with an issuing country, which the bank asks for before
+  // the passport number. Still UNCONFIRMED so the settings screenshot shows
+  // the two confirmation boxes rather than the ✓ line.
   await prisma.userProfile.create({
     data: {
       id: proxyId,
@@ -231,7 +236,7 @@ export async function seed() {
       linearId: PERSONAS.proxy.linearId,
       linearEmail: PERSONAS.proxy.email,
       preferredName: PERSONAS.proxy.preferredName,
-      legalName: "Priya a/p Devan",
+      legalName: "Priya d/o Devan",
       role: "DEVELOPER",
       developerRank: "DEVELOPER",
       specialties: ["SCRIPTING"],
@@ -242,6 +247,8 @@ export async function seed() {
       duitNowId: "A12345678",
       duitNowIdType: "PASSPORT",
       duitNowIdStatus: "UNCONFIRMED",
+      duitNowIdCountry: "SG",
+      duitNowIdInstitution: "TNGDMYNB",
     },
   });
 
@@ -258,6 +265,7 @@ export async function seed() {
       // developer-facing fault banner and the admin card's unreachable state.
       duitNowIdStatus: "UNREACHABLE" as const,
       duitNowIdIssue: "NOT_FOUND" as const,
+      duitNowIdInstitution: "BOSTMYNB",
     },
     {
       user: mei,
@@ -269,6 +277,7 @@ export async function seed() {
       duitNowIdType: null,
       duitNowIdStatus: "UNCONFIRMED" as const,
       duitNowIdIssue: null,
+      duitNowIdInstitution: null,
     },
     {
       user: ravi,
@@ -280,6 +289,7 @@ export async function seed() {
       duitNowIdType: null,
       duitNowIdStatus: "UNCONFIRMED" as const,
       duitNowIdIssue: null,
+      duitNowIdInstitution: null,
     },
     {
       // Never claimed anything: no watches, no transactions, nothing below
@@ -294,6 +304,7 @@ export async function seed() {
       duitNowIdType: null,
       duitNowIdStatus: "UNCONFIRMED" as const,
       duitNowIdIssue: null,
+      duitNowIdInstitution: null,
     },
   ];
   for (const entry of backgroundProfiles) {
@@ -315,6 +326,7 @@ export async function seed() {
         duitNowIdType: entry.duitNowIdType,
         duitNowIdStatus: entry.duitNowIdStatus,
         duitNowIdIssue: entry.duitNowIdIssue,
+        duitNowIdInstitution: entry.duitNowIdInstitution,
         bankName: entry.paymentMethod === "BANK_TRANSFER" ? "CIBBMYKL" : null,
         bankAccountNumber:
           entry.paymentMethod === "BANK_TRANSFER" ? "760123456789" : null,
@@ -697,6 +709,21 @@ export async function seed() {
       source: "PPT",
       status: "PENDING",
       createdAt: daysAgo(4),
+    },
+  });
+
+  // The proxy-only developer with money waiting: the one pending card that
+  // renders a passport's issuing country and the claimed institution.
+  await prisma.transaction.create({
+    data: {
+      userId: proxyId,
+      linearIssueTitle: `Bonus payout ${monthKey(now)}`,
+      amount: 40,
+      currency: "MYR",
+      source: "BONUS",
+      bonusPeriod: monthKey(now),
+      status: "PENDING",
+      createdAt: daysAgo(1),
     },
   });
 
@@ -2402,7 +2429,7 @@ export async function seed() {
 
   console.log("  fresh     fresh@devhub.mock (no profile — onboarding)");
   console.log(
-    `  proxy     ${PERSONAS.proxy.email}     (id ${proxyId}, DuitNow passport proxy, no bank)`,
+    `  proxy     ${PERSONAS.proxy.email}     (id ${proxyId}, Singapore passport DuitNow proxy linked at TnG, no bank)`,
   );
 }
 

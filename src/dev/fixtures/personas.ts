@@ -54,8 +54,10 @@ export const PERSONAS: Record<PersonaKey, Persona> = {
   // Every other logged-in persona carries bankAccountNumber, which makes the
   // payment settings form open on the Bank account branch, so without this one
   // the proxy fields are unreachable from a screenshot and `pnpm visual` would
-  // pass green while never rendering them. The proxy is a passport, which the
-  // old validator refused outright.
+  // pass green while never rendering them. The proxy is a Singapore passport
+  // (the type the old validator refused outright, and the one type that needs
+  // an issuing country), linked at TnG eWallet, and still unconfirmed so the
+  // inline confirmation boxes render.
   proxy: {
     key: "proxy",
     email: "proxy@devhub.mock",

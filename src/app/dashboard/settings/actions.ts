@@ -28,6 +28,8 @@ const SettingsSchema = z
     duitNowId: z.string().optional().nullable(),
     duitNowType: z.enum(["ID", "BANK"]).optional().nullable(),
     duitNowIdType: z.enum(DUITNOW_ID_TYPE_VALUES).optional().nullable(),
+    duitNowIdCountry: z.string().length(2).optional().nullable(),
+    duitNowIdInstitution: z.string().optional().nullable(),
     duitNowConfirmed: z.boolean().optional().nullable(),
     shippingAddress: z.string().optional().nullable(),
     bankName: z.string().optional().nullable(),
@@ -48,6 +50,8 @@ export async function updateProfileSettings(formData: FormData) {
     duitNowId: formData.get("duitNowId") || null,
     duitNowType: formData.get("duitNowType") || null,
     duitNowIdType: formData.get("duitNowIdType") || null,
+    duitNowIdCountry: formData.get("duitNowIdCountry") || null,
+    duitNowIdInstitution: formData.get("duitNowIdInstitution") || null,
     duitNowConfirmed: formData.get("duitNowConfirmed") === "true",
     shippingAddress: formData.get("shippingAddress") || null,
     bankName: formData.get("bankName") || null,
@@ -69,6 +73,8 @@ export async function updateProfileSettings(formData: FormData) {
     duitNowId,
     // duitNowType picks the form branch and is not stored; duitNowIdType is.
     duitNowIdType,
+    duitNowIdCountry,
+    duitNowIdInstitution,
     duitNowConfirmed,
     shippingAddress,
     bankName,
@@ -105,7 +111,12 @@ export async function updateProfileSettings(formData: FormData) {
     // saving an unrelated field leaves it intact.
     const current = await prisma.userProfile.findUnique({
       where: { id: userId },
-      select: { duitNowId: true, duitNowIdType: true },
+      select: {
+        duitNowId: true,
+        duitNowIdType: true,
+        duitNowIdCountry: true,
+        duitNowIdInstitution: true,
+      },
     });
 
     await prisma.userProfile.update({
@@ -119,6 +130,8 @@ export async function updateProfileSettings(formData: FormData) {
           {
             duitNowId,
             duitNowIdType,
+            duitNowIdCountry,
+            duitNowIdInstitution,
             confirmed: duitNowConfirmed ?? false,
           },
           current,

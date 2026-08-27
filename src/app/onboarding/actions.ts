@@ -23,6 +23,10 @@ type OnboardingInput = {
   duitNowId: string | null;
   duitNowType: "ID" | "BANK" | null;
   duitNowIdType: DuitNowIdType | null;
+  /** ISO 3166-1 alpha-2; PASSPORT only. */
+  duitNowIdCountry?: string | null;
+  /** BIC of the bank or e-wallet the proxy is linked at. */
+  duitNowIdInstitution?: string | null;
   duitNowConfirmed: boolean | null;
   bankName: string | null;
   bankAccountNumber: string | null;
@@ -50,6 +54,8 @@ const OnboardingSchema = z
     duitNowId: z.string().optional().nullable(),
     duitNowType: z.enum(["ID", "BANK"]).optional().nullable(),
     duitNowIdType: z.enum(DUITNOW_ID_TYPE_VALUES).optional().nullable(),
+    duitNowIdCountry: z.string().length(2).optional().nullable(),
+    duitNowIdInstitution: z.string().optional().nullable(),
     duitNowConfirmed: z.boolean().optional().nullable(),
     bankName: z.string().optional().nullable(),
     bankAccountNumber: z.string().optional().nullable(),
@@ -130,7 +136,12 @@ export async function completeOnboarding(
 
     const current = await prisma.userProfile.findUnique({
       where: { id: userId },
-      select: { duitNowId: true, duitNowIdType: true },
+      select: {
+        duitNowId: true,
+        duitNowIdType: true,
+        duitNowIdCountry: true,
+        duitNowIdInstitution: true,
+      },
     });
 
     const profileData = {
@@ -146,6 +157,8 @@ export async function completeOnboarding(
         {
           duitNowId: data.duitNowId,
           duitNowIdType: data.duitNowIdType,
+          duitNowIdCountry: data.duitNowIdCountry,
+          duitNowIdInstitution: data.duitNowIdInstitution,
           confirmed: data.duitNowConfirmed ?? false,
         },
         current,

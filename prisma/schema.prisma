@@ -117,6 +117,20 @@ model UserProfile {
   /// read by a bare findUnique and handed whole to a client component, so
   /// anything stored here is visible to the developer it describes.
   duitNowIdIssue     DuitNowIdIssue?
+  /// ISO 3166-1 alpha-2 of the country that issued the passport. PASSPORT
+  /// only: the admin's bank asks for the issuing country before it asks for
+  /// the passport number, so a passport proxy without one cannot be paid. Null
+  /// on every other type, and on passport rows predating this column — the
+  /// admin card flags those until the developer re-saves.
+  duitNowIdCountry     String?
+  /// BIC (see DUITNOW_BANK_MAP) of the bank or e-wallet the developer says the
+  /// proxy is linked at. A claim, never a lookup result: nothing here can check
+  /// it, and the bank resolves the proxy wherever it is really registered. It
+  /// exists so the developer has to name the app they linked it in, and so the
+  /// admin can compare that with what the bank shows. Null whenever duitNowId
+  /// is null. Not bankName — that column is the bank-account branch and routes
+  /// automated payouts.
+  duitNowIdInstitution String?
 
   // Auto-payout opt-in for ewallet methods (requires KYC)
   autoPayoutEnabled Boolean @default(false)

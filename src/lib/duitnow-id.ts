@@ -339,3 +339,39 @@ export function isDuitNowConfirmationStale(
   if (!checkedAt) return false;
   return now.getTime() - checkedAt.getTime() > DUITNOW_CONFIRMATION_STALE_MS;
 }
+
+/**
+ * Everything a recorded check is *about*. Two proxies with the same identity
+ * are the same proxy as far as a developer's confirmation or an admin's bank
+ * lookup is concerned; anything else and the check must be asked again.
+ */
+export type DuitNowIdentity = {
+  duitNowId: string | null;
+  duitNowIdType: DuitNowIdType | null;
+  /** ISO 3166-1 alpha-2. Only meaningful on a PASSPORT. */
+  duitNowIdCountry: string | null;
+  /** BIC of the bank or e-wallet the developer says it is linked at. */
+  duitNowIdInstitution: string | null;
+};
+
+/**
+ * Whether `next` is the same proxy that `stored` was checked as.
+ *
+ * The value, the type and the issuing country are the identity outright. The
+ * institution is asymmetric on purpose: a stored row with none is a legacy
+ * row that predates the column, and a developer filling that gap in is adding
+ * a fact, not changing one — their confirmation and any bank lookup still
+ * stand. Once an institution is on record, moving it (or dropping it) means
+ * the ID is now claimed to be linked somewhere else, and the previous answer
+ * was about a different account.
+ */
+export function sameDuitNowIdentity(
+  stored: DuitNowIdentity,
+  next: DuitNowIdentity,
+): boolean {
+  if (stored.duitNowId !== next.duitNowId) return false;
+  if (stored.duitNowIdType !== next.duitNowIdType) return false;
+  if (stored.duitNowIdCountry !== next.duitNowIdCountry) return false;
+  if (stored.duitNowIdInstitution === null) return true;
+  return stored.duitNowIdInstitution === next.duitNowIdInstitution;
+}

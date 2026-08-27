@@ -39,6 +39,12 @@ export const PROFILE_PAYOUT_SELECT = {
   duitNowIdStatus: true,
   duitNowIdCheckedAt: true,
   duitNowIdIssue: true,
+  // A passport proxy is unpayable without its issuing country — the bank asks
+  // for it before the number.
+  duitNowIdCountry: true,
+  // Where the developer says it is linked. A claim the admin compares with
+  // what the bank shows, not a routing input.
+  duitNowIdInstitution: true,
   bankName: true,
   bankAccountNumber: true,
   bankAccountName: true,

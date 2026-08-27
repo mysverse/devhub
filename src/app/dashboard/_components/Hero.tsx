@@ -1,4 +1,5 @@
 import type { DeveloperRank, UserProfile } from "@prisma/client";
+import { countryNameFromCode } from "@/lib/countries";
 import { getUserWeeklyUsage, getWeekBounds } from "@/lib/credit-limit";
 import type { CurrencyCode } from "@/lib/currency";
 import { getCurrencyForPaymentMethod } from "@/lib/currency";
@@ -62,9 +63,14 @@ function getPaymentMethodDetail(userProfile: UserProfile) {
     if (userProfile.duitNowIdStatus === "UNREACHABLE") {
       return "Not reachable — needs fixing";
     }
-    return userProfile.duitNowIdType
-      ? `${duitNowIdTypeLabel(userProfile.duitNowIdType)} ${formatDuitNowIdForDisplay(userProfile.duitNowIdType, userProfile.duitNowId)}`
-      : `ID: ${userProfile.duitNowId}`;
+    if (!userProfile.duitNowIdType) return `ID: ${userProfile.duitNowId}`;
+    const label = `${duitNowIdTypeLabel(userProfile.duitNowIdType)} ${formatDuitNowIdForDisplay(userProfile.duitNowIdType, userProfile.duitNowId)}`;
+    if (userProfile.duitNowIdType !== "PASSPORT") return label;
+    // The bank cannot pay a passport without its issuing country. Kept short:
+    // the tile truncates, and turning yellow is the only other signal it has.
+    return userProfile.duitNowIdCountry
+      ? `${label} (${countryNameFromCode(userProfile.duitNowIdCountry)})`
+      : `${label} — add issuing country`;
   }
 
   return "Not set";
@@ -88,9 +94,14 @@ function isPaymentMethodSet(userProfile: UserProfile) {
     // A proxy the bank could not find is not "set" in any sense the developer
     // cares about: this drives the dashboard's own "payment details complete"
     // signal, and saying complete while an admin has recorded that we cannot
-    // pay them is the opposite of what that signal is for.
-    return Boolean(
-      userProfile.duitNowId && userProfile.duitNowIdStatus !== "UNREACHABLE",
+    // pay them is the opposite of what that signal is for. Nor is a passport
+    // with no issuing country — the bank refuses it. A missing institution
+    // does not count: that is the developer's claim, not a payment input.
+    if (!userProfile.duitNowId) return false;
+    if (userProfile.duitNowIdStatus === "UNREACHABLE") return false;
+    return (
+      userProfile.duitNowIdType !== "PASSPORT" ||
+      Boolean(userProfile.duitNowIdCountry)
     );
   }
 

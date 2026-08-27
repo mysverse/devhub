@@ -14,7 +14,7 @@ export type DuitNowIssueKey =
 
 export const DUITNOW_ISSUE_COPY: Record<DuitNowIssueKey, string> = {
   NOT_FOUND:
-    "We searched for your DuitNow ID at our bank and nothing came up. That usually means it was never registered as a DuitNow ID — having the number in your banking or e-wallet app is not the same thing.",
+    "We searched for your DuitNow ID at our bank and nothing came up. That usually means it was never linked as a DuitNow ID — having the number in your banking or e-wallet app is not the same thing.",
   NAME_MISMATCH:
     "Your DuitNow ID resolves to an account in a different name from the one on your DevHub profile. We can only pay an account in your own name.",
   WRONG_TYPE:
@@ -23,8 +23,25 @@ export const DUITNOW_ISSUE_COPY: Record<DuitNowIssueKey, string> = {
     "Your DuitNow ID is registered somewhere our bank cannot reach. Registering it against a Malaysian bank account, or giving us a bank account number instead, will fix it.",
 };
 
-export function duitNowIssueMessage(issue: string | null | undefined): string {
-  return (
-    DUITNOW_ISSUE_COPY[issue as DuitNowIssueKey] ?? DUITNOW_ISSUE_COPY.NOT_FOUND
-  );
+function issueKey(issue: string | null | undefined): DuitNowIssueKey {
+  return issue && issue in DUITNOW_ISSUE_COPY
+    ? (issue as DuitNowIssueKey)
+    : "NOT_FOUND";
+}
+
+/**
+ * The message for an issue. When the developer told us which app the ID is
+ * linked at and the bank found nothing, the fix is in that app — so name it,
+ * rather than sending them to "your banking or e-wallet app" in general.
+ */
+export function duitNowIssueMessage(
+  issue: string | null | undefined,
+  context: { institutionName?: string | null } = {},
+): string {
+  const key = issueKey(issue);
+  const base = DUITNOW_ISSUE_COPY[key];
+  if (key === "NOT_FOUND" && context.institutionName) {
+    return `${base} You told us it is linked at ${context.institutionName} — open that app, check the ID is switched on for DuitNow, then save it again.`;
+  }
+  return base;
 }

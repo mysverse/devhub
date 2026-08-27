@@ -12,6 +12,12 @@ import {
 import { createElement } from "react";
 import { formatBonusPeriod } from "@/lib/bonus";
 import { siteConfig } from "@/lib/config";
+import { countryNameFromCode } from "@/lib/countries";
+import {
+  type DuitNowIdType,
+  duitNowIdTypeLabel,
+  formatDuitNowIdForDisplay,
+} from "@/lib/duitnow-id";
 import {
   getBankDisplayName,
   getPaymentMethodLabel,
@@ -176,6 +182,9 @@ export type TransactionSlipData = {
   paymentMethod: "PAYPAL" | "DUITNOW" | "ROBUX" | "BANK_TRANSFER";
   paypalEmail?: string | null;
   duitNowId?: string | null;
+  duitNowIdType?: DuitNowIdType | null;
+  /** ISO 3166-1 alpha-2 of a passport proxy's issuing country. */
+  duitNowIdCountry?: string | null;
   bankName?: string | null;
   bankAccountNumber?: string | null;
   bankAccountName?: string | null;
@@ -217,12 +226,20 @@ function getPaymentDetails(data: TransactionSlipData): string {
       return data.paypalEmail || "Not set";
     case "ROBUX":
       return data.robuxUsername || "Not set";
-    case "DUITNOW":
-      return data.duitNowId
-        ? `ID: ${data.duitNowId}`
-        : data.bankAccountNumber
-          ? `${getBankDisplayName(data.bankName)} - ${data.bankAccountNumber}`
-          : "Not set";
+    case "DUITNOW": {
+      // The bank account is what gets paid when both exist, matching
+      // classifyPayoutRoute — this slip has to name the rail the money took,
+      // and it used to name the proxy regardless.
+      if (data.bankAccountNumber) {
+        return `${getBankDisplayName(data.bankName)} - ${data.bankAccountNumber}`;
+      }
+      if (!data.duitNowId) return "Not set";
+      if (!data.duitNowIdType) return `ID: ${data.duitNowId}`;
+      const proxy = `${duitNowIdTypeLabel(data.duitNowIdType)} ${formatDuitNowIdForDisplay(data.duitNowIdType, data.duitNowId)}`;
+      return data.duitNowIdType === "PASSPORT" && data.duitNowIdCountry
+        ? `${proxy} (${countryNameFromCode(data.duitNowIdCountry)})`
+        : proxy;
+    }
     case "BANK_TRANSFER":
       return data.bankAccountNumber
         ? `${getBankDisplayName(data.bankName)} - ${data.bankAccountNumber} (${data.bankAccountName})`
@@ -504,6 +521,8 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
           paymentMethod: true,
           paypalEmail: true,
           duitNowId: true,
+          duitNowIdType: true,
+          duitNowIdCountry: true,
           bankName: true,
           bankAccountNumber: true,
           bankAccountName: true,
@@ -553,6 +572,8 @@ export async function generateTransactionSlipBuffer(transactionId: string) {
     paymentMethod: transaction.user.paymentMethod,
     paypalEmail: transaction.user.paypalEmail,
     duitNowId: transaction.user.duitNowId,
+    duitNowIdType: transaction.user.duitNowIdType,
+    duitNowIdCountry: transaction.user.duitNowIdCountry,
     bankName: transaction.user.bankName,
     bankAccountNumber: transaction.user.bankAccountNumber,
     bankAccountName: transaction.user.bankAccountName,

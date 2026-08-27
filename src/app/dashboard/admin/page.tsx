@@ -372,6 +372,8 @@ function buildPayoutTransaction(
           duitNowIdStatus: user.duitNowIdStatus,
           duitNowIdCheckedAt: user.duitNowIdCheckedAt?.toISOString() ?? null,
           duitNowIdIssue: user.duitNowIdIssue,
+          duitNowIdCountry: user.duitNowIdCountry,
+          duitNowIdInstitution: user.duitNowIdInstitution,
           bankName: user.bankName,
           bankAccountNumber: user.bankAccountNumber,
           bankAccountName: user.bankAccountName,

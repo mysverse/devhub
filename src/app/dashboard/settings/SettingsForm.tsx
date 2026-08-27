@@ -31,6 +31,7 @@ import {
 } from "@/lib/duitnow-id";
 import type { IntegrationAvailability } from "@/lib/integration-availability";
 import {
+  getBankDisplayName,
   validateBankAccountName,
   validateBankAccountNumber,
   validateBankName,
@@ -208,12 +209,15 @@ export default function SettingsForm({
           >
             <Stack gap="xs">
               <Text size="sm">
-                {duitNowIssueMessage(profile.duitNowIdIssue)}
+                {duitNowIssueMessage(profile.duitNowIdIssue, {
+                  institutionName: getBankDisplayName(
+                    profile.duitNowIdInstitution,
+                  ),
+                })}
               </Text>
               <Text size="sm">
-                Register the ID in your banking or e-wallet app and save it
-                again below, or switch to a bank account number — those are
-                always reachable.
+                Once it is linked, save it again below and confirm — or switch
+                to a bank account number, which is always reachable.
               </Text>
             </Stack>
           </Alert>

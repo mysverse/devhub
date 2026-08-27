@@ -27,6 +27,7 @@ import {
   SPRING,
 } from "@/components/animations";
 import ConfirmModal from "@/components/ConfirmModal";
+import { formatIssuingCountryForBank } from "@/lib/country-alpha3";
 import { type CurrencyCode, formatAmount } from "@/lib/currency";
 import {
   duitNowIdTypeLabel,
@@ -152,11 +153,33 @@ function renderPaymentDetails(
               </span>
             )}
           </div>
+          {/* Above the number because the bank asks for it first, in the
+              words the bank's own select uses. */}
+          {tx.duitNowIdType === "PASSPORT" && (
+            <div>
+              Issuing country:{" "}
+              {tx.duitNowIdCountry ? (
+                formatIssuingCountryForBank(tx.duitNowIdCountry)
+              ) : (
+                <span style={{ color: "var(--mantine-color-red-6)" }}>
+                  Not recorded — ask the developer to re-save it
+                </span>
+              )}
+            </div>
+          )}
           <div>
             ID:{" "}
             {tx.duitNowIdType
               ? formatDuitNowIdForDisplay(tx.duitNowIdType, tx.duitNowId)
               : tx.duitNowId}
+          </div>
+          {/* The developer's claim, for comparing with the recipient bank the
+              lookup shows. Never an input to the transfer itself. */}
+          <div style={{ color: "var(--mantine-color-dimmed)" }}>
+            Linked at:{" "}
+            {tx.duitNowIdInstitution
+              ? `${getBankDisplayName(tx.duitNowIdInstitution)} (developer's claim)`
+              : "not recorded"}
           </div>
         </>
       );
@@ -253,6 +276,9 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
   // so gating on it would freeze every in-flight proxy payout on deploy day.
   const duitNowStatus = tx.paymentDetails?.duitNowIdStatus ?? "UNCONFIRMED";
   const duitNowCheckedAt = tx.paymentDetails?.duitNowIdCheckedAt;
+  const duitNowInstitutionName = getBankDisplayName(
+    tx.paymentDetails?.duitNowIdInstitution,
+  );
   const duitNowStatusColor =
     duitNowStatus === "UNREACHABLE"
       ? "red"
@@ -265,8 +291,8 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
       : duitNowStatus === "RESOLVED"
         ? `Bank found this ID${duitNowCheckedAt ? ` — checked ${new Date(duitNowCheckedAt).toLocaleDateString("en-MY")}` : ""}`
         : duitNowStatus === "CONFIRMED"
-          ? "Developer says it is registered; no bank lookup recorded yet"
-          : "Nobody has confirmed this ID is registered";
+          ? `Developer says it is linked${duitNowInstitutionName ? ` at ${duitNowInstitutionName}` : ""}; no bank lookup recorded yet`
+          : "Nobody has confirmed this ID is linked";
 
   async function recordLookup(
     outcome: "resolved" | "NOT_FOUND" | "NAME_MISMATCH",
@@ -659,6 +685,17 @@ function PayoutCard({ transaction: tx }: { transaction: PayoutTransaction }) {
                       the separators humans read by. Until now none of the
                       payment values had a copy button at all: the admin
                       hand-selected them out of a monospace <Text>. */}
+                  {tx.paymentMethod === "DUITNOW" &&
+                    tx.paymentDetails?.duitNowIdType === "PASSPORT" &&
+                    tx.paymentDetails.duitNowIdCountry &&
+                    !tx.paymentDetails.bankAccountNumber && (
+                      <CopyField
+                        label="Issuing country"
+                        value={formatIssuingCountryForBank(
+                          tx.paymentDetails.duitNowIdCountry,
+                        )}
+                      />
+                    )}
                   {tx.paymentMethod === "DUITNOW" &&
                     tx.paymentDetails?.duitNowId &&
                     tx.paymentDetails.duitNowIdType &&

@@ -21,6 +21,7 @@ import PaymentInfoInvalid from "@/emails/PaymentInfoInvalid";
 import { requireAdmin } from "@/lib/authz";
 import { duitNowIssueMessage } from "@/lib/duitnow-copy";
 import { EMAIL_CHANNEL, IN_APP_CHANNEL, notify } from "@/lib/notifications";
+import { getBankDisplayName } from "@/lib/payment-validation";
 import prisma from "@/lib/prisma";
 import { getUserEmailAndName } from "@/lib/user-contact";
 
@@ -59,11 +60,15 @@ export async function markDuitNowIdUnreachable(
         duitNowIdCheckedAt: new Date(),
         duitNowIdIssue: issue,
       },
-      select: { duitNowIdCheckedAt: true },
+      select: { duitNowIdCheckedAt: true, duitNowIdInstitution: true },
     });
 
     const { email, name } = await getUserEmailAndName(userId);
-    const reason = duitNowIssueMessage(issue);
+    // Name the app the developer said it was linked at: that is where the
+    // fix is, and "your banking or e-wallet app" sends them everywhere.
+    const reason = duitNowIssueMessage(issue, {
+      institutionName: getBankDisplayName(profile.duitNowIdInstitution),
+    });
     // Keyed on the check, not on the day: a second lookup after the developer
     // says they fixed it has to be able to tell them it still does not work.
     const key = `payment:duitnow-unreachable:${userId}:${profile.duitNowIdCheckedAt?.toISOString()}`;

@@ -72,6 +72,11 @@ passport, business registration or army/police number), are processed by an
 administrator through our bank. They are not automated, and they never require
 identity verification.
 
+A DuitNow ID only works if you have linked it as a DuitNow ID at the bank or
+e-wallet you name in your payment settings — having the number in the app is
+not the same thing. A passport ID also needs its issuing country, because our
+bank asks for it before the passport number.
+
 ## Identity verification (KYC)
 
 **DevHub no longer collects identity documents.** Verification previously

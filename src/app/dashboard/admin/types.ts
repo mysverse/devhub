@@ -15,6 +15,10 @@ export type PayoutPaymentDetails = {
   duitNowIdStatus: string;
   duitNowIdCheckedAt: string | null;
   duitNowIdIssue: string | null;
+  /** ISO 3166-1 alpha-2; the bank asks for it before a passport number. */
+  duitNowIdCountry: string | null;
+  /** Where the developer says the proxy is linked — a claim, not a lookup. */
+  duitNowIdInstitution: string | null;
   bankName: string | null;
   bankAccountNumber: string | null;
   bankAccountName: string | null;
